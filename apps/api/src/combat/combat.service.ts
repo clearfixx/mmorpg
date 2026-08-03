@@ -17,6 +17,7 @@ import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { WorldService } from '../world/world.service';
 import { SubmitCombatCommandInput } from './dto/submit-combat-command.input';
+import { ContinueAdventureInput } from './dto/continue-adventure.input';
 import { BattleModel } from './models/battle.model';
 
 @Injectable()
@@ -228,6 +229,85 @@ export class CombatService {
     return this.toModel(updated.id, updated.state as unknown as BattleState);
   }
 
+  async continueAdventure(
+    userId: string,
+    input: ContinueAdventureInput,
+  ): Promise<BattleModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const previous = await this.prisma.client.battle.findFirst({
+      where: {
+        id: input.battleId,
+        characterId,
+        status: BattleStatus.WON,
+        resultAcknowledgedAt: null,
+        rewardClaim: { isNot: null },
+      },
+    });
+    if (!previous)
+      throw new BadRequestException('Claimed victory is required to continue');
+    const existing = await this.prisma.client.battleCommand.findUnique({
+      where: {
+        battleId_idempotencyKey: {
+          battleId: previous.id,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.actionId !== 'CONTINUE_ADVENTURE')
+        throw new ConflictException('Command key already used');
+      const active = await this.prisma.client.battle.findFirstOrThrow({
+        where: { characterId, status: BattleStatus.ACTIVE },
+      });
+      return this.toModel(active.id, active.state as unknown as BattleState);
+    }
+    const character = await this.prisma.client.character.findUniqueOrThrow({
+      where: { id: characterId },
+      select: {
+        archetype: true,
+        equipment: {
+          where: { slot: 'MAIN_HAND' },
+          select: { item: { select: { damage: true } } },
+        },
+      },
+    });
+    const previousState = previous.state as unknown as BattleState;
+    const tier = (previousState.encounterTier ?? 1) + 1;
+    const next = createBattle(
+      character.archetype,
+      previousState.preparation,
+      character.equipment[0]?.item.damage ?? 0,
+      tier,
+    );
+    const battle = await this.prisma.client.$transaction(async (tx) => {
+      const acknowledged = await tx.battle.updateMany({
+        where: { id: previous.id, resultAcknowledgedAt: null },
+        data: { resultAcknowledgedAt: new Date() },
+      });
+      if (acknowledged.count !== 1)
+        throw new ConflictException('Adventure state changed');
+      await tx.battleCommand.create({
+        data: {
+          battleId: previous.id,
+          idempotencyKey: input.idempotencyKey,
+          expectedVersion: previous.version,
+          actionId: 'CONTINUE_ADVENTURE',
+          resultingVersion: previous.version,
+        },
+      });
+      return tx.battle.create({
+        data: {
+          characterId,
+          activeCharacterId: characterId,
+          encounterId: `hollow-road-tier-${tier}`,
+          seed: 1701 + tier,
+          state: next as unknown as Prisma.InputJsonValue,
+        },
+      });
+    });
+    return this.toModel(battle.id, next);
+  }
+
   async retreat(userId: string, expectedVersion: number): Promise<BattleModel> {
     const characterId = await this.characters.requireIdForUser(userId);
     const battle = await this.prisma.client.battle.findFirst({
@@ -379,6 +459,12 @@ export class CombatService {
       id,
       status: state.status,
       phase,
+      encounterTier: state.encounterTier ?? 1,
+      enemyName:
+        state.enemyLabel ??
+        ((state.encounterTier ?? 1) > 1
+          ? 'Загартований Завісою розоритель'
+          : 'Спотворений Завісою мародер'),
       version: state.version,
       turn: state.turn,
       hero: state.hero,

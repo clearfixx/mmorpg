@@ -4,6 +4,7 @@ import type { GraphqlContext } from '../identity/identity.types';
 import { RetreatInput } from './dto/retreat.input';
 import { StartEncounterInput } from './dto/start-encounter.input';
 import { SubmitCombatCommandInput } from './dto/submit-combat-command.input';
+import { ContinueAdventureInput } from './dto/continue-adventure.input';
 import { BattleModel } from './models/battle.model';
 import { CombatService } from './combat.service';
 
@@ -57,5 +58,14 @@ export class CombatResolver {
   async returnToWatchpost(@Context() context: GraphqlContext) {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.combat.returnToWatchpost(viewer.id);
+  }
+
+  @Mutation(() => BattleModel)
+  async continueAdventure(
+    @Args('input') input: ContinueAdventureInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.continueAdventure(viewer.id, input);
   }
 }

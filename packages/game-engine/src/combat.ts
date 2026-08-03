@@ -46,6 +46,9 @@ export interface BattleState {
   archetype: CombatArchetype
   preparation: Preparation
   weaponDamageBonus: number
+  encounterTier: number
+  enemyLabel: string
+  enemyDamageBonus: number
   hero: {
     health: number
     maxHealth: number
@@ -173,8 +176,14 @@ export function createBattle(
   archetype: CombatArchetype,
   preparation: Preparation,
   weaponDamageBonus = 0,
+  encounterTier = 1,
 ): BattleState {
   const maxHealth = { VANGUARD: 140, RANGER: 100, ARCANIST: 90 }[archetype]
+  const enemyMaxHealth = 125 + (encounterTier - 1) * 40
+  const enemyLabel =
+    encounterTier > 1
+      ? 'Загартований Завісою розоритель'
+      : 'Спотворений Завісою мародер'
   return {
     version: 1,
     turn: 1,
@@ -182,8 +191,11 @@ export function createBattle(
     archetype,
     preparation,
     weaponDamageBonus,
+    encounterTier,
+    enemyLabel,
+    enemyDamageBonus: (encounterTier - 1) * 6,
     hero: { health: maxHealth, maxHealth, resource: 3, maxResource: 5 },
-    enemy: { health: 125, maxHealth: 125 },
+    enemy: { health: enemyMaxHealth, maxHealth: enemyMaxHealth },
     intentIndex: 0,
     guardedReduction: 0,
     bleedingTurns: 0,
@@ -194,7 +206,7 @@ export function createBattle(
       {
         turn: 0,
         kind: 'SYSTEM',
-        message: 'Спотворений Завісою мародер виходить на дорогу.',
+        message: `${enemyLabel} виходить на дорогу.`,
       },
     ],
   }
@@ -288,7 +300,7 @@ export function resolveTurn(
     next.log.push({
       turn: state.turn,
       kind: 'STATUS',
-      message: 'Кровотеча виснажує мародера.',
+      message: `${next.enemyLabel ?? 'Ворог'} стікає кров’ю.`,
       amount: 5,
     })
   }
@@ -298,7 +310,7 @@ export function resolveTurn(
     next.log.push({
       turn: state.turn,
       kind: 'VICTORY',
-      message: 'Мародер падає. Перемога.',
+      message: `${next.enemyLabel ?? 'Ворог'} падає. Перемога.`,
     })
     return next
   }
@@ -313,14 +325,17 @@ export function resolveTurn(
     next.stunned = false
   } else if (intent.damage > 0) {
     const armorReduction = state.preparation === 'SEARCH_ARMORY' ? 4 : 0
-    const raw = Math.max(0, intent.damage - armorReduction)
+    const raw = Math.max(
+      0,
+      intent.damage + (state.enemyDamageBonus ?? 0) - armorReduction,
+    )
     const received = Math.floor(raw * (1 - next.guardedReduction))
     const blocked = intent.damage - received
     next.hero.health = Math.max(0, next.hero.health - received)
     next.log.push({
       turn: state.turn,
       kind: 'ENEMY_DAMAGE',
-      message: `Мародер застосовує «${intent.name}».`,
+      message: `${next.enemyLabel ?? 'Ворог'} застосовує «${intent.name}».`,
       amount: received,
       ...(blocked > 0 ? { detail: `Заблоковано ${blocked} шкоди.` } : {}),
     })

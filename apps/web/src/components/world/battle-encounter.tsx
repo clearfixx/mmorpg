@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
   status: string
   phase: string
+  encounterTier: number
+  enemyName: string
   version: number
   turn: number
   hero: {
@@ -197,6 +199,31 @@ export function BattleEncounter({
     }
   }
 
+  async function continueAdventure() {
+    if (!battle || !reward) return
+    setPending(true)
+    setError(null)
+    try {
+      const data = await graphQl<{ continueAdventure: Battle }>(
+        `mutation Continue($input: ContinueAdventureInput!) { continueAdventure(input: $input) { ${battleFields} } }`,
+        {
+          input: {
+            battleId: battle.id,
+            idempotencyKey: crypto.randomUUID(),
+          },
+        },
+      )
+      setReward(null)
+      setBattle(data.continueAdventure)
+    } catch {
+      setError(
+        'Не вдалося продовжити пригоду. Оновіть стан і спробуйте ще раз.',
+      )
+    } finally {
+      setPending(false)
+    }
+  }
+
   if (loading)
     return (
       <main className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
@@ -257,9 +284,7 @@ export function BattleEncounter({
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
               Порожня дорога · хід {battle.turn}
             </p>
-            <h1 className="mt-1 text-xl font-semibold">
-              Спотворений Завісою мародер
-            </h1>
+            <h1 className="mt-1 text-xl font-semibold">{battle.enemyName}</h1>
           </div>
           <span className="font-mono text-xs text-muted-foreground">
             стан {battle.version}
@@ -274,8 +299,8 @@ export function BattleEncounter({
             secondary={`${battle.hero.resource}/${battle.hero.maxResource} ресурсу`}
           />
           <HealthPanel
-            portrait="М"
-            title="Мародер"
+            portrait={battle.encounterTier > 1 ? 'Р' : 'М'}
+            title={battle.encounterTier > 1 ? 'Розоритель' : 'Мародер'}
             value={battle.enemy.health}
             max={battle.enemy.maxHealth}
             secondary="важкий тесак"
@@ -292,6 +317,7 @@ export function BattleEncounter({
                 pending={pending}
                 reward={reward}
                 onClaim={claimReward}
+                onContinue={continueAdventure}
                 onReturn={returnToWatchpost}
               />
             ) : enemyResponding ? (
@@ -413,6 +439,7 @@ function BattleResult({
   pending,
   reward,
   onClaim,
+  onContinue,
   onReturn,
 }: {
   status: string
@@ -422,6 +449,7 @@ function BattleResult({
   pending: boolean
   reward: BattleReward | null
   onClaim: () => void
+  onContinue: () => void
   onReturn: () => void
 }) {
   const won = status === 'WON'
@@ -460,15 +488,27 @@ function BattleResult({
       ) : null}
       {reward ? <RewardReveal reward={reward} /> : null}
       {!won || reward ? (
-        <Button
-          type="button"
-          onClick={onReturn}
-          disabled={pending}
-          variant="outline"
-          className="mt-5 h-9 rounded-sm"
-        >
-          {pending ? 'Повертаємося…' : 'Повернутися на заставу'}
-        </Button>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Button
+            type="button"
+            onClick={onReturn}
+            disabled={pending}
+            variant="outline"
+            className="h-9 rounded-sm"
+          >
+            Повернутися на заставу
+          </Button>
+          {won && reward ? (
+            <Button
+              type="button"
+              onClick={onContinue}
+              disabled={pending}
+              className="h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
+            >
+              {pending ? 'Шукаємо шлях…' : 'Продовжити пригоду'}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )

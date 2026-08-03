@@ -68,9 +68,12 @@ export class RewardsService {
     if (!battle) throw new BadRequestException('Won battle is required');
 
     const definition = REWARDS[battle.character.archetype];
-    const roll = this.rollForBattle(battle.id);
-    const experience = 40;
-    const gold = 18;
+    const tier =
+      (battle.state as unknown as { encounterTier?: number }).encounterTier ??
+      1;
+    const roll = this.rollForBattle(battle.id, tier);
+    const experience = 40 + (tier - 1) * 20;
+    const gold = 18 + (tier - 1) * 12;
 
     try {
       const claim = await this.prisma.client.$transaction(async (tx) => {
@@ -140,7 +143,10 @@ export class RewardsService {
     }
   }
 
-  private rollForBattle(battleId: string): {
+  private rollForBattle(
+    battleId: string,
+    tier: number,
+  ): {
     rarity: ItemRarity;
     damage: number;
   } {
@@ -150,7 +156,10 @@ export class RewardsService {
     const rarity =
       digest[0] % 4 === 0 ? ItemRarity.UNCOMMON : ItemRarity.COMMON;
     const damage =
-      4 + (digest[1] % 4) + (rarity === ItemRarity.UNCOMMON ? 1 : 0);
+      4 +
+      (digest[1] % 4) +
+      (rarity === ItemRarity.UNCOMMON ? 1 : 0) +
+      (tier - 1) * 2;
     return { rarity, damage };
   }
 

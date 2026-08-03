@@ -407,6 +407,57 @@ describe('Health (e2e)', () => {
         },
       });
 
+    const continued = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Continue($input: ContinueAdventureInput!) { continueAdventure(input: $input) { id status encounterTier enemyName enemy { health maxHealth } } }',
+        variables: {
+          input: {
+            battleId,
+            idempotencyKey: `continue-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(continued.text).toContain('"encounterTier":2');
+    expect(continued.text).toContain('"health":165');
+    expect(continued.text).toContain('Загартований Завісою розоритель');
+
+    const secondBattle = await prisma.client.battle.findFirstOrThrow({
+      where: { characterId: rewardedCharacter.id, status: 'ACTIVE' },
+    });
+    const secondState = secondBattle.state as Record<string, unknown>;
+    expect(secondState.enemyDamageBonus).toBe(6);
+    expect(secondState.weaponDamageBonus).toBe(rewardedItem.damage);
+    await prisma.client.battle.update({
+      where: { id: secondBattle.id },
+      data: {
+        status: 'WON',
+        version: 2,
+        state: { ...secondState, status: 'WON', version: 2 },
+        activeCharacterId: null,
+        completedAt: new Date(),
+      },
+    });
+    const secondReward = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { experience gold item { damage } } }',
+        variables: {
+          input: {
+            battleId: secondBattle.id,
+            idempotencyKey: `second-reward-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(secondReward.text).toContain('"experience":60');
+    expect(secondReward.text).toContain('"gold":30');
+
     await prisma.client.battle.create({
       data: {
         characterId: rewardedCharacter.id,

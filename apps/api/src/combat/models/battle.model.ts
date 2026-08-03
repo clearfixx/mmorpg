@@ -37,6 +37,8 @@ export class BattleModel {
   @Field(() => ID) id!: string;
   @Field() status!: string;
   @Field() phase!: string;
+  @Field(() => Int) encounterTier!: number;
+  @Field() enemyName!: string;
   @Field(() => Int) version!: number;
   @Field(() => Int) turn!: number;
   @Field(() => CombatantModel) hero!: CombatantModel;

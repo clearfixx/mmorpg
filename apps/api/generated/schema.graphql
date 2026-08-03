@@ -15,7 +15,9 @@ enum AvatarMode {
 type BattleModel {
   actions: [CombatActionModel!]!
   currentIntent: EnemyIntentModel!
+  encounterTier: Int!
   enemy: CombatantModel!
+  enemyName: String!
   hero: CombatantModel!
   id: ID!
   log: [CombatLogEntryModel!]!
@@ -95,6 +97,11 @@ type CombatantModel {
   resource: Int
 }
 
+input ContinueAdventureInput {
+  battleId: ID!
+  idempotencyKey: String!
+}
+
 input CreateCharacterInput {
   archetype: CharacterArchetype!
   avatarMode: AvatarMode!
@@ -169,6 +176,7 @@ input LoginInput {
 
 type Mutation {
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
+  continueAdventure(input: ContinueAdventureInput!): BattleModel!
   createCharacter(input: CreateCharacterInput!): CharacterModel!
   equipItem(input: EquipItemInput!): InventoryModel!
   login(input: LoginInput!): AuthPayload!
@@ -201,9 +209,7 @@ type Query {
   myCharacter: CharacterModel
   myInventory: InventoryModel!
 
-  """
-  API readiness probe for the foundation milestone.
-  """
+  """API readiness probe for the foundation milestone."""
   status: String!
   viewer: Viewer
 }
