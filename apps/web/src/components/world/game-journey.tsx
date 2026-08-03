@@ -461,8 +461,10 @@ function EquipmentScreen({
                     </p>
                     <div className="mt-3 flex justify-between text-sm">
                       <span className="text-muted-foreground">Зміна DMG</span>
-                      <span className="font-mono text-moss">
-                        +{item.damage - (weapon?.damage ?? 0)}
+                      <span
+                        className={`font-mono ${deltaColor(item.damage - (weapon?.damage ?? 0))}`}
+                      >
+                        {formatDelta(item.damage - (weapon?.damage ?? 0))}
                       </span>
                     </div>
                     <Button
@@ -601,4 +603,16 @@ function preparationName(value: Preparation | null): string {
     INSPECT_TRACKS: 'Розвідка перших намірів ворога',
     REST_BRAZIER: 'Відновлення біля холодної жаровні',
   }[value]
+}
+
+function formatDelta(value: number): string {
+  if (value > 0) return `+${value}`
+  if (value < 0) return `−${Math.abs(value)}`
+  return '0'
+}
+
+function deltaColor(value: number): string {
+  if (value > 0) return 'text-moss'
+  if (value < 0) return 'text-destructive'
+  return 'text-muted-foreground'
 }
