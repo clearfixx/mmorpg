@@ -33,9 +33,18 @@ export class CombatService {
       where: { characterId, status: BattleStatus.ACTIVE },
       orderBy: { createdAt: 'desc' },
     });
-    return battle
-      ? this.toModel(battle.id, battle.state as unknown as BattleState)
-      : null;
+    if (!battle) return null;
+    if (
+      battle.pendingState &&
+      battle.enemyReadyAt &&
+      battle.enemyReadyAt <= new Date()
+    )
+      return this.finishEnemyResponse(battle.id, characterId);
+    return this.toModel(
+      battle.id,
+      battle.state as unknown as BattleState,
+      battle.pendingState ? 'ENEMY_RESOLVING' : 'PLAYER_TURN',
+    );
   }
 
   async start(userId: string): Promise<BattleModel> {
@@ -44,7 +53,11 @@ export class CombatService {
       where: { characterId: context.characterId, status: BattleStatus.ACTIVE },
     });
     if (active)
-      return this.toModel(active.id, active.state as unknown as BattleState);
+      return this.toModel(
+        active.id,
+        active.state as unknown as BattleState,
+        active.pendingState ? 'ENEMY_RESOLVING' : 'PLAYER_TURN',
+      );
 
     const character = await this.prisma.client.character.findUniqueOrThrow({
       where: { id: context.characterId },
@@ -72,7 +85,6 @@ export class CombatService {
       where: { characterId, status: BattleStatus.ACTIVE },
     });
     if (!battle) throw new BadRequestException('No active battle');
-
     const existing = await this.prisma.client.battleCommand.findUnique({
       where: {
         battleId_idempotencyKey: {
@@ -87,8 +99,14 @@ export class CombatService {
       const current = await this.prisma.client.battle.findUniqueOrThrow({
         where: { id: battle.id },
       });
-      return this.toModel(current.id, current.state as unknown as BattleState);
+      return this.toModel(
+        current.id,
+        current.state as unknown as BattleState,
+        current.pendingState ? 'ENEMY_RESOLVING' : undefined,
+      );
     }
+    if (battle.pendingState)
+      throw new ConflictException('Enemy response is still resolving');
     if (battle.version !== input.expectedVersion)
       throw new ConflictException('Battle state changed; refresh and retry');
 
@@ -104,6 +122,40 @@ export class CombatService {
       );
     }
     const status = next.status;
+    if (status === BattleStatus.ACTIVE) {
+      await this.prisma.client.$transaction(async (tx) => {
+        const result = await tx.battle.updateMany({
+          where: {
+            id: battle.id,
+            version: input.expectedVersion,
+            status: BattleStatus.ACTIVE,
+            enemyReadyAt: null,
+          },
+          data: {
+            pendingState: next as unknown as Prisma.InputJsonValue,
+            enemyReadyAt: new Date(Date.now() + 1200),
+          },
+        });
+        if (result.count !== 1)
+          throw new ConflictException(
+            'Battle state changed; refresh and retry',
+          );
+        await tx.battleCommand.create({
+          data: {
+            battleId: battle.id,
+            idempotencyKey: input.idempotencyKey,
+            expectedVersion: input.expectedVersion,
+            actionId: input.actionId,
+            resultingVersion: next.version,
+          },
+        });
+      });
+      return this.toModel(
+        battle.id,
+        battle.state as unknown as BattleState,
+        'ENEMY_RESOLVING',
+      );
+    }
     const updated = await this.prisma.client.$transaction(async (tx) => {
       const result = await tx.battle.updateMany({
         where: {
@@ -115,9 +167,8 @@ export class CombatService {
           state: next as unknown as Prisma.InputJsonValue,
           version: next.version,
           status,
-          completedAt: status === BattleStatus.ACTIVE ? null : new Date(),
-          activeCharacterId:
-            status === BattleStatus.ACTIVE ? characterId : null,
+          completedAt: new Date(),
+          activeCharacterId: null,
         },
       });
       if (result.count !== 1)
@@ -151,7 +202,12 @@ export class CombatService {
     const battle = await this.prisma.client.battle.findFirst({
       where: { characterId, status: BattleStatus.ACTIVE },
     });
-    if (!battle || battle.version !== expectedVersion || expectedVersion < 2)
+    if (
+      !battle ||
+      battle.pendingState ||
+      battle.version !== expectedVersion ||
+      expectedVersion < 2
+    )
       throw new ConflictException('Battle cannot be retreated from');
     const state = battle.state as unknown as BattleState;
     state.status = 'RETREATED';
@@ -187,12 +243,88 @@ export class CombatService {
     return this.toModel(battle.id, state);
   }
 
-  private toModel(id: string, state: BattleState): BattleModel {
+  async returnToWatchpost(userId: string): Promise<boolean> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const active = await this.prisma.client.battle.count({
+      where: { characterId, status: BattleStatus.ACTIVE },
+    });
+    if (active > 0)
+      throw new ConflictException('Finish or retreat from battle first');
+    await this.prisma.client.characterWorldState.update({
+      where: { characterId },
+      data: {
+        currentLocation: 'BROKEN_WATCHPOST',
+        preparationChoice: null,
+        version: { increment: 1 },
+      },
+    });
+    return true;
+  }
+
+  private async finishEnemyResponse(
+    battleId: string,
+    characterId: string,
+  ): Promise<BattleModel> {
+    const battle = await this.prisma.client.battle.findUniqueOrThrow({
+      where: { id: battleId },
+    });
+    if (!battle.pendingState)
+      return this.toModel(battle.id, battle.state as unknown as BattleState);
+    const next = battle.pendingState as unknown as BattleState;
+    const status = next.status;
+    const result = await this.prisma.client.battle.updateMany({
+      where: {
+        id: battleId,
+        version: battle.version,
+        enemyReadyAt: battle.enemyReadyAt,
+      },
+      data: {
+        state: next as unknown as Prisma.InputJsonValue,
+        pendingState: Prisma.DbNull,
+        enemyReadyAt: null,
+        version: next.version,
+        status,
+        completedAt: status === BattleStatus.ACTIVE ? null : new Date(),
+        activeCharacterId: status === BattleStatus.ACTIVE ? characterId : null,
+      },
+    });
+    if (result.count !== 1) {
+      const current = await this.prisma.client.battle.findUniqueOrThrow({
+        where: { id: battleId },
+      });
+      return this.toModel(
+        current.id,
+        current.state as unknown as BattleState,
+        current.pendingState ? 'ENEMY_RESOLVING' : undefined,
+      );
+    }
+    if (status === BattleStatus.LOST)
+      await this.prisma.client.characterWorldState.update({
+        where: { characterId },
+        data: {
+          currentLocation: 'BROKEN_WATCHPOST',
+          preparationChoice: null,
+          version: { increment: 1 },
+        },
+      });
+    return this.toModel(
+      battle.id,
+      next,
+      status === BattleStatus.ACTIVE ? 'PLAYER_TURN' : 'COMPLETED',
+    );
+  }
+
+  private toModel(
+    id: string,
+    state: BattleState,
+    phase = state.status === 'ACTIVE' ? 'PLAYER_TURN' : 'COMPLETED',
+  ): BattleModel {
     const intent = INTENTS[state.intentIndex] ?? INTENTS[0];
     const visibleCount = state.preparation === 'INSPECT_TRACKS' ? 2 : 1;
     return {
       id,
       status: state.status,
+      phase,
       version: state.version,
       turn: state.turn,
       hero: state.hero,

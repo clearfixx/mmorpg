@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
   moduleFormat = "cjs"
 }
 
@@ -73,20 +73,20 @@ model User {
 }
 
 model Character {
-  id             String             @id @default(uuid()) @db.Uuid
-  userId         String             @unique @map("user_id") @db.Uuid
-  name           String             @db.VarChar(24)
-  nameKey        String             @unique @map("name_key") @db.VarChar(64)
+  id             String               @id @default(uuid()) @db.Uuid
+  userId         String               @unique @map("user_id") @db.Uuid
+  name           String               @db.VarChar(24)
+  nameKey        String               @unique @map("name_key") @db.VarChar(64)
   archetype      CharacterArchetype
-  origin         CharacterOrigin    @default(ROAD_SURVIVOR)
-  avatarMode     AvatarMode         @default(STATIC) @map("avatar_mode")
-  staticAvatarId String?            @map("static_avatar_id") @db.VarChar(64)
-  level          Int                @default(1)
-  experience     Int                @default(0)
-  version        Int                @default(1)
-  createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  origin         CharacterOrigin      @default(ROAD_SURVIVOR)
+  avatarMode     AvatarMode           @default(STATIC) @map("avatar_mode")
+  staticAvatarId String?              @map("static_avatar_id") @db.VarChar(64)
+  level          Int                  @default(1)
+  experience     Int                  @default(0)
+  version        Int                  @default(1)
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   worldState     CharacterWorldState?
   worldCommands  WorldCommand[]
   battles        Battle[]
@@ -95,58 +95,60 @@ model Character {
 }
 
 model Battle {
-  id            String        @id @default(uuid()) @db.Uuid
-  characterId   String        @map("character_id") @db.Uuid
-  activeCharacterId String?   @unique @map("active_character_id") @db.Uuid
-  encounterId   String        @map("encounter_id") @db.VarChar(64)
-  status        BattleStatus  @default(ACTIVE)
-  version       Int           @default(1)
-  seed          Int
-  state         Json
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  completedAt   DateTime?     @map("completed_at")
-  character     Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  commands      BattleCommand[]
+  id                String          @id @default(uuid()) @db.Uuid
+  characterId       String          @map("character_id") @db.Uuid
+  activeCharacterId String?         @unique @map("active_character_id") @db.Uuid
+  encounterId       String          @map("encounter_id") @db.VarChar(64)
+  status            BattleStatus    @default(ACTIVE)
+  version           Int             @default(1)
+  seed              Int
+  state             Json
+  pendingState      Json?           @map("pending_state")
+  enemyReadyAt      DateTime?       @map("enemy_ready_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  completedAt       DateTime?       @map("completed_at")
+  character         Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  commands          BattleCommand[]
 
   @@index([characterId, status])
   @@map("battles")
 }
 
 model BattleCommand {
-  id              String   @id @default(uuid()) @db.Uuid
-  battleId        String   @map("battle_id") @db.Uuid
-  idempotencyKey  String   @map("idempotency_key") @db.VarChar(64)
-  expectedVersion Int      @map("expected_version")
-  actionId        String   @map("action_id") @db.VarChar(64)
-  resultingVersion Int     @map("resulting_version")
-  createdAt       DateTime @default(now()) @map("created_at")
-  battle          Battle   @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  id               String   @id @default(uuid()) @db.Uuid
+  battleId         String   @map("battle_id") @db.Uuid
+  idempotencyKey   String   @map("idempotency_key") @db.VarChar(64)
+  expectedVersion  Int      @map("expected_version")
+  actionId         String   @map("action_id") @db.VarChar(64)
+  resultingVersion Int      @map("resulting_version")
+  createdAt        DateTime @default(now()) @map("created_at")
+  battle           Battle   @relation(fields: [battleId], references: [id], onDelete: Cascade)
 
   @@unique([battleId, idempotencyKey])
   @@map("battle_commands")
 }
 
 model CharacterWorldState {
-  characterId        String             @id @map("character_id") @db.Uuid
-  currentLocation    WorldLocation      @default(BROKEN_WATCHPOST) @map("current_location")
-  preparationChoice  PreparationChoice? @map("preparation_choice")
-  version            Int                @default(1)
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
-  character          Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  characterId       String             @id @map("character_id") @db.Uuid
+  currentLocation   WorldLocation      @default(BROKEN_WATCHPOST) @map("current_location")
+  preparationChoice PreparationChoice? @map("preparation_choice")
+  version           Int                @default(1)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  character         Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@map("character_world_states")
 }
 
 model WorldCommand {
-  id              String    @id @default(uuid()) @db.Uuid
-  characterId     String    @map("character_id") @db.Uuid
-  idempotencyKey  String    @map("idempotency_key") @db.VarChar(64)
-  commandType     String    @map("command_type") @db.VarChar(32)
-  payloadHash     String    @map("payload_hash") @db.Char(64)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  character       Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid()) @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  commandType    String    @map("command_type") @db.VarChar(32)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@unique([characterId, idempotencyKey])
   @@index([characterId, createdAt])
@@ -154,14 +156,14 @@ model WorldCommand {
 }
 
 model Session {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String    @map("user_id") @db.Uuid
-  tokenHash    String    @unique @map("token_hash") @db.Char(64)
-  expiresAt    DateTime  @map("expires_at")
-  lastUsedAt   DateTime  @default(now()) @map("last_used_at")
-  revokedAt    DateTime? @map("revoked_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at")
+  lastUsedAt DateTime  @default(now()) @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])

@@ -19,6 +19,7 @@ type BattleModel {
   hero: CombatantModel!
   id: ID!
   log: [CombatLogEntryModel!]!
+  phase: String!
   status: String!
   turn: Int!
   version: Int!
@@ -112,6 +113,7 @@ type Mutation {
   performLocationAction(input: PrepareLocationInput!): WorldStateModel!
   register(input: RegisterInput!): AuthPayload!
   retreatFromBattle(input: RetreatInput!): BattleModel!
+  returnToWatchpost: Boolean!
   startEncounter(input: StartEncounterInput!): BattleModel!
   submitCombatCommand(input: SubmitCombatCommandInput!): BattleModel!
   travel(input: TravelInput!): WorldStateModel!

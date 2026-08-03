@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
   status: string
+  phase: string
   version: number
   turn: number
   hero: {
@@ -52,18 +53,31 @@ export function BattleEncounter({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    void graphQl<{ activeBattle: Battle | null }>(
-      `{ activeBattle { ${battleFields} } }`,
-    )
-      .then((data) => {
-        setBattle(data.activeBattle)
-        setLoading(false)
-      })
-      .catch(() => {
-        setError('Не вдалося відновити стан бою.')
-        setLoading(false)
-      })
+    void loadActiveBattle()
+      .then(setBattle)
+      .catch(() => setError('Не вдалося відновити стан бою.'))
+      .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (battle?.phase !== 'ENEMY_RESOLVING') return
+
+    let cancelled = false
+    const timer = window.setInterval(() => {
+      void loadActiveBattle()
+        .then((nextBattle) => {
+          if (!cancelled && nextBattle) setBattle(nextBattle)
+        })
+        .catch(() => {
+          if (!cancelled) setError('Не вдалося отримати відповідь ворога.')
+        })
+    }, 350)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [battle?.phase, battle?.version])
 
   async function start() {
     setPending(true)
@@ -82,7 +96,7 @@ export function BattleEncounter({
   }
 
   async function act(actionId: string) {
-    if (!battle) return
+    if (!battle || battle.phase !== 'PLAYER_TURN') return
     setPending(true)
     setError(null)
     try {
@@ -105,7 +119,7 @@ export function BattleEncounter({
   }
 
   async function retreat() {
-    if (!battle) return
+    if (!battle || battle.phase !== 'PLAYER_TURN') return
     setPending(true)
     setError(null)
     try {
@@ -122,6 +136,20 @@ export function BattleEncounter({
     } catch {
       setError('Відступ зараз неможливий.')
     } finally {
+      setPending(false)
+    }
+  }
+
+  async function returnToWatchpost() {
+    setPending(true)
+    setError(null)
+    try {
+      await graphQl<{ returnToWatchpost: boolean }>(
+        'mutation { returnToWatchpost }',
+      )
+      window.location.reload()
+    } catch {
+      setError('Не вдалося повернутися на заставу.')
       setPending(false)
     }
   }
@@ -151,18 +179,18 @@ export function BattleEncounter({
           </p>
           <div className="mt-6 border-l-2 border-moss bg-moss/5 px-4 py-3">
             <p className="text-[0.65rem] uppercase tracking-widest text-moss">
-              Підготовка до бою
+              Активний бонус
             </p>
             <p className="mt-1 text-sm">{preparation}</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {preparationEffect(preparation)}
             </p>
           </div>
-          {error && (
+          {error ? (
             <p role="alert" className="mt-4 text-sm text-destructive">
               {error}
             </p>
-          )}
+          ) : null}
           <Button
             onClick={start}
             disabled={pending}
@@ -175,6 +203,9 @@ export function BattleEncounter({
     )
 
   const finished = battle.status !== 'ACTIVE'
+  const enemyResponding = battle.phase === 'ENEMY_RESOLVING'
+  const actionsLocked = pending || finished || enemyResponding
+
   return (
     <main className="min-h-screen bg-background px-4 py-5 text-foreground sm:px-6">
       <div className="mx-auto max-w-5xl border border-border/70 bg-panel/60">
@@ -209,43 +240,69 @@ export function BattleEncounter({
         </section>
         <section className="grid md:grid-cols-[1fr_18rem]">
           <div className="p-5 sm:p-6">
-            <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
-              Намір ворога
-            </p>
-            <div className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3">
-              <p className="font-medium">{battle.currentIntent.name}</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                {battle.currentIntent.description}
-              </p>
-            </div>
-            {battle.visibleIntents.length > 1 && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Далі: {battle.visibleIntents[1]?.name}
-              </p>
+            {finished ? (
+              <BattleResult
+                status={battle.status}
+                turns={battle.turn}
+                health={battle.hero.health}
+                maxHealth={battle.hero.maxHealth}
+                pending={pending}
+                onReturn={returnToWatchpost}
+              />
+            ) : enemyResponding ? (
+              <div className="border-l-2 border-destructive bg-destructive/5 px-4 py-5">
+                <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-destructive">
+                  Хід ворога
+                </p>
+                <p className="mt-2 font-medium">Мародер відповідає…</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Команду прийнято. Уміння заблоковані, доки сервер не завершить
+                  відповідь ворога.
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
+                  Намір ворога
+                </p>
+                <div className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3">
+                  <p className="font-medium">{battle.currentIntent.name}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {battle.currentIntent.description}
+                  </p>
+                </div>
+                {battle.visibleIntents.length > 1 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Далі: {battle.visibleIntents[1]?.name}
+                  </p>
+                ) : null}
+              </>
             )}
-            <div className="mt-6 grid gap-2 sm:grid-cols-2">
-              {battle.actions.map((action) => (
-                <button
-                  key={action.id}
-                  type="button"
-                  disabled={
-                    pending || finished || battle.hero.resource < action.cost
-                  }
-                  onClick={() => act(action.id)}
-                  className="border border-border/70 bg-background/50 p-3 text-left transition hover:border-ember/60 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span className="flex justify-between gap-3 text-sm font-medium">
-                    <span>{action.name}</span>
-                    <span className="font-mono text-xs text-ember">
-                      {action.cost}
+            {!finished ? (
+              <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                {battle.actions.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    disabled={
+                      actionsLocked || battle.hero.resource < action.cost
+                    }
+                    onClick={() => act(action.id)}
+                    className="border border-border/70 bg-background/50 p-3 text-left transition hover:border-ember/60 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span className="flex justify-between gap-3 text-sm font-medium">
+                      <span>{action.name}</span>
+                      <span className="font-mono text-xs text-ember">
+                        {action.cost}
+                      </span>
                     </span>
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                    {action.description}
-                  </span>
-                </button>
-              ))}
-            </div>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      {action.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
           <aside className="max-h-[34rem] overflow-y-auto border-t border-border/70 bg-background/30 p-5 md:border-t-0 md:border-l">
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
@@ -261,51 +318,90 @@ export function BattleEncounter({
                     Хід {entry.turn}
                   </span>
                   <span className={logColor(entry.kind)}>{entry.message}</span>
-                  {typeof entry.amount === 'number' && (
+                  {typeof entry.amount === 'number' ? (
                     <span
                       className={`ml-2 font-mono ${entry.kind === 'HEAL' ? 'text-moss' : entry.kind === 'ENEMY_DAMAGE' ? 'text-destructive' : 'text-ember'}`}
                     >
                       [{entry.kind === 'HEAL' ? '+' : '−'}
                       {entry.amount} HP]
                     </span>
-                  )}
-                  {entry.detail && (
+                  ) : null}
+                  {entry.detail ? (
                     <span className="mt-1 block text-muted-foreground">
                       [{entry.detail}]
                     </span>
-                  )}
+                  ) : null}
                 </li>
               ))}
             </ol>
-            {!finished && battle.turn > 1 && (
+            {!finished && battle.turn > 1 ? (
               <Button
                 type="button"
                 variant="outline"
-                disabled={pending}
+                disabled={actionsLocked}
                 onClick={retreat}
                 className="mt-5 h-8 rounded-sm text-xs"
               >
                 Відступити
               </Button>
-            )}
-            {finished && (
-              <p
-                className={`mt-6 border-l-2 px-3 py-2 text-sm ${battle.status === 'WON' ? 'border-moss text-moss' : 'border-destructive text-destructive'}`}
-              >
-                {battle.status === 'WON'
-                  ? 'Перемога. Нагорода з’явиться в наступному пакеті.'
-                  : 'Бій завершено.'}
-              </p>
-            )}
-            {error && (
+            ) : null}
+            {error ? (
               <p role="alert" className="mt-4 text-xs text-destructive">
                 {error}
               </p>
-            )}
+            ) : null}
           </aside>
         </section>
       </div>
     </main>
+  )
+}
+
+function BattleResult({
+  status,
+  turns,
+  health,
+  maxHealth,
+  pending,
+  onReturn,
+}: {
+  status: string
+  turns: number
+  health: number
+  maxHealth: number
+  pending: boolean
+  onReturn: () => void
+}) {
+  const won = status === 'WON'
+  return (
+    <div
+      className={`border-l-2 px-5 py-5 ${won ? 'border-moss bg-moss/5' : 'border-destructive bg-destructive/5'}`}
+    >
+      <p
+        className={`font-mono text-[0.65rem] uppercase tracking-[0.2em] ${won ? 'text-moss' : 'text-destructive'}`}
+      >
+        Бій завершено
+      </p>
+      <h2 className="mt-2 text-2xl font-semibold">
+        {won ? 'Перемога' : status === 'RETREATED' ? 'Відступ' : 'Поразка'}
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        Ходів: {turns}. Здоров’я героя: {health}/{maxHealth}.
+      </p>
+      {won ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Нагорода з’явиться в наступному пакеті механік.
+        </p>
+      ) : null}
+      <Button
+        type="button"
+        onClick={onReturn}
+        disabled={pending}
+        className="mt-5 h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
+      >
+        {pending ? 'Повертаємося…' : 'Повернутися на заставу'}
+      </Button>
+    </div>
   )
 }
 
@@ -339,10 +435,7 @@ function HealthPanel({
           </span>
         </div>
         <div className="mt-3 h-1.5 bg-background">
-          <div
-            className="h-full bg-ember transition-all"
-            style={{ width: `${width}%` }}
-          />
+          <div className="h-full bg-ember" style={{ width: `${width}%` }} />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">{secondary}</p>
       </div>
@@ -364,6 +457,13 @@ function logColor(kind: string): string {
   if (kind === 'PLAYER_DAMAGE') return 'text-ember'
   if (kind === 'DEFENSE' || kind === 'STATUS') return 'text-cyan-300'
   return 'text-muted-foreground'
+}
+
+async function loadActiveBattle(): Promise<Battle | null> {
+  const data = await graphQl<{ activeBattle: Battle | null }>(
+    `{ activeBattle { ${battleFields} } }`,
+  )
+  return data.activeBattle
 }
 
 async function graphQl<T>(

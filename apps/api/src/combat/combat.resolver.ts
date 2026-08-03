@@ -46,4 +46,10 @@ export class CombatResolver {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.combat.retreat(viewer.id, input.expectedVersion);
   }
+
+  @Mutation(() => Boolean)
+  async returnToWatchpost(@Context() context: GraphqlContext) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.returnToWatchpost(viewer.id);
+  }
 }

@@ -193,11 +193,12 @@ describe('Health (e2e)', () => {
       .set('Cookie', cookie)
       .send({
         query:
-          'mutation Start($input: StartEncounterInput!) { startEncounter(input: $input) { id status version turn currentIntent { id } hero { health } enemy { health } actions { id } } }',
+          'mutation Start($input: StartEncounterInput!) { startEncounter(input: $input) { id status phase version turn currentIntent { id } hero { health } enemy { health } actions { id } } }',
         variables: { input: { idempotencyKey: `battle-${Date.now()}` } },
       })
       .expect(200);
     expect(started.text).toContain('"status":"ACTIVE"');
+    expect(started.text).toContain('"phase":"PLAYER_TURN"');
     expect(started.text).toContain('"version":1');
     expect(started.text).toContain('"id":"STRIKE"');
 
@@ -207,7 +208,7 @@ describe('Health (e2e)', () => {
       .set('Cookie', cookie)
       .send({
         query:
-          'mutation Act($input: SubmitCombatCommandInput!) { submitCombatCommand(input: $input) { status version turn enemy { health } log { turn kind message amount detail } } }',
+          'mutation Act($input: SubmitCombatCommandInput!) { submitCombatCommand(input: $input) { status phase version turn enemy { health } log { turn kind message amount detail } } }',
         variables: {
           input: {
             actionId: 'STRIKE',
@@ -218,18 +219,61 @@ describe('Health (e2e)', () => {
       })
       .expect(200)
       .expect(({ text }) => {
-        expect(text).toContain('"version":2');
-        expect(text).toContain('"turn":2');
-        expect(text).toContain('"health":107');
+        expect(text).toContain('"phase":"ENEMY_RESOLVING"');
+        expect(text).toContain('"version":1');
+        expect(text).toContain('"turn":1');
+        expect(text).toContain('"health":125');
       });
+
+    const blockedCommand = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Act($input: SubmitCombatCommandInput!) { submitCombatCommand(input: $input) { phase version } }',
+        variables: {
+          input: {
+            actionId: 'STRIKE',
+            expectedVersion: 1,
+            idempotencyKey: `blocked-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(blockedCommand.text).toContain('errors');
+    expect(blockedCommand.text).toContain('Enemy response is still resolving');
+
+    const prisma = app.get(PrismaService);
+    const combatUser = await prisma.client.user.findUniqueOrThrow({
+      where: { email },
+      include: { character: true },
+    });
+    await prisma.client.battle.updateMany({
+      where: {
+        characterId: combatUser.character?.id,
+        status: 'ACTIVE',
+      },
+      data: { enemyReadyAt: new Date(0) },
+    });
 
     await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
-      .send({ query: '{ activeBattle { status version turn } }' })
+      .send({
+        query:
+          '{ activeBattle { status phase version turn enemy { health } } }',
+      })
       .expect(200)
       .expect({
-        data: { activeBattle: { status: 'ACTIVE', version: 2, turn: 2 } },
+        data: {
+          activeBattle: {
+            status: 'ACTIVE',
+            phase: 'PLAYER_TURN',
+            version: 2,
+            turn: 2,
+            enemy: { health: 107 },
+          },
+        },
       });
 
     const duplicate = await request(server)
