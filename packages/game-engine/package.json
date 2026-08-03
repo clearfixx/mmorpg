@@ -3,10 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"

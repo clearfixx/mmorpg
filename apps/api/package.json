@@ -10,7 +10,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "test": "jest --passWithNoTests",
-    "test:e2e": "pnpm --filter @veilfall/database build && NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json",
+    "test:e2e": "pnpm --filter @veilfall/database build && pnpm --filter @veilfall/game-engine build && NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
