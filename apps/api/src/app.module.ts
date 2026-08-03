@@ -10,6 +10,7 @@ import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { IdentityModule } from './identity/identity.module';
 import type { GraphqlContext } from './identity/identity.types';
+import { WorldModule } from './world/world.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import type { GraphqlContext } from './identity/identity.types';
     DatabaseModule,
     IdentityModule,
     CharactersModule,
+    WorldModule,
   ],
   controllers: [HealthController],
   providers: [AppResolver],

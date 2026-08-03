@@ -8,5 +8,6 @@ import { CharactersService } from './characters.service';
 @Module({
   imports: [IdentityModule],
   providers: [CharacterNameService, CharactersResolver, CharactersService],
+  exports: [CharactersService],
 })
 export class CharactersModule {}

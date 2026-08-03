@@ -39,6 +39,18 @@ enum AvatarMode {
   DYNAMIC
 }
 
+enum WorldLocation {
+  BROKEN_WATCHPOST
+  HOLLOW_ROAD
+  CINDERHAVEN_GATE
+}
+
+enum PreparationChoice {
+  SEARCH_ARMORY
+  INSPECT_TRACKS
+  REST_BRAZIER
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -68,8 +80,36 @@ model Character {
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  worldState     CharacterWorldState?
+  worldCommands  WorldCommand[]
 
   @@map("characters")
+}
+
+model CharacterWorldState {
+  characterId        String             @id @map("character_id") @db.Uuid
+  currentLocation    WorldLocation      @default(BROKEN_WATCHPOST) @map("current_location")
+  preparationChoice  PreparationChoice? @map("preparation_choice")
+  version            Int                @default(1)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  character          Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@map("character_world_states")
+}
+
+model WorldCommand {
+  id              String    @id @default(uuid()) @db.Uuid
+  characterId     String    @map("character_id") @db.Uuid
+  idempotencyKey  String    @map("idempotency_key") @db.VarChar(64)
+  commandType     String    @map("command_type") @db.VarChar(32)
+  payloadHash     String    @map("payload_hash") @db.Char(64)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  character       Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@index([characterId, createdAt])
+  @@map("world_commands")
 }
 
 model Session {

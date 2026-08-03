@@ -100,6 +100,94 @@ describe('Health (e2e)', () => {
       .expect(200)
       .expect({ data: { myCharacter: { name: characterName, level: 1 } } });
 
+    const world = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ currentLocation { currentLocation preparationChoice version routes { destination locked } } }',
+      })
+      .expect(200);
+    expect(world.text).toContain('"currentLocation":"BROKEN_WATCHPOST"');
+    expect(world.text).toContain('"preparationChoice":null');
+    expect(world.text).toContain('"version":1');
+
+    const preparationKey = `prepare-${Date.now()}`;
+    const prepareInput = {
+      choice: 'INSPECT_TRACKS',
+      expectedVersion: 1,
+      idempotencyKey: preparationKey,
+    };
+    const sendPreparation = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Prepare($input: PrepareLocationInput!) { performLocationAction(input: $input) { currentLocation preparationChoice version } }',
+          variables: { input: prepareInput },
+        })
+        .expect(200);
+    const [prepared, concurrentRetry] = await Promise.all([
+      sendPreparation(),
+      sendPreparation(),
+    ]);
+    const expectedPreparation = {
+      data: {
+        performLocationAction: {
+          currentLocation: 'BROKEN_WATCHPOST',
+          preparationChoice: 'INSPECT_TRACKS',
+          version: 2,
+        },
+      },
+    };
+    expect(prepared.body).toEqual(expectedPreparation);
+    expect(concurrentRetry.body).toEqual(expectedPreparation);
+
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Prepare($input: PrepareLocationInput!) { performLocationAction(input: $input) { version preparationChoice } }',
+        variables: { input: prepareInput },
+      })
+      .expect(200)
+      .expect({
+        data: {
+          performLocationAction: {
+            version: 2,
+            preparationChoice: 'INSPECT_TRACKS',
+          },
+        },
+      });
+
+    const travelKey = `travel-${Date.now()}`;
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Travel($input: TravelInput!) { travel(input: $input) { currentLocation preparationChoice version } }',
+        variables: {
+          input: {
+            destination: 'HOLLOW_ROAD',
+            expectedVersion: 2,
+            idempotencyKey: travelKey,
+          },
+        },
+      })
+      .expect(200)
+      .expect({
+        data: {
+          travel: {
+            currentLocation: 'HOLLOW_ROAD',
+            preparationChoice: 'INSPECT_TRACKS',
+            version: 3,
+          },
+        },
+      });
+
     const duplicate = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
@@ -145,5 +233,11 @@ describe('Health (e2e)', () => {
       .send({ query: '{ myCharacter { id } }' })
       .expect(200);
     expect(response.text).toContain('errors');
+
+    const worldResponse = await request(server)
+      .post('/graphql')
+      .send({ query: '{ currentLocation { currentLocation } }' })
+      .expect(200);
+    expect(worldResponse.text).toContain('errors');
   });
 });

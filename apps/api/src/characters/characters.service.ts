@@ -80,6 +80,7 @@ export class CharactersService {
           origin: input.origin ?? CharacterOrigin.ROAD_SURVIVOR,
           avatarMode: input.avatarMode,
           staticAvatarId,
+          worldState: { create: {} },
         },
       });
       return this.toModel(character);
@@ -88,6 +89,15 @@ export class CharactersService {
         throw new ConflictException('Character or name is already registered');
       throw error;
     }
+  }
+
+  async requireIdForUser(userId: string): Promise<string> {
+    const character = await this.prisma.client.character.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!character) throw new BadRequestException('Create a character first');
+    return character.id;
   }
 
   private validateAvatar(
