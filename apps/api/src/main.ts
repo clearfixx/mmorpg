@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
+import { requireEnvironment } from './common/environment';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,7 +14,10 @@ async function bootstrap() {
     }),
   );
   app.enableShutdownHooks();
-  app.enableCors({ origin: 'http://localhost:3000', credentials: true });
+  app.enableCors({
+    origin: requireEnvironment('WEB_ORIGIN'),
+    credentials: true,
+  });
   await app.listen(process.env.API_PORT ?? 4000);
 }
 

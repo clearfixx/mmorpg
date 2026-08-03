@@ -4,7 +4,9 @@ packages:
 
 allowBuilds:
   '@apollo/protobufjs': true
+  '@prisma/engines': true
   esbuild: true
+  prisma: true
   sharp: true
   unrs-resolver: true
 

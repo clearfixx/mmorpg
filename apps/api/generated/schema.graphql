@@ -2,7 +2,51 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type AuthPayload {
+  authenticated: Boolean!
+  viewer: Viewer
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type Mutation {
+  login(input: LoginInput!): AuthPayload!
+  logout: Boolean!
+  register(input: RegisterInput!): AuthPayload!
+}
+
 type Query {
-  """API readiness probe for the foundation milestone."""
+  """
+  API readiness probe for the foundation milestone.
+  """
   status: String!
+  viewer: Viewer
+}
+
+input RegisterInput {
+  email: String!
+  password: String!
+}
+
+enum UserRole {
+  ADMIN
+  MODERATOR
+  PLAYER
+  ROOT_OWNER
+  SUPPORT
+}
+
+type Viewer {
+  createdAt: DateTime!
+  email: String!
+  id: ID!
+  role: UserRole!
 }

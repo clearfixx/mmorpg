@@ -18,6 +18,16 @@ pnpm dev
 
 Web runs at `http://localhost:3000`; GraphQL API runs at `http://localhost:4000/graphql`.
 
+## Database
+
+```bash
+pnpm --filter @veilfall/database db:generate
+pnpm --filter @veilfall/database db:migrate
+pnpm --filter @veilfall/database db:deploy
+```
+
+Local development reads the root `.env`. The first migration creates server-owned `users` and hashed `sessions`; plaintext passwords and session tokens are never persisted.
+
 ## Quality checks
 
 ```bash

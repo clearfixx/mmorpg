@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 
 const milestones = [
   ['01', 'Особистий шлях', 'Герой, тактичний бій, здобич і видиме посилення.'],
@@ -58,10 +59,11 @@ export default function Home() {
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
               <Button
+                asChild
                 size="lg"
                 className="h-12 rounded-sm bg-ember px-6 text-ink hover:bg-ember-bright"
               >
-                Почати перший шлях
+                <Link href="/auth">Почати перший шлях</Link>
               </Button>
               <Button
                 variant="outline"
