@@ -207,7 +207,7 @@ describe('Health (e2e)', () => {
       .set('Cookie', cookie)
       .send({
         query:
-          'mutation Act($input: SubmitCombatCommandInput!) { submitCombatCommand(input: $input) { status version turn enemy { health } log } }',
+          'mutation Act($input: SubmitCombatCommandInput!) { submitCombatCommand(input: $input) { status version turn enemy { health } log { turn kind message amount detail } } }',
         variables: {
           input: {
             actionId: 'STRIKE',

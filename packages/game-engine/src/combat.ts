@@ -22,6 +22,23 @@ export interface CombatAction {
   description: string
 }
 
+export type CombatLogKind =
+  | 'SYSTEM'
+  | 'PLAYER_DAMAGE'
+  | 'ENEMY_DAMAGE'
+  | 'HEAL'
+  | 'DEFENSE'
+  | 'STATUS'
+  | 'VICTORY'
+
+export interface CombatLogEntry {
+  turn: number
+  kind: CombatLogKind
+  message: string
+  amount?: number
+  detail?: string
+}
+
 export interface BattleState {
   version: number
   turn: number
@@ -41,7 +58,7 @@ export interface BattleState {
   stunned: boolean
   exposed: boolean
   regeneratingTurns: number
-  log: string[]
+  log: CombatLogEntry[]
 }
 
 export const INTENTS = [
@@ -170,7 +187,13 @@ export function createBattle(
     stunned: false,
     exposed: false,
     regeneratingTurns: preparation === 'REST_BRAZIER' ? 3 : 0,
-    log: ['Спотворений Завісою мародер виходить на дорогу.'],
+    log: [
+      {
+        turn: 0,
+        kind: 'SYSTEM',
+        message: 'Спотворений Завісою мародер виходить на дорогу.',
+      },
+    ],
   }
 }
 
@@ -187,7 +210,7 @@ export function resolveTurn(
     throw new Error('INSUFFICIENT_RESOURCE')
 
   const next: BattleState = structuredClone(state)
-  next.log = []
+  next.log = normalizeLog(next.log)
   next.hero.resource -= action.cost
   let damage = 0
 
@@ -224,47 +247,95 @@ export function resolveTurn(
     case 'EVADE':
       next.guardedReduction = 1
       break
-    case 'SECOND_WIND':
+    case 'SECOND_WIND': {
+      const before = next.hero.health
       next.hero.health = Math.min(next.hero.maxHealth, next.hero.health + 28)
+      next.log.push({
+        turn: state.turn,
+        kind: 'HEAL',
+        message: `Герой застосовує «${action.name}».`,
+        amount: next.hero.health - before,
+      })
       break
+    }
   }
 
   if (state.exposed && damage > 0) damage = Math.ceil(damage * 1.5)
   next.enemy.health = Math.max(0, next.enemy.health - damage)
-  next.log.push(
-    `${action.name}: ${damage > 0 ? `${damage} шкоди.` : action.description}`,
-  )
+  if (damage > 0)
+    next.log.push({
+      turn: state.turn,
+      kind: 'PLAYER_DAMAGE',
+      message: `Герой застосовує «${action.name}».`,
+      amount: damage,
+    })
+  else if (actionId !== 'SECOND_WIND')
+    next.log.push({
+      turn: state.turn,
+      kind: 'DEFENSE',
+      message: `Герой застосовує «${action.name}».`,
+      detail: action.description,
+    })
 
   if (next.bleedingTurns > 0) {
     next.enemy.health = Math.max(0, next.enemy.health - 5)
     next.bleedingTurns -= 1
-    next.log.push('Кровотеча завдає 5 шкоди.')
+    next.log.push({
+      turn: state.turn,
+      kind: 'STATUS',
+      message: 'Кровотеча виснажує мародера.',
+      amount: 5,
+    })
   }
   if (next.enemy.health === 0) {
     next.status = 'WON'
     next.version += 1
-    next.log.push('Мародер падає. Перемога.')
+    next.log.push({
+      turn: state.turn,
+      kind: 'VICTORY',
+      message: 'Мародер падає. Перемога.',
+    })
     return next
   }
 
   const intent = INTENTS[state.intentIndex] ?? INTENTS[0]!
   if (next.stunned) {
-    next.log.push('Атаку ворога перервано.')
+    next.log.push({
+      turn: state.turn,
+      kind: 'DEFENSE',
+      message: 'Небезпечну атаку ворога перервано.',
+    })
     next.stunned = false
   } else if (intent.damage > 0) {
     const armorReduction = state.preparation === 'SEARCH_ARMORY' ? 4 : 0
     const raw = Math.max(0, intent.damage - armorReduction)
     const received = Math.floor(raw * (1 - next.guardedReduction))
+    const blocked = intent.damage - received
     next.hero.health = Math.max(0, next.hero.health - received)
-    next.log.push(`${intent.name}: герой отримує ${received} шкоди.`)
+    next.log.push({
+      turn: state.turn,
+      kind: 'ENEMY_DAMAGE',
+      message: `Мародер застосовує «${intent.name}».`,
+      amount: received,
+      ...(blocked > 0 ? { detail: `Заблоковано ${blocked} шкоди.` } : {}),
+    })
   } else {
-    next.log.push(intent.description)
+    next.log.push({
+      turn: state.turn,
+      kind: 'SYSTEM',
+      message: intent.description,
+    })
   }
 
   if (next.regeneratingTurns > 0 && next.hero.health > 0) {
     next.hero.health = Math.min(next.hero.maxHealth, next.hero.health + 6)
     next.regeneratingTurns -= 1
-    next.log.push('Регенерація відновлює 6 здоров’я.')
+    next.log.push({
+      turn: state.turn,
+      kind: 'HEAL',
+      message: 'Підготовка відновлює здоров’я.',
+      amount: 6,
+    })
   }
   next.guardedReduction = 0
   next.exposed = intent.id === 'OFF_BALANCE'
@@ -274,7 +345,19 @@ export function resolveTurn(
   next.hero.resource = Math.min(next.hero.maxResource, next.hero.resource + 1)
   if (next.hero.health === 0) {
     next.status = 'LOST'
-    next.log.push('Герой не витримує удару.')
+    next.log.push({
+      turn: state.turn,
+      kind: 'ENEMY_DAMAGE',
+      message: 'Герой не витримує удару.',
+    })
   }
   return next
+}
+
+function normalizeLog(log: BattleState['log'] | string[]): CombatLogEntry[] {
+  return log.map((entry) =>
+    typeof entry === 'string'
+      ? { turn: 0, kind: 'SYSTEM' as const, message: entry }
+      : entry,
+  )
 }

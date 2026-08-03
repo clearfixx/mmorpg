@@ -24,6 +24,15 @@ export class EnemyIntentModel {
 }
 
 @ObjectType()
+export class CombatLogEntryModel {
+  @Field(() => Int) turn!: number;
+  @Field() kind!: string;
+  @Field() message!: string;
+  @Field(() => Int, { nullable: true }) amount?: number;
+  @Field(() => String, { nullable: true }) detail?: string;
+}
+
+@ObjectType()
 export class BattleModel {
   @Field(() => ID) id!: string;
   @Field() status!: string;
@@ -34,5 +43,5 @@ export class BattleModel {
   @Field(() => EnemyIntentModel) currentIntent!: EnemyIntentModel;
   @Field(() => [EnemyIntentModel]) visibleIntents!: EnemyIntentModel[];
   @Field(() => [CombatActionModel]) actions!: CombatActionModel[];
-  @Field(() => [String]) log!: string[];
+  @Field(() => [CombatLogEntryModel]) log!: CombatLogEntryModel[];
 }

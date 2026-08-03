@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log'
+  'id status version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
@@ -30,7 +30,13 @@ interface Battle {
     cost: number
     description: string
   }>
-  log: string[]
+  log: Array<{
+    turn: number
+    kind: string
+    message: string
+    amount?: number
+    detail?: string
+  }>
 }
 
 export function BattleEncounter({
@@ -145,9 +151,12 @@ export function BattleEncounter({
           </p>
           <div className="mt-6 border-l-2 border-moss bg-moss/5 px-4 py-3">
             <p className="text-[0.65rem] uppercase tracking-widest text-moss">
-              Активна підготовка
+              Підготовка до бою
             </p>
             <p className="mt-1 text-sm">{preparation}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {preparationEffect(preparation)}
+            </p>
           </div>
           {error && (
             <p role="alert" className="mt-4 text-sm text-destructive">
@@ -184,12 +193,14 @@ export function BattleEncounter({
         </header>
         <section className="grid gap-px bg-border/60 md:grid-cols-2">
           <HealthPanel
+            portrait="В"
             title={heroName}
             value={battle.hero.health}
             max={battle.hero.maxHealth}
             secondary={`${battle.hero.resource}/${battle.hero.maxResource} ресурсу`}
           />
           <HealthPanel
+            portrait="М"
             title="Мародер"
             value={battle.enemy.health}
             max={battle.enemy.maxHealth}
@@ -236,13 +247,34 @@ export function BattleEncounter({
               ))}
             </div>
           </div>
-          <aside className="border-t border-border/70 bg-background/30 p-5 md:border-t-0 md:border-l">
+          <aside className="max-h-[34rem] overflow-y-auto border-t border-border/70 bg-background/30 p-5 md:border-t-0 md:border-l">
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
               Журнал бою
             </p>
-            <ol className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
+            <ol className="mt-3 space-y-3 text-xs leading-5">
               {battle.log.map((entry, index) => (
-                <li key={`${battle.version}-${index}`}>{entry}</li>
+                <li
+                  key={`${entry.turn}-${index}`}
+                  className="border-b border-border/40 pb-2"
+                >
+                  <span className="mb-1 block font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
+                    Хід {entry.turn}
+                  </span>
+                  <span className={logColor(entry.kind)}>{entry.message}</span>
+                  {typeof entry.amount === 'number' && (
+                    <span
+                      className={`ml-2 font-mono ${entry.kind === 'HEAL' ? 'text-moss' : entry.kind === 'ENEMY_DAMAGE' ? 'text-destructive' : 'text-ember'}`}
+                    >
+                      [{entry.kind === 'HEAL' ? '+' : '−'}
+                      {entry.amount} HP]
+                    </span>
+                  )}
+                  {entry.detail && (
+                    <span className="mt-1 block text-muted-foreground">
+                      [{entry.detail}]
+                    </span>
+                  )}
+                </li>
               ))}
             </ol>
             {!finished && battle.turn > 1 && (
@@ -278,11 +310,13 @@ export function BattleEncounter({
 }
 
 function HealthPanel({
+  portrait,
   title,
   value,
   max,
   secondary,
 }: {
+  portrait: string
   title: string
   value: number
   max: number
@@ -290,22 +324,46 @@ function HealthPanel({
 }) {
   const width = Math.max(0, Math.round((value / max) * 100))
   return (
-    <div className="bg-panel p-5">
-      <div className="flex justify-between text-sm">
-        <span>{title}</span>
-        <span className="font-mono">
-          {value}/{max}
-        </span>
+    <div className="flex gap-4 bg-panel p-5">
+      <div
+        className="grid size-16 shrink-0 place-items-center border border-border bg-background font-mono text-xl text-ember"
+        aria-label={`Портрет: ${title}`}
+      >
+        {portrait}
       </div>
-      <div className="mt-3 h-1.5 bg-background">
-        <div
-          className="h-full bg-ember transition-all"
-          style={{ width: `${width}%` }}
-        />
+      <div className="min-w-0 flex-1">
+        <div className="flex justify-between text-sm">
+          <span className="truncate">{title}</span>
+          <span className="font-mono">
+            {value}/{max}
+          </span>
+        </div>
+        <div className="mt-3 h-1.5 bg-background">
+          <div
+            className="h-full bg-ember transition-all"
+            style={{ width: `${width}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">{secondary}</p>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{secondary}</p>
     </div>
   )
+}
+
+function preparationEffect(preparation: string): string {
+  if (preparation.includes('пластини'))
+    return 'Кожна атака ворога завдає на 4 одиниці менше шкоди.'
+  if (preparation.includes('намірів'))
+    return 'Ви бачите поточний і наступний намір ворога.'
+  return 'Перші три ходи відновлюють по 6 HP.'
+}
+
+function logColor(kind: string): string {
+  if (kind === 'HEAL' || kind === 'VICTORY') return 'text-moss'
+  if (kind === 'ENEMY_DAMAGE') return 'text-destructive'
+  if (kind === 'PLAYER_DAMAGE') return 'text-ember'
+  if (kind === 'DEFENSE' || kind === 'STATUS') return 'text-cyan-300'
+  return 'text-muted-foreground'
 }
 
 async function graphQl<T>(

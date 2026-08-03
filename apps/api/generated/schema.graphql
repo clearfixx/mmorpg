@@ -18,7 +18,7 @@ type BattleModel {
   enemy: CombatantModel!
   hero: CombatantModel!
   id: ID!
-  log: [String!]!
+  log: [CombatLogEntryModel!]!
   status: String!
   turn: Int!
   version: Int!
@@ -64,6 +64,14 @@ type CombatActionModel {
   description: String!
   id: String!
   name: String!
+}
+
+type CombatLogEntryModel {
+  amount: Int
+  detail: String
+  kind: String!
+  message: String!
+  turn: Int!
 }
 
 type CombatantModel {

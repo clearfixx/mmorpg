@@ -156,7 +156,14 @@ export class CombatService {
     const state = battle.state as unknown as BattleState;
     state.status = 'RETREATED';
     state.version += 1;
-    state.log = ['Герой відступає до Зламаної застави.'];
+    state.log = [
+      ...state.log,
+      {
+        turn: state.turn,
+        kind: 'SYSTEM',
+        message: 'Герой відступає до Зламаної застави.',
+      },
+    ];
     await this.prisma.client.$transaction([
       this.prisma.client.battle.update({
         where: { id: battle.id },
@@ -197,7 +204,11 @@ export class CombatService {
           INTENTS[(state.intentIndex + offset) % INTENTS.length] ?? INTENTS[0],
       ),
       actions: actionsFor(state.archetype),
-      log: state.log,
+      log: state.log.map((entry) =>
+        typeof entry === 'string'
+          ? { turn: 0, kind: 'SYSTEM', message: entry }
+          : entry,
+      ),
     };
   }
 }
