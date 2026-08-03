@@ -1,5 +1,5 @@
 import { UserStatus } from '@veilfall/database';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
 import { PrismaService } from '../database/prisma.service';
@@ -69,6 +69,12 @@ export class SessionService {
       role: session.user.role,
       createdAt: session.user.createdAt,
     };
+  }
+
+  async requireViewer(request: Request): Promise<SafeViewer> {
+    const viewer = await this.viewer(request);
+    if (!viewer) throw new UnauthorizedException('Authentication required');
+    return viewer;
   }
 
   async end(request: Request, response: Response): Promise<void> {

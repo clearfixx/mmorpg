@@ -56,6 +56,67 @@ describe('Health (e2e)', () => {
     expect(cookie).toContain('veilfall_session=');
     expect(cookie).toContain('HttpOnly');
 
+    const characterName = `Hero ${Date.now()}`;
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation CreateCharacter($input: CreateCharacterInput!) { createCharacter(input: $input) { name archetype origin avatarMode level baseStats { health damage armor speed reaction } } }',
+        variables: {
+          input: {
+            name: characterName,
+            archetype: 'VANGUARD',
+            origin: 'FORMER_SENTINEL',
+            avatarMode: 'STATIC',
+            staticAvatarId: 'standard-01',
+          },
+        },
+      })
+      .expect(200)
+      .expect({
+        data: {
+          createCharacter: {
+            name: characterName,
+            archetype: 'VANGUARD',
+            origin: 'FORMER_SENTINEL',
+            avatarMode: 'STATIC',
+            level: 1,
+            baseStats: {
+              health: 140,
+              damage: 16,
+              armor: 14,
+              speed: 8,
+              reaction: 8,
+            },
+          },
+        },
+      });
+
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: '{ myCharacter { name level } }' })
+      .expect(200)
+      .expect({ data: { myCharacter: { name: characterName, level: 1 } } });
+
+    const duplicate = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation CreateCharacter($input: CreateCharacterInput!) { createCharacter(input: $input) { id } }',
+        variables: {
+          input: {
+            name: `${characterName} Two`,
+            archetype: 'RANGER',
+            avatarMode: 'DYNAMIC',
+          },
+        },
+      })
+      .expect(200);
+    expect(duplicate.text).toContain('errors');
+
     await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
@@ -75,5 +136,14 @@ describe('Health (e2e)', () => {
       .send({ query: '{ viewer { email } }' })
       .expect(200)
       .expect({ data: { viewer: null } });
+  });
+
+  it('rejects character access without a valid session', async () => {
+    const server = app.getHttpServer() as Server;
+    const response = await request(server)
+      .post('/graphql')
+      .send({ query: '{ myCharacter { id } }' })
+      .expect(200);
+    expect(response.text).toContain('errors');
   });
 });

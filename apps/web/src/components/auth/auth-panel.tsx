@@ -46,7 +46,7 @@ export function AuthPanel() {
       const payload: unknown = await response.json()
       if (!response.ok || hasGraphqlErrors(payload))
         throw new Error('AUTHENTICATION_FAILED')
-      window.location.assign('/')
+      window.location.assign('/character/create')
     } catch {
       setError(
         mode === 'login'

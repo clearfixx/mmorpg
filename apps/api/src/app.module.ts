@@ -5,6 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { join } from 'node:path';
 
 import { AppResolver } from './app.resolver';
+import { CharactersModule } from './characters/characters.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { IdentityModule } from './identity/identity.module';
@@ -24,6 +25,7 @@ import type { GraphqlContext } from './identity/identity.types';
     }),
     DatabaseModule,
     IdentityModule,
+    CharactersModule,
   ],
   controllers: [HealthController],
   providers: [AppResolver],

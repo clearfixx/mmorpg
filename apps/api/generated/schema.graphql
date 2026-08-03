@@ -7,6 +7,53 @@ type AuthPayload {
   viewer: Viewer
 }
 
+enum AvatarMode {
+  DYNAMIC
+  STATIC
+}
+
+enum CharacterArchetype {
+  ARCANIST
+  RANGER
+  VANGUARD
+}
+
+type CharacterModel {
+  archetype: CharacterArchetype!
+  avatarMode: AvatarMode!
+  baseStats: CharacterStats!
+  createdAt: DateTime!
+  experience: Int!
+  id: ID!
+  level: Int!
+  name: String!
+  origin: CharacterOrigin!
+  staticAvatarId: String
+  version: Int!
+}
+
+enum CharacterOrigin {
+  ARCHIVE_EXILE
+  FORMER_SENTINEL
+  ROAD_SURVIVOR
+}
+
+type CharacterStats {
+  armor: Int!
+  damage: Int!
+  health: Int!
+  reaction: Int!
+  speed: Int!
+}
+
+input CreateCharacterInput {
+  archetype: CharacterArchetype!
+  avatarMode: AvatarMode!
+  name: String!
+  origin: CharacterOrigin
+  staticAvatarId: String
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
@@ -18,15 +65,16 @@ input LoginInput {
 }
 
 type Mutation {
+  createCharacter(input: CreateCharacterInput!): CharacterModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!
   register(input: RegisterInput!): AuthPayload!
 }
 
 type Query {
-  """
-  API readiness probe for the foundation milestone.
-  """
+  myCharacter: CharacterModel
+
+  """API readiness probe for the foundation milestone."""
   status: String!
   viewer: Viewer
 }

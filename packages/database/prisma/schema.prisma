@@ -22,6 +22,23 @@ enum UserStatus {
   BANNED
 }
 
+enum CharacterArchetype {
+  VANGUARD
+  RANGER
+  ARCANIST
+}
+
+enum CharacterOrigin {
+  FORMER_SENTINEL
+  ROAD_SURVIVOR
+  ARCHIVE_EXILE
+}
+
+enum AvatarMode {
+  STATIC
+  DYNAMIC
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -31,8 +48,28 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
   sessions     Session[]
+  character    Character?
 
   @@map("users")
+}
+
+model Character {
+  id             String             @id @default(uuid()) @db.Uuid
+  userId         String             @unique @map("user_id") @db.Uuid
+  name           String             @db.VarChar(24)
+  nameKey        String             @unique @map("name_key") @db.VarChar(64)
+  archetype      CharacterArchetype
+  origin         CharacterOrigin    @default(ROAD_SURVIVOR)
+  avatarMode     AvatarMode         @default(STATIC) @map("avatar_mode")
+  staticAvatarId String?            @map("static_avatar_id") @db.VarChar(64)
+  level          Int                @default(1)
+  experience     Int                @default(0)
+  version        Int                @default(1)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("characters")
 }
 
 model Session {

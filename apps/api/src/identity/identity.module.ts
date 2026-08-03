@@ -14,5 +14,6 @@ import { SessionTokenService } from './session-token.service';
     SessionService,
     SessionTokenService,
   ],
+  exports: [SessionService],
 })
 export class IdentityModule {}
