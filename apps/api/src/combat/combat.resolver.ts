@@ -20,6 +20,12 @@ export class CombatResolver {
     return this.combat.activeForUser(viewer.id);
   }
 
+  @Query(() => BattleModel, { nullable: true })
+  async latestBattle(@Context() context: GraphqlContext) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.latestForUser(viewer.id);
+  }
+
   @Mutation(() => BattleModel)
   async startEncounter(
     @Args('input') _input: StartEncounterInput,

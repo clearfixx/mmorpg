@@ -47,6 +47,27 @@ export class CombatService {
     );
   }
 
+  async latestForUser(userId: string): Promise<BattleModel | null> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const battle = await this.prisma.client.battle.findFirst({
+      where: { characterId, resultAcknowledgedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!battle) return null;
+    if (
+      battle.status === BattleStatus.ACTIVE &&
+      battle.pendingState &&
+      battle.enemyReadyAt &&
+      battle.enemyReadyAt <= new Date()
+    )
+      return this.finishEnemyResponse(battle.id, characterId);
+    return this.toModel(
+      battle.id,
+      battle.state as unknown as BattleState,
+      battle.pendingState ? 'ENEMY_RESOLVING' : undefined,
+    );
+  }
+
   async start(userId: string): Promise<BattleModel> {
     const context = await this.world.encounterContext(userId);
     const active = await this.prisma.client.battle.findFirst({
@@ -250,14 +271,35 @@ export class CombatService {
     });
     if (active > 0)
       throw new ConflictException('Finish or retreat from battle first');
-    await this.prisma.client.characterWorldState.update({
-      where: { characterId },
-      data: {
-        currentLocation: 'BROKEN_WATCHPOST',
-        preparationChoice: null,
-        version: { increment: 1 },
+    const unclaimedVictory = await this.prisma.client.battle.findFirst({
+      where: {
+        characterId,
+        status: BattleStatus.WON,
+        resultAcknowledgedAt: null,
+        rewardClaim: null,
       },
+      select: { id: true },
     });
+    if (unclaimedVictory)
+      throw new ConflictException('Claim the battle reward before returning');
+    await this.prisma.client.$transaction([
+      this.prisma.client.battle.updateMany({
+        where: {
+          characterId,
+          status: { not: BattleStatus.ACTIVE },
+          resultAcknowledgedAt: null,
+        },
+        data: { resultAcknowledgedAt: new Date() },
+      }),
+      this.prisma.client.characterWorldState.update({
+        where: { characterId },
+        data: {
+          currentLocation: 'BROKEN_WATCHPOST',
+          preparationChoice: null,
+          version: { increment: 1 },
+        },
+      }),
+    ]);
     return true;
   }
 

@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@veilfall/database';
 import type { Server } from 'node:http';
 import request from 'supertest';
 
@@ -275,6 +276,94 @@ describe('Health (e2e)', () => {
           },
         },
       });
+
+    const persistedBattle = await prisma.client.battle.findFirstOrThrow({
+      where: { characterId: combatUser.character?.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    const battleId = persistedBattle.id;
+    const winningState = {
+      ...(persistedBattle.state as Record<string, unknown>),
+      status: 'WON',
+      version: 3,
+    };
+    await prisma.client.battle.update({
+      where: { id: battleId },
+      data: {
+        state: winningState,
+        status: 'WON',
+        version: 3,
+        pendingState: Prisma.DbNull,
+        enemyReadyAt: null,
+        activeCharacterId: null,
+        completedAt: new Date(),
+      },
+    });
+
+    const prematureReturn = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: 'mutation { returnToWatchpost }' })
+      .expect(200);
+    expect(prematureReturn.text).toContain('errors');
+    expect(prematureReturn.text).toContain(
+      'Claim the battle reward before returning',
+    );
+
+    const rewardKey = `reward-${Date.now()}`;
+    const claimReward = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold item { id definitionId name rarity damage binding setName visualAssetId } } }',
+          variables: {
+            input: { battleId, idempotencyKey: rewardKey },
+          },
+        })
+        .expect(200);
+    const firstReward = await claimReward();
+    const retriedReward = await claimReward();
+    expect(firstReward.body).toEqual(retriedReward.body);
+    expect(firstReward.text).toContain('veteran-notched-blade-v1');
+    expect(firstReward.text).toContain('BOUND_ON_EQUIP');
+    expect(firstReward.text).toContain('"experience":40');
+    expect(firstReward.text).toContain('"gold":18');
+
+    expect(await prisma.client.rewardClaim.count({ where: { battleId } })).toBe(
+      1,
+    );
+    expect(
+      await prisma.client.itemInstance.count({
+        where: { sourceBattleId: battleId },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.client.itemLineageEvent.count({
+        where: { item: { sourceBattleId: battleId } },
+      }),
+    ).toBe(1);
+    const rewardedCharacter = await prisma.client.character.findUniqueOrThrow({
+      where: { id: combatUser.character?.id },
+      include: { worldState: true },
+    });
+    expect(rewardedCharacter.experience).toBe(40);
+    expect(rewardedCharacter.gold).toBe(18);
+    expect(rewardedCharacter.worldState?.cinderhavenUnlocked).toBe(true);
+
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: 'mutation { returnToWatchpost }' })
+      .expect(200)
+      .expect({ data: { returnToWatchpost: true } });
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: '{ latestBattle { id } }' })
+      .expect(200)
+      .expect({ data: { latestBattle: null } });
 
     const duplicate = await request(server)
       .post('/graphql')

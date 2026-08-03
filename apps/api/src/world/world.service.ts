@@ -181,6 +181,7 @@ export class WorldService {
     currentLocation: WorldLocation;
     preparationChoice: PreparationChoice | null;
     version: number;
+    cinderhavenUnlocked: boolean;
   }): WorldStateModel {
     return {
       ...state,
@@ -197,8 +198,10 @@ export class WorldService {
               },
               {
                 destination: WorldLocation.CINDERHAVEN_GATE,
-                locked: true,
-                lockReason: 'Шлях відкриється після першої перемоги',
+                locked: !state.cinderhavenUnlocked,
+                lockReason: state.cinderhavenUnlocked
+                  ? null
+                  : 'Шлях відкриється після першої перемоги',
               },
             ]
           : [

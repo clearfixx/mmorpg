@@ -40,6 +40,21 @@ interface Battle {
   }>
 }
 
+interface BattleReward {
+  claimId: string
+  experience: number
+  gold: number
+  item: {
+    id: string
+    name: string
+    itemLevel: number
+    rarity: 'COMMON' | 'UNCOMMON'
+    damage: number
+    binding: string
+    setName: string
+  }
+}
+
 export function BattleEncounter({
   heroName,
   preparation,
@@ -51,6 +66,7 @@ export function BattleEncounter({
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reward, setReward] = useState<BattleReward | null>(null)
 
   useEffect(() => {
     void loadActiveBattle()
@@ -154,6 +170,33 @@ export function BattleEncounter({
     }
   }
 
+  async function claimReward() {
+    if (!battle || battle.status !== 'WON') return
+    setPending(true)
+    setError(null)
+    try {
+      const data = await graphQl<{ claimBattleReward: BattleReward }>(
+        `mutation Claim($input: ClaimBattleRewardInput!) {
+          claimBattleReward(input: $input) {
+            claimId experience gold
+            item { id name itemLevel rarity damage binding setName }
+          }
+        }`,
+        {
+          input: {
+            battleId: battle.id,
+            idempotencyKey: crypto.randomUUID(),
+          },
+        },
+      )
+      setReward(data.claimBattleReward)
+    } catch {
+      setError('Не вдалося отримати нагороду. Спробуйте ще раз.')
+    } finally {
+      setPending(false)
+    }
+  }
+
   if (loading)
     return (
       <main className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
@@ -247,6 +290,8 @@ export function BattleEncounter({
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
                 pending={pending}
+                reward={reward}
+                onClaim={claimReward}
                 onReturn={returnToWatchpost}
               />
             ) : enemyResponding ? (
@@ -363,6 +408,8 @@ function BattleResult({
   health,
   maxHealth,
   pending,
+  reward,
+  onClaim,
   onReturn,
 }: {
   status: string
@@ -370,6 +417,8 @@ function BattleResult({
   health: number
   maxHealth: number
   pending: boolean
+  reward: BattleReward | null
+  onClaim: () => void
   onReturn: () => void
 }) {
   const won = status === 'WON'
@@ -388,19 +437,80 @@ function BattleResult({
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Ходів: {turns}. Здоров’я героя: {health}/{maxHealth}.
       </p>
-      {won ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          Нагорода з’явиться в наступному пакеті механік.
-        </p>
+      {won && !reward ? (
+        <div className="mt-5 border border-ember/50 bg-background/50 p-4">
+          <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-ember">
+            Здобич не отримана
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Заберіть трофей мародера перед поверненням на заставу.
+          </p>
+          <Button
+            type="button"
+            onClick={onClaim}
+            disabled={pending}
+            className="mt-4 h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
+          >
+            {pending ? 'Перевіряємо здобич…' : 'Отримати нагороду'}
+          </Button>
+        </div>
       ) : null}
-      <Button
-        type="button"
-        onClick={onReturn}
-        disabled={pending}
-        className="mt-5 h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
-      >
-        {pending ? 'Повертаємося…' : 'Повернутися на заставу'}
-      </Button>
+      {reward ? <RewardReveal reward={reward} /> : null}
+      {!won || reward ? (
+        <Button
+          type="button"
+          onClick={onReturn}
+          disabled={pending}
+          variant="outline"
+          className="mt-5 h-9 rounded-sm"
+        >
+          {pending ? 'Повертаємося…' : 'Повернутися на заставу'}
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+function RewardReveal({ reward }: { reward: BattleReward }) {
+  return (
+    <section
+      className="mt-5 border border-moss/50 bg-background/55 p-4"
+      aria-live="polite"
+    >
+      <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
+        Нагороду отримано
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-[5rem_1fr]">
+        <div className="grid size-20 place-items-center border border-ember/50 bg-ember/5 font-mono text-2xl text-ember">
+          V
+        </div>
+        <div>
+          <p className="text-lg font-semibold">{reward.item.name}</p>
+          <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-wider text-ember">
+            {rarityName(reward.item.rarity)} · комплект {reward.item.setName}
+          </p>
+          <dl className="mt-3 grid grid-cols-3 gap-px bg-border/60 text-center">
+            <RewardStat label="DMG" value={`+${reward.item.damage}`} />
+            <RewardStat label="EXP" value={`+${reward.experience}`} />
+            <RewardStat label="Золото" value={`+${reward.gold}`} />
+          </dl>
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            Предмет переміщено до постійного сундука. Він прив’яжеться до героя
+            після екіпірування.
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function RewardStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-panel px-2 py-2">
+      <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 font-mono text-xs text-foreground">{value}</dd>
     </div>
   )
 }
@@ -460,10 +570,14 @@ function logColor(kind: string): string {
 }
 
 async function loadActiveBattle(): Promise<Battle | null> {
-  const data = await graphQl<{ activeBattle: Battle | null }>(
-    `{ activeBattle { ${battleFields} } }`,
+  const data = await graphQl<{ latestBattle: Battle | null }>(
+    `{ latestBattle { ${battleFields} } }`,
   )
-  return data.activeBattle
+  return data.latestBattle
+}
+
+function rarityName(rarity: BattleReward['item']['rarity']): string {
+  return rarity === 'UNCOMMON' ? 'Незвичайний' : 'Звичайний'
 }
 
 async function graphQl<T>(
