@@ -1,6 +1,15 @@
 'use client'
 
-import { ArrowRight, Compass, Eye, Flame, Shield } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Compass,
+  Eye,
+  Flame,
+  Package,
+  Shield,
+  Sword,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -28,6 +37,26 @@ interface Hero {
   archetype: 'VANGUARD' | 'RANGER' | 'ARCANIST'
   level: number
   baseStats: { health: number; damage: number; armor: number }
+}
+
+interface InventoryItem {
+  id: string
+  name: string
+  itemLevel: number
+  rarity: string
+  damage: number
+  binding: string
+  setName: string
+  visualAssetId: string
+}
+
+interface Inventory {
+  characterVersion: number
+  baseDamage: number
+  totalDamage: number
+  chest: InventoryItem[]
+  equipped: Array<{ slot: 'MAIN_HAND'; item: InventoryItem }>
+  mainHandVisualAssetId: string | null
 }
 
 const preparations = [
@@ -59,6 +88,8 @@ const preparations = [
 export function GameJourney() {
   const [hero, setHero] = useState<Hero | null>(null)
   const [world, setWorld] = useState<WorldState | null>(null)
+  const [inventory, setInventory] = useState<Inventory | null>(null)
+  const [view, setView] = useState<'LOBBY' | 'EQUIPMENT'>('LOBBY')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,6 +99,7 @@ export function GameJourney() {
       else {
         setHero(result.hero)
         setWorld(result.world)
+        setInventory(result.inventory)
       }
     })
   }, [])
@@ -128,6 +160,38 @@ export function GameJourney() {
   if (world.currentLocation === 'HOLLOW_ROAD')
     return <HollowRoad hero={hero} preparation={world.preparationChoice} />
 
+  if (view === 'EQUIPMENT' && inventory)
+    return (
+      <EquipmentScreen
+        hero={hero}
+        inventory={inventory}
+        pending={pending}
+        error={error}
+        onBack={() => setView('LOBBY')}
+        onEquip={async (itemId) => {
+          setPending(true)
+          setError(null)
+          try {
+            const next = await executeInventoryMutation(
+              itemId,
+              inventory.characterVersion,
+            )
+            setInventory(next)
+            setHero({
+              ...hero,
+              baseStats: { ...hero.baseStats, damage: next.totalDamage },
+            })
+          } catch {
+            setError(
+              'Не вдалося екіпірувати предмет. Оновіть стан і повторіть дію.',
+            )
+          } finally {
+            setPending(false)
+          }
+        }}
+      />
+    )
+
   const hollowRoad = world.routes.find(
     (route) => route.destination === 'HOLLOW_ROAD',
   )
@@ -167,6 +231,15 @@ export function GameJourney() {
             </p>
             <p className="mt-2 text-sm">Зламана застава</p>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setView('EQUIPMENT')}
+            className="mt-6 h-9 w-full justify-start rounded-sm"
+          >
+            <Package aria-hidden="true" />
+            Герой і сундук
+          </Button>
         </aside>
 
         <section className="relative overflow-hidden px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
@@ -282,9 +355,177 @@ function HollowRoad({
   )
 }
 
+function EquipmentScreen({
+  hero,
+  inventory,
+  pending,
+  error,
+  onBack,
+  onEquip,
+}: {
+  hero: Hero
+  inventory: Inventory
+  pending: boolean
+  error: string | null
+  onBack: () => void
+  onEquip: (itemId: string) => void
+}) {
+  const weapon = inventory.equipped.find(
+    (entry) => entry.slot === 'MAIN_HAND',
+  )?.item
+  return (
+    <main className="min-h-screen bg-background px-4 py-5 text-foreground sm:px-6">
+      <div className="mx-auto max-w-6xl border border-border/70 bg-panel/60">
+        <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
+          <div>
+            <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
+              Зламана застава · спорядження
+            </p>
+            <h1 className="mt-1 text-xl font-semibold">{hero.name}</h1>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onBack}
+            className="h-9 rounded-sm"
+          >
+            <ArrowLeft aria-hidden="true" /> До застави
+          </Button>
+        </header>
+        <div className="grid lg:grid-cols-[18rem_1fr_20rem]">
+          <aside className="border-b border-border/70 p-5 lg:border-r lg:border-b-0">
+            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+              Показники
+            </p>
+            <dl className="mt-4 space-y-3 text-sm">
+              <div className="flex justify-between">
+                <dt>Базовий DMG</dt>
+                <dd className="font-mono">{inventory.baseDamage}</dd>
+              </div>
+              <div className="flex justify-between text-ember">
+                <dt>Зброя</dt>
+                <dd className="font-mono">+{weapon?.damage ?? 0}</dd>
+              </div>
+              <div className="flex justify-between border-t border-border pt-3 font-medium">
+                <dt>Загальний DMG</dt>
+                <dd className="font-mono">{inventory.totalDamage}</dd>
+              </div>
+            </dl>
+            <div className="mt-8">
+              <p className="font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
+                Основна рука
+              </p>
+              <div className="mt-2 border border-ember/50 bg-ember/5 p-3 text-sm">
+                {weapon ? weapon.name : 'Слот порожній'}
+              </div>
+            </div>
+          </aside>
+          <section className="relative min-h-[34rem] border-b border-border/70 p-6 lg:border-r lg:border-b-0">
+            <p className="text-center font-mono text-[0.65rem] uppercase tracking-[0.22em] text-moss">
+              Динамічний вигляд
+            </p>
+            <div className="relative mx-auto mt-8 h-96 w-52">
+              <div className="absolute top-0 left-1/2 h-16 w-14 -translate-x-1/2 border border-border bg-muted" />
+              <div className="absolute top-16 left-1/2 h-44 w-28 -translate-x-1/2 border border-border bg-panel" />
+              <div className="absolute top-60 left-1/2 h-32 w-24 -translate-x-1/2 border-x border-border bg-panel" />
+              <div className="absolute top-20 right-0 flex h-56 w-10 items-center justify-center border border-ember/60 bg-ember/5 text-ember">
+                {weapon ? (
+                  <Sword className="h-7 w-7" aria-label={weapon.name} />
+                ) : (
+                  <span className="font-mono text-xs">—</span>
+                )}
+              </div>
+            </div>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {inventory.mainHandVisualAssetId ?? 'Базовий вигляд без зброї'}
+            </p>
+          </section>
+          <aside className="p-5">
+            <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+              Сундук · зброя
+            </p>
+            <div className="mt-4 space-y-3">
+              {inventory.chest.length === 0 ? (
+                <p className="border border-border/70 p-4 text-sm text-muted-foreground">
+                  У сундуку немає доступної зброї.
+                </p>
+              ) : (
+                inventory.chest.map((item) => (
+                  <div
+                    key={item.id}
+                    className="border border-border/70 bg-background/45 p-4"
+                  >
+                    <p className="font-medium">{item.name}</p>
+                    <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-ember">
+                      {item.rarity} · {item.setName}
+                    </p>
+                    <div className="mt-3 flex justify-between text-sm">
+                      <span className="text-muted-foreground">Зміна DMG</span>
+                      <span className="font-mono text-moss">
+                        +{item.damage - (weapon?.damage ?? 0)}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={pending || item.itemLevel > hero.level}
+                      onClick={() => onEquip(item.id)}
+                      className="mt-4 h-8 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
+                    >
+                      {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+            {error ? (
+              <p
+                role="alert"
+                className="mt-4 border-l-2 border-destructive px-3 py-2 text-sm text-destructive"
+              >
+                {error}
+              </p>
+            ) : null}
+          </aside>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+async function executeInventoryMutation(
+  itemId: string,
+  expectedCharacterVersion: number,
+): Promise<Inventory> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query:
+        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
+      variables: {
+        input: {
+          itemId,
+          slot: 'MAIN_HAND',
+          expectedCharacterVersion,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { equipItem: Inventory }
+    errors?: unknown
+  }
+  if (!response.ok || payload.errors || !payload.data)
+    throw new Error('EQUIP_FAILED')
+  return payload.data.equipItem
+}
+
 async function loadJourney(): Promise<{
   hero: Hero | null
   world: WorldState | null
+  inventory: Inventory | null
   redirect: string | null
 }> {
   try {
@@ -294,7 +535,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } }',
+          '{ viewer { id } myCharacter { name archetype level baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -302,20 +543,27 @@ async function loadJourney(): Promise<{
         viewer?: unknown
         myCharacter?: Hero
         currentLocation?: WorldState
+        myInventory?: Inventory
       }
       errors?: unknown
     }
     if (payload.errors || !payload.data?.viewer)
-      return { hero: null, world: null, redirect: '/auth' }
+      return { hero: null, world: null, inventory: null, redirect: '/auth' }
     if (!payload.data.myCharacter)
-      return { hero: null, world: null, redirect: '/character/create' }
+      return {
+        hero: null,
+        world: null,
+        inventory: null,
+        redirect: '/character/create',
+      }
     return {
       hero: payload.data.myCharacter,
       world: payload.data.currentLocation ?? null,
+      inventory: payload.data.myInventory ?? null,
       redirect: null,
     }
   } catch {
-    return { hero: null, world: null, redirect: '/auth' }
+    return { hero: null, world: null, inventory: null, redirect: '/auth' }
   }
 }
 

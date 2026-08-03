@@ -8,6 +8,7 @@ export {
   BattleStatus,
   CharacterArchetype,
   CharacterOrigin,
+  EquipmentSlot,
   ItemBinding,
   ItemLineageType,
   ItemLocation,

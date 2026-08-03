@@ -56,6 +56,7 @@ export class CharactersService {
   async findForUser(userId: string): Promise<CharacterModel | null> {
     const character = await this.prisma.client.character.findUnique({
       where: { userId },
+      include: { equipment: { include: { item: true } } },
     });
     return character ? this.toModel(character) : null;
   }
@@ -127,8 +128,16 @@ export class CharactersService {
     experience: number;
     version: number;
     createdAt: Date;
+    equipment?: Array<{ item: { damage: number } }>;
   }): CharacterModel {
-    return { ...character, baseStats: BASE_STATS[character.archetype] };
+    const weaponDamage = character.equipment?.[0]?.item.damage ?? 0;
+    return {
+      ...character,
+      baseStats: {
+        ...BASE_STATS[character.archetype],
+        damage: BASE_STATS[character.archetype].damage + weaponDamage,
+      },
+    };
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

@@ -45,6 +45,7 @@ export interface BattleState {
   status: BattleStatus
   archetype: CombatArchetype
   preparation: Preparation
+  weaponDamageBonus: number
   hero: {
     health: number
     maxHealth: number
@@ -171,6 +172,7 @@ export function actionsFor(archetype: CombatArchetype): CombatAction[] {
 export function createBattle(
   archetype: CombatArchetype,
   preparation: Preparation,
+  weaponDamageBonus = 0,
 ): BattleState {
   const maxHealth = { VANGUARD: 140, RANGER: 100, ARCANIST: 90 }[archetype]
   return {
@@ -179,6 +181,7 @@ export function createBattle(
     status: 'ACTIVE',
     archetype,
     preparation,
+    weaponDamageBonus,
     hero: { health: maxHealth, maxHealth, resource: 3, maxResource: 5 },
     enemy: { health: 125, maxHealth: 125 },
     intentIndex: 0,
@@ -259,6 +262,8 @@ export function resolveTurn(
       break
     }
   }
+
+  if (damage > 0) damage += state.weaponDamageBonus ?? 0
 
   if (state.exposed && damage > 0) damage = Math.ceil(damage * 1.5)
   next.enemy.health = Math.max(0, next.enemy.health - damage)

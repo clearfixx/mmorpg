@@ -11,6 +11,7 @@ import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { IdentityModule } from './identity/identity.module';
 import type { GraphqlContext } from './identity/identity.types';
+import { InventoryModule } from './inventory/inventory.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { WorldModule } from './world/world.module';
 
@@ -28,6 +29,7 @@ import { WorldModule } from './world/world.module';
     }),
     DatabaseModule,
     IdentityModule,
+    InventoryModule,
     CharactersModule,
     CombatModule,
     RewardsModule,

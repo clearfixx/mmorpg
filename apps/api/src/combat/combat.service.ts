@@ -82,9 +82,19 @@ export class CombatService {
 
     const character = await this.prisma.client.character.findUniqueOrThrow({
       where: { id: context.characterId },
-      select: { archetype: true },
+      select: {
+        archetype: true,
+        equipment: {
+          where: { slot: 'MAIN_HAND' },
+          select: { item: { select: { damage: true } } },
+        },
+      },
     });
-    const state = createBattle(character.archetype, context.preparation);
+    const state = createBattle(
+      character.archetype,
+      context.preparation,
+      character.equipment[0]?.item.damage ?? 0,
+    );
     const battle = await this.prisma.client.battle.create({
       data: {
         characterId: context.characterId,

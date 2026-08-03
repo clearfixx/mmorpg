@@ -352,6 +352,61 @@ describe('Health (e2e)', () => {
     expect(rewardedCharacter.gold).toBe(18);
     expect(rewardedCharacter.worldState?.cinderhavenUnlocked).toBe(true);
 
+    const rewardedItem = await prisma.client.itemInstance.findUniqueOrThrow({
+      where: { sourceBattleId: battleId },
+    });
+    const equipKey = `equip-${Date.now()}`;
+    const equip = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage chest { id } equipped { slot item { id binding damage visualAssetId } } } }',
+          variables: {
+            input: {
+              itemId: rewardedItem.id,
+              slot: 'MAIN_HAND',
+              expectedCharacterVersion: rewardedCharacter.version,
+              idempotencyKey: equipKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstEquip = await equip();
+    const retriedEquip = await equip();
+    expect(firstEquip.body).toEqual(retriedEquip.body);
+    expect(firstEquip.text).toContain('"baseDamage":16');
+    expect(firstEquip.text).toContain(
+      `"totalDamage":${16 + rewardedItem.damage}`,
+    );
+    expect(firstEquip.text).toContain('"binding":"BOUND"');
+    expect(firstEquip.text).toContain('"chest":[]');
+    expect(
+      await prisma.client.equipmentAssignment.count({
+        where: { characterId: rewardedCharacter.id, slot: 'MAIN_HAND' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.client.itemLineageEvent.count({
+        where: { itemId: rewardedItem.id },
+      }),
+    ).toBe(2);
+
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: '{ myCharacter { version baseStats { damage } } }' })
+      .expect(200)
+      .expect({
+        data: {
+          myCharacter: {
+            version: rewardedCharacter.version + 1,
+            baseStats: { damage: 16 + rewardedItem.damage },
+          },
+        },
+      });
+
     await prisma.client.battle.create({
       data: {
         characterId: rewardedCharacter.id,

@@ -114,6 +114,43 @@ type EnemyIntentModel {
   name: String!
 }
 
+input EquipItemInput {
+  expectedCharacterVersion: Int!
+  idempotencyKey: String!
+  itemId: ID!
+  slot: EquipmentSlot!
+}
+
+enum EquipmentSlot {
+  MAIN_HAND
+}
+
+type EquippedItemModel {
+  item: InventoryItemModel!
+  slot: EquipmentSlot!
+}
+
+type InventoryItemModel {
+  binding: String!
+  damage: Int!
+  definitionId: String!
+  id: ID!
+  itemLevel: Int!
+  name: String!
+  rarity: String!
+  setName: String!
+  visualAssetId: String!
+}
+
+type InventoryModel {
+  baseDamage: Int!
+  characterVersion: Int!
+  chest: [InventoryItemModel!]!
+  equipped: [EquippedItemModel!]!
+  mainHandVisualAssetId: String
+  totalDamage: Int!
+}
+
 enum ItemBinding {
   BOUND
   BOUND_ON_EQUIP
@@ -133,6 +170,7 @@ input LoginInput {
 type Mutation {
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
   createCharacter(input: CreateCharacterInput!): CharacterModel!
+  equipItem(input: EquipItemInput!): InventoryModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!
   performLocationAction(input: PrepareLocationInput!): WorldStateModel!
@@ -161,6 +199,7 @@ type Query {
   currentLocation: WorldStateModel!
   latestBattle: BattleModel
   myCharacter: CharacterModel
+  myInventory: InventoryModel!
 
   """API readiness probe for the foundation milestone."""
   status: String!
