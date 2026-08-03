@@ -311,6 +311,7 @@ export function BattleEncounter({
             {finished ? (
               <BattleResult
                 status={battle.status}
+                encounterTier={battle.encounterTier}
                 turns={battle.turn}
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
@@ -433,6 +434,7 @@ export function BattleEncounter({
 
 function BattleResult({
   status,
+  encounterTier,
   turns,
   health,
   maxHealth,
@@ -443,6 +445,7 @@ function BattleResult({
   onReturn,
 }: {
   status: string
+  encounterTier: number
   turns: number
   health: number
   maxHealth: number
@@ -487,6 +490,13 @@ function BattleResult({
         </div>
       ) : null}
       {reward ? <RewardReveal reward={reward} /> : null}
+      {won && reward ? (
+        <p className="mt-4 text-xs leading-5 text-muted-foreground">
+          Етап {encounterTier + 1}: ворог матиме на 40 більше здоров’я та
+          завдаватиме на 6 більше шкоди. Нагорода: +{40 + encounterTier * 20}{' '}
+          досвіду і +{18 + encounterTier * 12} золота.
+        </p>
+      ) : null}
       {!won || reward ? (
         <div className="mt-5 flex flex-wrap gap-3">
           <Button
@@ -505,7 +515,9 @@ function BattleResult({
               disabled={pending}
               className="h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
             >
-              {pending ? 'Шукаємо шлях…' : 'Продовжити пригоду'}
+              {pending
+                ? 'Шукаємо шлях…'
+                : `Продовжити пригоду · етап ${encounterTier + 1}`}
             </Button>
           ) : null}
         </div>
