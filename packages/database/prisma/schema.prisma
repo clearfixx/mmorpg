@@ -51,6 +51,13 @@ enum PreparationChoice {
   REST_BRAZIER
 }
 
+enum BattleStatus {
+  ACTIVE
+  WON
+  LOST
+  RETREATED
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -82,8 +89,42 @@ model Character {
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   worldState     CharacterWorldState?
   worldCommands  WorldCommand[]
+  battles        Battle[]
 
   @@map("characters")
+}
+
+model Battle {
+  id            String        @id @default(uuid()) @db.Uuid
+  characterId   String        @map("character_id") @db.Uuid
+  activeCharacterId String?   @unique @map("active_character_id") @db.Uuid
+  encounterId   String        @map("encounter_id") @db.VarChar(64)
+  status        BattleStatus  @default(ACTIVE)
+  version       Int           @default(1)
+  seed          Int
+  state         Json
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  completedAt   DateTime?     @map("completed_at")
+  character     Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  commands      BattleCommand[]
+
+  @@index([characterId, status])
+  @@map("battles")
+}
+
+model BattleCommand {
+  id              String   @id @default(uuid()) @db.Uuid
+  battleId        String   @map("battle_id") @db.Uuid
+  idempotencyKey  String   @map("idempotency_key") @db.VarChar(64)
+  expectedVersion Int      @map("expected_version")
+  actionId        String   @map("action_id") @db.VarChar(64)
+  resultingVersion Int     @map("resulting_version")
+  createdAt       DateTime @default(now()) @map("created_at")
+  battle          Battle   @relation(fields: [battleId], references: [id], onDelete: Cascade)
+
+  @@unique([battleId, idempotencyKey])
+  @@map("battle_commands")
 }
 
 model CharacterWorldState {

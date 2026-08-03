@@ -188,6 +188,50 @@ describe('Health (e2e)', () => {
         },
       });
 
+    const started = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Start($input: StartEncounterInput!) { startEncounter(input: $input) { id status version turn currentIntent { id } hero { health } enemy { health } actions { id } } }',
+        variables: { input: { idempotencyKey: `battle-${Date.now()}` } },
+      })
+      .expect(200);
+    expect(started.text).toContain('"status":"ACTIVE"');
+    expect(started.text).toContain('"version":1');
+    expect(started.text).toContain('"id":"STRIKE"');
+
+    const commandKey = `combat-${Date.now()}`;
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Act($input: SubmitCombatCommandInput!) { submitCombatCommand(input: $input) { status version turn enemy { health } log } }',
+        variables: {
+          input: {
+            actionId: 'STRIKE',
+            expectedVersion: 1,
+            idempotencyKey: commandKey,
+          },
+        },
+      })
+      .expect(200)
+      .expect(({ text }) => {
+        expect(text).toContain('"version":2');
+        expect(text).toContain('"turn":2');
+        expect(text).toContain('"health":107');
+      });
+
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: '{ activeBattle { status version turn } }' })
+      .expect(200)
+      .expect({
+        data: { activeBattle: { status: 'ACTIVE', version: 2, turn: 2 } },
+      });
+
     const duplicate = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

@@ -47,7 +47,7 @@ export default function Home() {
             <p className="mb-6 font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground">
               Text-first · Clan-centric · Server-authoritative
             </p>
-            <h1 className="max-w-4xl text-balance text-5xl font-semibold leading-[0.95] tracking-[-0.055em] sm:text-7xl lg:text-[6.5rem]">
+            <h1 className="max-w-3xl text-balance text-4xl font-semibold leading-[0.98] tracking-[-0.05em] sm:text-6xl lg:text-[4.8rem]">
               Стати сильним можна самому.
               <span className="mt-2 block text-ember">
                 Стати легендою — ні.

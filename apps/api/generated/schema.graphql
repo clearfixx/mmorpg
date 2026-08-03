@@ -12,6 +12,19 @@ enum AvatarMode {
   STATIC
 }
 
+type BattleModel {
+  actions: [CombatActionModel!]!
+  currentIntent: EnemyIntentModel!
+  enemy: CombatantModel!
+  hero: CombatantModel!
+  id: ID!
+  log: [String!]!
+  status: String!
+  turn: Int!
+  version: Int!
+  visibleIntents: [EnemyIntentModel!]!
+}
+
 enum CharacterArchetype {
   ARCANIST
   RANGER
@@ -46,6 +59,20 @@ type CharacterStats {
   speed: Int!
 }
 
+type CombatActionModel {
+  cost: Int!
+  description: String!
+  id: String!
+  name: String!
+}
+
+type CombatantModel {
+  health: Int!
+  maxHealth: Int!
+  maxResource: Int
+  resource: Int
+}
+
 input CreateCharacterInput {
   archetype: CharacterArchetype!
   avatarMode: AvatarMode!
@@ -59,6 +86,12 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
+type EnemyIntentModel {
+  description: String!
+  id: String!
+  name: String!
+}
+
 input LoginInput {
   email: String!
   password: String!
@@ -70,6 +103,9 @@ type Mutation {
   logout: Boolean!
   performLocationAction(input: PrepareLocationInput!): WorldStateModel!
   register(input: RegisterInput!): AuthPayload!
+  retreatFromBattle(input: RetreatInput!): BattleModel!
+  startEncounter(input: StartEncounterInput!): BattleModel!
+  submitCombatCommand(input: SubmitCombatCommandInput!): BattleModel!
   travel(input: TravelInput!): WorldStateModel!
 }
 
@@ -86,6 +122,7 @@ input PrepareLocationInput {
 }
 
 type Query {
+  activeBattle: BattleModel
   currentLocation: WorldStateModel!
   myCharacter: CharacterModel
 
@@ -97,6 +134,21 @@ type Query {
 input RegisterInput {
   email: String!
   password: String!
+}
+
+input RetreatInput {
+  expectedVersion: Int!
+  idempotencyKey: String!
+}
+
+input StartEncounterInput {
+  idempotencyKey: String!
+}
+
+input SubmitCombatCommandInput {
+  actionId: String!
+  expectedVersion: Int!
+  idempotencyKey: String!
 }
 
 input TravelInput {

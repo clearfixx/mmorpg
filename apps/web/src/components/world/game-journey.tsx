@@ -1,9 +1,10 @@
 'use client'
 
-import { ArrowRight, Compass, Eye, Flame, Shield, Swords } from 'lucide-react'
+import { ArrowRight, Compass, Eye, Flame, Shield } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
@@ -133,7 +134,7 @@ export function GameJourney() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto grid min-h-screen max-w-7xl lg:grid-cols-[18rem_1fr]">
+      <div className="mx-auto grid min-h-screen max-w-6xl lg:grid-cols-[15rem_1fr]">
         <aside className="border-b border-border/70 bg-panel/55 p-6 lg:border-r lg:border-b-0 lg:p-8">
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-moss">
             Особова справа
@@ -168,13 +169,13 @@ export function GameJourney() {
           </div>
         </aside>
 
-        <section className="relative overflow-hidden px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
+        <section className="relative overflow-hidden px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
           <div className="pointer-events-none absolute top-0 right-0 h-72 w-72 bg-[radial-gradient(circle,rgba(174,90,47,0.12),transparent_68%)]" />
           <div className="relative max-w-4xl">
             <p className="font-mono text-xs uppercase tracking-[0.3em] text-moss">
               Попелястий край · I
             </p>
-            <h2 className="mt-5 max-w-2xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
+            <h2 className="mt-4 max-w-2xl text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
               Зламана застава
             </h2>
             <p className="mt-6 max-w-3xl text-base leading-8 text-muted-foreground">
@@ -208,7 +209,7 @@ export function GameJourney() {
                       disabled={pending}
                       aria-pressed={selected}
                       onClick={() => prepare(option.value)}
-                      className={`group min-h-64 bg-panel p-5 text-left transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring disabled:cursor-wait ${selected ? 'bg-ember/10' : 'hover:bg-muted/45'}`}
+                      className={`group min-h-52 bg-panel p-4 text-left transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring disabled:cursor-wait ${selected ? 'bg-ember/10' : 'hover:bg-muted/45'}`}
                     >
                       <Icon
                         className={selected ? 'text-ember' : 'text-moss'}
@@ -274,33 +275,10 @@ function HollowRoad({
   preparation: Preparation | null
 }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
-      <section className="w-full max-w-3xl border border-border/70 bg-panel/75 p-8 sm:p-12">
-        <div className="flex items-center gap-3 text-ember">
-          <Swords size={20} aria-hidden="true" />
-          <p className="font-mono text-xs uppercase tracking-[0.28em]">
-            Небезпечна місцевість
-          </p>
-        </div>
-        <h1 className="mt-6 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
-          Порожня дорога
-        </h1>
-        <p className="mt-6 max-w-2xl leading-8 text-muted-foreground">
-          {hero.name} залишає мури застави. Попереду між чорними валунами
-          рухається постать із важким тесаком. Обрана підготовка вже вплине на
-          першу сутичку.
-        </p>
-        <div className="mt-8 border-l-2 border-moss bg-moss/5 px-5 py-4">
-          <p className="text-xs uppercase tracking-widest text-moss">
-            Активна підготовка
-          </p>
-          <p className="mt-2 text-sm">{preparationName(preparation)}</p>
-        </div>
-        <p className="mt-10 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
-          Наступний пакет · тактична сутичка
-        </p>
-      </section>
-    </main>
+    <BattleEncounter
+      heroName={hero.name}
+      preparation={preparationName(preparation)}
+    />
   )
 }
 

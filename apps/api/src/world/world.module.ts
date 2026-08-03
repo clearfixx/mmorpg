@@ -8,5 +8,6 @@ import { WorldService } from './world.service';
 @Module({
   imports: [CharactersModule, IdentityModule],
   providers: [WorldResolver, WorldService],
+  exports: [WorldService],
 })
 export class WorldModule {}

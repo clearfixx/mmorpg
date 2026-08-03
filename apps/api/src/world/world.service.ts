@@ -37,6 +37,20 @@ export class WorldService {
     return this.toModel(state);
   }
 
+  async encounterContext(userId: string) {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const state = await this.prisma.client.characterWorldState.findUnique({
+      where: { characterId },
+    });
+    if (
+      !state ||
+      state.currentLocation !== WorldLocation.HOLLOW_ROAD ||
+      !state.preparationChoice
+    )
+      throw new BadRequestException('Travel to the encounter first');
+    return { characterId, preparation: state.preparationChoice };
+  }
+
   async prepare(
     userId: string,
     input: PrepareLocationInput,
