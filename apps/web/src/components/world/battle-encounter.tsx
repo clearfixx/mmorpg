@@ -348,6 +348,14 @@ export function BattleEncounter({
                 ))}
               </div>
             ) : null}
+            {error ? (
+              <p
+                role="alert"
+                className="mt-5 border-l-2 border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {error}
+              </p>
+            ) : null}
           </div>
           <aside className="max-h-[34rem] overflow-y-auto border-t border-border/70 bg-background/30 p-5 md:border-t-0 md:border-l">
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
@@ -389,11 +397,6 @@ export function BattleEncounter({
               >
                 Відступити
               </Button>
-            ) : null}
-            {error ? (
-              <p role="alert" className="mt-4 text-xs text-destructive">
-                {error}
-              </p>
             ) : null}
           </aside>
         </section>

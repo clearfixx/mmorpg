@@ -352,6 +352,19 @@ describe('Health (e2e)', () => {
     expect(rewardedCharacter.gold).toBe(18);
     expect(rewardedCharacter.worldState?.cinderhavenUnlocked).toBe(true);
 
+    await prisma.client.battle.create({
+      data: {
+        characterId: rewardedCharacter.id,
+        encounterId: 'legacy-unclaimed-victory',
+        status: 'WON',
+        version: 3,
+        seed: 42,
+        state: winningState,
+        completedAt: new Date('2020-01-01T00:00:00.000Z'),
+        createdAt: new Date('2020-01-01T00:00:00.000Z'),
+      },
+    });
+
     await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

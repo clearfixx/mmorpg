@@ -271,16 +271,18 @@ export class CombatService {
     });
     if (active > 0)
       throw new ConflictException('Finish or retreat from battle first');
-    const unclaimedVictory = await this.prisma.client.battle.findFirst({
+    const latestResult = await this.prisma.client.battle.findFirst({
       where: {
         characterId,
-        status: BattleStatus.WON,
         resultAcknowledgedAt: null,
-        rewardClaim: null,
       },
-      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, rewardClaim: { select: { id: true } } },
     });
-    if (unclaimedVictory)
+    if (
+      latestResult?.status === BattleStatus.WON &&
+      latestResult.rewardClaim === null
+    )
       throw new ConflictException('Claim the battle reward before returning');
     await this.prisma.client.$transaction([
       this.prisma.client.battle.updateMany({
