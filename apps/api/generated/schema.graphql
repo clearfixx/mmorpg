@@ -201,7 +201,9 @@ type Query {
   myCharacter: CharacterModel
   myInventory: InventoryModel!
 
-  """API readiness probe for the foundation milestone."""
+  """
+  API readiness probe for the foundation milestone.
+  """
   status: String!
   viewer: Viewer
 }
