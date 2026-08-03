@@ -1,0 +1,16 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  '@apollo/protobufjs': true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+
+onlyBuiltDependencies:
+  - '@apollo/protobufjs'
+  - '@nestjs/core'
+  - esbuild
+  - sharp
+  - unrs-resolver

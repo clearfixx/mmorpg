@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ink: var(--ink);
+  --color-panel: var(--panel);
+  --color-ember: var(--ember);
+  --color-ember-bright: var(--ember-bright);
+  --color-moss: var(--moss);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+}
+
+:root {
+  --background: oklch(0.135 0.012 70);
+  --foreground: oklch(0.91 0.025 77);
+  --card: oklch(0.18 0.014 65);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.17 0.013 65);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.69 0.15 45);
+  --primary-foreground: oklch(0.13 0.01 55);
+  --secondary: oklch(0.23 0.018 65);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.21 0.012 65);
+  --muted-foreground: oklch(0.68 0.025 73);
+  --accent: oklch(0.27 0.04 55);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.61 0.19 28);
+  --border: oklch(0.36 0.025 65 / 70%);
+  --input: oklch(0.29 0.02 65);
+  --ring: oklch(0.69 0.15 45);
+  --ink: oklch(0.13 0.01 55);
+  --panel: oklch(0.17 0.014 65);
+  --ember: oklch(0.72 0.15 48);
+  --ember-bright: oklch(0.78 0.16 55);
+  --moss: oklch(0.69 0.09 145);
+  --radius: 0.35rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply bg-background font-sans;
+  }
+  body {
+    @apply min-h-screen bg-background text-foreground antialiased;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.veil-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.7 0.04 70 / 5%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.7 0.04 70 / 5%) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to bottom, black, transparent 80%);
+}
