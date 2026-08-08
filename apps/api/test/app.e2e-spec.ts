@@ -642,6 +642,113 @@ describe('Health (e2e)', () => {
       }),
     ).toBe(3);
 
+    const talentResult = JSON.parse(firstTalent.text) as {
+      data: { upgradeTalent: { characterVersion: number } };
+    };
+    const clanKey = `clan-${Date.now()}`;
+    const clanName = `Варта ${Date.now()}`;
+    const createClan = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level characterVersion viewerRole members { name role level } } }',
+          variables: {
+            input: {
+              name: clanName,
+              expectedCharacterVersion:
+                talentResult.data.upgradeTalent.characterVersion,
+              idempotencyKey: clanKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstClan = await createClan();
+    const retriedClan = await createClan();
+    expect(firstClan.body).toEqual(retriedClan.body);
+    expect(firstClan.text).toContain('"viewerRole":"LEADER"');
+    expect(firstClan.text).toContain('"level":1');
+    const clanResult = JSON.parse(firstClan.text) as {
+      data: { createClan: { inviteCode: string } };
+    };
+    expect(clanResult.data.createClan.inviteCode).toMatch(/^[A-F0-9]{8}$/);
+    expect(
+      await prisma.client.clanMembership.count({
+        where: { characterId: rewardedCharacter.id },
+      }),
+    ).toBe(1);
+
+    const recruitEmail = `recruit-${Date.now()}@example.test`;
+    createdEmails.push(recruitEmail);
+    const recruitRegistration = await request(server)
+      .post('/graphql')
+      .send({
+        query:
+          'mutation Register($input: RegisterInput!) { register(input: $input) { authenticated } }',
+        variables: {
+          input: {
+            email: recruitEmail,
+            password: 'another correct horse battery staple',
+          },
+        },
+      })
+      .expect(200);
+    const recruitCookies: unknown = recruitRegistration.headers['set-cookie'];
+    if (!Array.isArray(recruitCookies) || typeof recruitCookies[0] !== 'string')
+      throw new Error('Recruit registration did not return a session cookie');
+    const recruitCookie = recruitCookies[0];
+    const recruitName = `Recruit ${Date.now()}`;
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', recruitCookie)
+      .send({
+        query:
+          'mutation CreateCharacter($input: CreateCharacterInput!) { createCharacter(input: $input) { id } }',
+        variables: {
+          input: {
+            name: recruitName,
+            archetype: 'VANGUARD',
+            origin: 'ROAD_SURVIVOR',
+            avatarMode: 'STATIC',
+            staticAvatarId: 'standard-02',
+          },
+        },
+      })
+      .expect(200);
+    const recruit = await prisma.client.user.findUniqueOrThrow({
+      where: { email: recruitEmail },
+      include: { character: { include: { worldState: true } } },
+    });
+    await prisma.client.characterWorldState.update({
+      where: { characterId: recruit.character!.id },
+      data: { currentLocation: 'CINDERHAVEN_GATE' },
+    });
+    const joinedClan = await request(server)
+      .post('/graphql')
+      .set('Cookie', recruitCookie)
+      .send({
+        query:
+          'mutation JoinClan($input: JoinClanInput!) { joinClan(input: $input) { name viewerRole members { name role } } }',
+        variables: {
+          input: {
+            inviteCode: clanResult.data.createClan.inviteCode,
+            expectedCharacterVersion: recruit.character!.version,
+            idempotencyKey: `join-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(joinedClan.text).toContain('"viewerRole":"MEMBER"');
+    expect(joinedClan.text).toContain(`"name":"${clanName}"`);
+    expect(
+      await prisma.client.clanMembership.count({
+        where: {
+          clan: { inviteCode: clanResult.data.createClan.inviteCode },
+        },
+      }),
+    ).toBe(2);
+
     const returnToWatchpost = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

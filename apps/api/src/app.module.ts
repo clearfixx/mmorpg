@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import { AppResolver } from './app.resolver';
 import { CharactersModule } from './characters/characters.module';
+import { ClansModule } from './clans/clans.module';
 import { CombatModule } from './combat/combat.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
@@ -33,6 +34,7 @@ import { WorldModule } from './world/world.module';
     IdentityModule,
     InventoryModule,
     CharactersModule,
+    ClansModule,
     CombatModule,
     RewardsModule,
     ResourcesModule,

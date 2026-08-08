@@ -99,6 +99,12 @@ enum ResourceType {
   BRONZE
 }
 
+enum ClanRole {
+  LEADER
+  ELDER
+  MEMBER
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -140,8 +146,56 @@ model Character {
   talentCommands    TalentCommand[]
   resources         CharacterResource[]
   resourceLedger    ResourceLedgerEntry[]
+  clanMembership    ClanMembership?
+  clanCommands      ClanCommand[]
 
   @@map("characters")
+}
+
+model Clan {
+  id         String           @id @default(uuid()) @db.Uuid
+  name       String           @db.VarChar(32)
+  nameKey    String           @unique @map("name_key") @db.VarChar(64)
+  inviteCode String           @unique @map("invite_code") @db.Char(8)
+  level      Int              @default(1)
+  experience Int              @default(0)
+  version    Int              @default(1)
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+  members    ClanMembership[]
+  commands   ClanCommand[]
+
+  @@map("clans")
+}
+
+model ClanMembership {
+  id          String    @id @default(uuid()) @db.Uuid
+  clanId      String    @map("clan_id") @db.Uuid
+  characterId String    @unique @map("character_id") @db.Uuid
+  role        ClanRole  @default(MEMBER)
+  joinedAt    DateTime  @default(now()) @map("joined_at")
+  roleSince   DateTime  @default(now()) @map("role_since")
+  clan        Clan      @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([clanId, joinedAt])
+  @@map("clan_memberships")
+}
+
+model ClanCommand {
+  id             String    @id @default(uuid()) @db.Uuid
+  clanId         String    @map("clan_id") @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  commandType    String    @map("command_type") @db.VarChar(32)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  clan           Clan      @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@index([clanId, createdAt])
+  @@map("clan_commands")
 }
 
 model CharacterTalent {

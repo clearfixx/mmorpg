@@ -79,6 +79,32 @@ input ClaimBattleRewardInput {
   idempotencyKey: String!
 }
 
+type ClanMemberModel {
+  characterId: ID!
+  joinedAt: DateTime!
+  level: Int!
+  name: String!
+  role: ClanRole!
+}
+
+type ClanModel {
+  characterVersion: Int!
+  experience: Int!
+  id: ID!
+  inviteCode: String!
+  level: Int!
+  members: [ClanMemberModel!]!
+  name: String!
+  version: Int!
+  viewerRole: ClanRole!
+}
+
+enum ClanRole {
+  ELDER
+  LEADER
+  MEMBER
+}
+
 type CombatActionModel {
   cost: Int!
   description: String!
@@ -112,6 +138,12 @@ input CreateCharacterInput {
   name: String!
   origin: CharacterOrigin
   staticAvatarId: String
+}
+
+input CreateClanInput {
+  expectedCharacterVersion: Int!
+  idempotencyKey: String!
+  name: String!
 }
 
 """
@@ -181,6 +213,12 @@ enum ItemRarity {
   UNCOMMON
 }
 
+input JoinClanInput {
+  expectedCharacterVersion: Int!
+  idempotencyKey: String!
+  inviteCode: String!
+}
+
 input LoginInput {
   email: String!
   password: String!
@@ -190,7 +228,9 @@ type Mutation {
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
   continueAdventure(input: ContinueAdventureInput!): BattleModel!
   createCharacter(input: CreateCharacterInput!): CharacterModel!
+  createClan(input: CreateClanInput!): ClanModel!
   equipItem(input: EquipItemInput!): InventoryModel!
+  joinClan(input: JoinClanInput!): ClanModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!
   performLocationAction(input: PrepareLocationInput!): WorldStateModel!
@@ -220,6 +260,7 @@ type Query {
   currentLocation: WorldStateModel!
   latestBattle: BattleModel
   myCharacter: CharacterModel
+  myClan: ClanModel
   myInventory: InventoryModel!
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!

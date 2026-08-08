@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
@@ -86,6 +87,26 @@ interface TalentTree {
   resources: Array<{ type: ResourceType; amount: number }>
 }
 
+type ClanRole = 'LEADER' | 'ELDER' | 'MEMBER'
+
+interface Clan {
+  id: string
+  name: string
+  inviteCode: string
+  level: number
+  experience: number
+  version: number
+  characterVersion: number
+  viewerRole: ClanRole
+  members: Array<{
+    characterId: string
+    name: string
+    level: number
+    role: ClanRole
+    joinedAt: string
+  }>
+}
+
 const preparations = [
   {
     value: 'SEARCH_ARMORY' as const,
@@ -117,6 +138,7 @@ export function GameJourney() {
   const [world, setWorld] = useState<WorldState | null>(null)
   const [inventory, setInventory] = useState<Inventory | null>(null)
   const [talents, setTalents] = useState<TalentTree | null>(null)
+  const [clan, setClan] = useState<Clan | null>(null)
   const [view, setView] = useState<'LOBBY' | 'EQUIPMENT'>('LOBBY')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -129,6 +151,7 @@ export function GameJourney() {
         setWorld(result.world)
         setInventory(result.inventory)
         setTalents(result.talents)
+        setClan(result.clan)
       }
     })
   }, [])
@@ -224,6 +247,7 @@ export function GameJourney() {
               setWorld(refreshed.world)
               setInventory(refreshed.inventory)
               setTalents(refreshed.talents)
+              setClan(refreshed.clan)
             }
             setError('Не вдалося екіпірувати предмет. Стан героя вже оновлено.')
           } finally {
@@ -242,10 +266,19 @@ export function GameJourney() {
         hero={hero}
         inventory={inventory}
         talents={talents}
+        clan={clan}
         pending={pending}
         error={error}
         onReturn={() => travel('BROKEN_WATCHPOST')}
         onOpenEquipment={() => setView('EQUIPMENT')}
+        onCreateClan={async (name) => {
+          if (!inventory || pending) return
+          await runClanAction('CREATE', name, inventory.characterVersion)
+        }}
+        onJoinClan={async (inviteCode) => {
+          if (!inventory || pending) return
+          await runClanAction('JOIN', inviteCode, inventory.characterVersion)
+        }}
         onUpgrade={async (type) => {
           if (!talents || pending) return
           setPending(true)
@@ -267,6 +300,7 @@ export function GameJourney() {
               setWorld(refreshed.world)
               setInventory(refreshed.inventory)
               setTalents(refreshed.talents)
+              setClan(refreshed.clan)
             }
           } catch {
             const refreshed = await loadJourney()
@@ -275,6 +309,7 @@ export function GameJourney() {
               setWorld(refreshed.world)
               setInventory(refreshed.inventory)
               setTalents(refreshed.talents)
+              setClan(refreshed.clan)
             }
             setError(
               'Стан героя змінився. Дані оновлено — перевірте талант перед повторною дією.',
@@ -285,6 +320,49 @@ export function GameJourney() {
         }}
       />
     )
+
+  async function runClanAction(
+    action: 'CREATE' | 'JOIN',
+    value: string,
+    expectedCharacterVersion: number,
+  ) {
+    setPending(true)
+    setError(null)
+    try {
+      const next = await executeClanMutation(
+        action,
+        value,
+        expectedCharacterVersion,
+      )
+      setClan(next)
+      setInventory((current) =>
+        current
+          ? { ...current, characterVersion: next.characterVersion }
+          : current,
+      )
+      setTalents((current) =>
+        current
+          ? { ...current, characterVersion: next.characterVersion }
+          : current,
+      )
+    } catch {
+      const refreshed = await loadJourney()
+      if (!refreshed.redirect) {
+        setHero(refreshed.hero)
+        setWorld(refreshed.world)
+        setInventory(refreshed.inventory)
+        setTalents(refreshed.talents)
+        setClan(refreshed.clan)
+      }
+      setError(
+        action === 'CREATE'
+          ? 'Не вдалося заснувати клан. Перевірте назву та актуальний стан героя.'
+          : 'Не вдалося вступити до клану. Перевірте код запрошення.',
+      )
+    } finally {
+      setPending(false)
+    }
+  }
 
   const hollowRoad = world.routes.find(
     (route) => route.destination === 'HOLLOW_ROAD',
@@ -487,22 +565,30 @@ function CinderhavenGate({
   hero,
   inventory,
   talents,
+  clan,
   pending,
   error,
   onReturn,
   onOpenEquipment,
+  onCreateClan,
+  onJoinClan,
   onUpgrade,
 }: {
   hero: Hero
   inventory: Inventory | null
   talents: TalentTree | null
+  clan: Clan | null
   pending: boolean
   error: string | null
   onReturn: () => void
   onOpenEquipment: () => void
+  onCreateClan: (name: string) => Promise<void>
+  onJoinClan: (inviteCode: string) => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
-  const [district, setDistrict] = useState<'HUB' | 'TRAINING'>('HUB')
+  const [district, setDistrict] = useState<'HUB' | 'TRAINING' | 'CLAN'>('HUB')
+  const [clanName, setClanName] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
 
   return (
     <main className="grid min-h-screen place-items-center bg-background px-5 py-10 text-foreground">
@@ -555,8 +641,8 @@ function CinderhavenGate({
                 icon={Sword}
                 title="Клановий двір"
                 description="Місце формування кланів, спільних походів і боротьби з лігвами."
-                action="Ще зачинено"
-                locked
+                action={clan ? 'Відкрити клан' : 'Знайти союзників'}
+                onClick={() => setDistrict('CLAN')}
               />
               <CityDistrict
                 icon={Compass}
@@ -567,7 +653,7 @@ function CinderhavenGate({
               />
             </div>
           </section>
-        ) : talents ? (
+        ) : district === 'TRAINING' && talents ? (
           <section className="mt-8 border-t border-border/70 pt-7">
             <Button
               type="button"
@@ -630,6 +716,90 @@ function CinderhavenGate({
                 </div>
               ))}
             </div>
+          </section>
+        ) : district === 'CLAN' ? (
+          <section className="mt-8 border-t border-border/70 pt-7">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDistrict('HUB')}
+              className="mb-5 h-8 rounded-sm px-2"
+            >
+              <ArrowLeft aria-hidden="true" /> До міських кварталів
+            </Button>
+            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ember">
+              Клановий двір
+            </p>
+            {clan ? (
+              <ClanHall clan={clan} />
+            ) : (
+              <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
+                <form
+                  className="bg-background/70 p-5"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void onCreateClan(clanName)
+                  }}
+                >
+                  <h2 className="font-medium">Заснувати клан</h2>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Засновник стає головою клану. Назва має бути унікальною.
+                  </p>
+                  <Input
+                    value={clanName}
+                    onChange={(event) => setClanName(event.target.value)}
+                    minLength={3}
+                    maxLength={32}
+                    placeholder="Назва клану"
+                    aria-label="Назва нового клану"
+                    className="mt-4 rounded-sm"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={pending || clanName.trim().length < 3}
+                    className="mt-3 h-9 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
+                  >
+                    {pending ? 'Записуємо статут…' : 'Заснувати клан'}
+                  </Button>
+                </form>
+                <form
+                  className="bg-background/70 p-5"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void onJoinClan(inviteCode.toUpperCase())
+                  }}
+                >
+                  <h2 className="font-medium">Вступити за кодом</h2>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Отримайте восьмизначний код у голови або старости клану.
+                  </p>
+                  <Input
+                    value={inviteCode}
+                    onChange={(event) =>
+                      setInviteCode(
+                        event.target.value
+                          .toUpperCase()
+                          .replace(/[^A-F0-9]/g, '')
+                          .slice(0, 8),
+                      )
+                    }
+                    minLength={8}
+                    maxLength={8}
+                    placeholder="A1B2C3D4"
+                    aria-label="Код запрошення до клану"
+                    className="mt-4 rounded-sm font-mono uppercase tracking-widest"
+                  />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    disabled={pending || inviteCode.length !== 8}
+                    className="mt-3 h-9 w-full rounded-sm"
+                  >
+                    {pending ? 'Перевіряємо код…' : 'Вступити до клану'}
+                  </Button>
+                </form>
+              </div>
+            )}
           </section>
         ) : null}
         {error ? (
@@ -704,6 +874,57 @@ function CityDistrict({
         {action}
       </Button>
     </article>
+  )
+}
+
+function ClanHall({ clan }: { clan: Clan }) {
+  return (
+    <div className="mt-4">
+      <div className="grid gap-px bg-border/60 sm:grid-cols-3">
+        <EndingStat label="Клан" value={clan.name} />
+        <EndingStat label="Рівень" value={clan.level} />
+        <EndingStat label="Досвід" value={clan.experience} />
+      </div>
+      <div className="mt-4 border-l-2 border-moss bg-moss/5 px-4 py-4">
+        <p className="font-mono text-[0.6rem] uppercase tracking-wider text-moss">
+          Код запрошення
+        </p>
+        <p className="mt-2 font-mono text-lg tracking-[0.22em]">
+          {clan.inviteCode}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Передавайте код лише тим героям, яких хочете бачити у складі.
+        </p>
+      </div>
+      <div className="mt-6">
+        <div className="flex items-center justify-between">
+          <h2 className="font-medium">Склад клану</h2>
+          <span className="font-mono text-xs text-muted-foreground">
+            {clan.members.length} учасн.
+          </span>
+        </div>
+        <div className="mt-3 divide-y divide-border/70 border border-border/70">
+          {clan.members.map((member) => (
+            <div
+              key={member.characterId}
+              className="flex items-center justify-between gap-4 bg-background/60 px-4 py-3"
+            >
+              <div>
+                <p className="text-sm font-medium">{member.name}</p>
+                <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
+                  Рівень {member.level}
+                </p>
+              </div>
+              <span
+                className={`font-mono text-[0.65rem] uppercase tracking-wider ${member.role === 'LEADER' ? 'text-ember' : 'text-moss'}`}
+              >
+                {clanRoleName(member.role)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -898,6 +1119,7 @@ async function loadJourney(): Promise<{
   world: WorldState | null
   inventory: Inventory | null
   talents: TalentTree | null
+  clan: Clan | null
   redirect: string | null
 }> {
   try {
@@ -907,7 +1129,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience version characterVersion viewerRole members { characterId name level role joinedAt } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -917,6 +1139,7 @@ async function loadJourney(): Promise<{
         currentLocation?: WorldState
         myInventory?: Inventory
         myTalents?: TalentTree
+        myClan?: Clan | null
       }
       errors?: unknown
     }
@@ -926,6 +1149,7 @@ async function loadJourney(): Promise<{
         world: null,
         inventory: null,
         talents: null,
+        clan: null,
         redirect: '/auth',
       }
     if (!payload.data.myCharacter)
@@ -934,6 +1158,7 @@ async function loadJourney(): Promise<{
         world: null,
         inventory: null,
         talents: null,
+        clan: null,
         redirect: '/character/create',
       }
     return {
@@ -941,6 +1166,7 @@ async function loadJourney(): Promise<{
       world: payload.data.currentLocation ?? null,
       inventory: payload.data.myInventory ?? null,
       talents: payload.data.myTalents ?? null,
+      clan: payload.data.myClan ?? null,
       redirect: null,
     }
   } catch {
@@ -949,9 +1175,42 @@ async function loadJourney(): Promise<{
       world: null,
       inventory: null,
       talents: null,
+      clan: null,
       redirect: '/auth',
     }
   }
+}
+
+async function executeClanMutation(
+  action: 'CREATE' | 'JOIN',
+  value: string,
+  expectedCharacterVersion: number,
+): Promise<Clan> {
+  const creating = action === 'CREATE'
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query: creating
+        ? 'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level experience version characterVersion viewerRole members { characterId name level role joinedAt } } }'
+        : 'mutation JoinClan($input: JoinClanInput!) { joinClan(input: $input) { id name inviteCode level experience version characterVersion viewerRole members { characterId name level role joinedAt } } }',
+      variables: {
+        input: {
+          [creating ? 'name' : 'inviteCode']: value,
+          expectedCharacterVersion,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { createClan?: Clan; joinClan?: Clan }
+    errors?: unknown
+  }
+  const clan = creating ? payload.data?.createClan : payload.data?.joinClan
+  if (!response.ok || payload.errors || !clan) throw new Error('CLAN_FAILED')
+  return clan
 }
 
 async function executeTalentMutation(
@@ -1012,6 +1271,10 @@ function archetypeName(value: Hero['archetype']): string {
   return { VANGUARD: 'Авангард', RANGER: 'Слідопит', ARCANIST: 'Арканіст' }[
     value
   ]
+}
+
+function clanRoleName(value: ClanRole): string {
+  return { LEADER: 'Голова', ELDER: 'Староста', MEMBER: 'Учасник' }[value]
 }
 
 function preparationName(value: Preparation | null): string {
