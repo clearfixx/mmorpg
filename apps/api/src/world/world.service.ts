@@ -83,7 +83,8 @@ export class WorldService {
   async travel(userId: string, input: TravelInput): Promise<WorldStateModel> {
     if (
       input.destination !== WorldLocation.HOLLOW_ROAD &&
-      input.destination !== WorldLocation.CINDERHAVEN_GATE
+      input.destination !== WorldLocation.CINDERHAVEN_GATE &&
+      input.destination !== WorldLocation.BROKEN_WATCHPOST
     )
       throw new BadRequestException('Destination is currently locked');
 
@@ -97,14 +98,20 @@ export class WorldService {
       async (tx) => {
         const requiresPreparation =
           input.destination === WorldLocation.HOLLOW_ROAD;
+        const returningFromCinderhaven =
+          input.destination === WorldLocation.BROKEN_WATCHPOST;
         const updated = await tx.characterWorldState.updateMany({
           where: {
             characterId,
             version: input.expectedVersion,
-            currentLocation: WorldLocation.BROKEN_WATCHPOST,
-            ...(requiresPreparation
-              ? { preparationChoice: { not: null } }
-              : { cinderhavenUnlocked: true }),
+            currentLocation: returningFromCinderhaven
+              ? WorldLocation.CINDERHAVEN_GATE
+              : WorldLocation.BROKEN_WATCHPOST,
+            ...(returningFromCinderhaven
+              ? {}
+              : requiresPreparation
+                ? { preparationChoice: { not: null } }
+                : { cinderhavenUnlocked: true }),
           },
           data: {
             currentLocation: input.destination,
@@ -211,13 +218,21 @@ export class WorldService {
                   : 'Шлях відкриється після першої перемоги',
               },
             ]
-          : [
-              {
-                destination: WorldLocation.BROKEN_WATCHPOST,
-                locked: true,
-                lockReason: 'Повернення відкриється разом із сутичкою',
-              },
-            ],
+          : state.currentLocation === WorldLocation.CINDERHAVEN_GATE
+            ? [
+                {
+                  destination: WorldLocation.BROKEN_WATCHPOST,
+                  locked: false,
+                  lockReason: null,
+                },
+              ]
+            : [
+                {
+                  destination: WorldLocation.BROKEN_WATCHPOST,
+                  locked: true,
+                  lockReason: 'Повернення відкриється разом із сутичкою',
+                },
+              ],
     };
   }
 

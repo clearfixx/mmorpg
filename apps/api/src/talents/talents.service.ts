@@ -1,0 +1,147 @@
+import { TalentType, WorldLocation } from '@veilfall/database';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+
+import { CharactersService } from '../characters/characters.service';
+import { PrismaService } from '../database/prisma.service';
+import { UpgradeTalentInput } from './dto/upgrade-talent.input';
+import { TalentTreeModel } from './models/talent-tree.model';
+
+const DEFINITIONS = {
+  [TalentType.VITALITY]: {
+    name: 'Живучість',
+    description: '+12 до максимального здоров’я за ранг.',
+    requiredLevel: 1,
+    effectPerRank: 12,
+  },
+  [TalentType.POWER]: {
+    name: 'Сила',
+    description: '+3 до шкоди за ранг.',
+    requiredLevel: 2,
+    effectPerRank: 3,
+  },
+  [TalentType.RESILIENCE]: {
+    name: 'Стійкість',
+    description: '+2 до броні за ранг.',
+    requiredLevel: 3,
+    effectPerRank: 2,
+  },
+} as const;
+
+@Injectable()
+export class TalentsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly characters: CharactersService,
+  ) {}
+
+  async forUser(userId: string): Promise<TalentTreeModel> {
+    return this.read(await this.characters.requireIdForUser(userId));
+  }
+
+  async upgrade(
+    userId: string,
+    input: UpgradeTalentInput,
+  ): Promise<TalentTreeModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const payloadHash = createHash('sha256')
+      .update(`${input.type}:${input.expectedCharacterVersion}`)
+      .digest('hex');
+    const existing = await this.prisma.client.talentCommand.findUnique({
+      where: {
+        characterId_idempotencyKey: {
+          characterId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.payloadHash !== payloadHash)
+        throw new ConflictException('Command key was used for another talent');
+      return this.read(characterId);
+    }
+
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        const character = await tx.character.findUniqueOrThrow({
+          where: { id: characterId },
+          include: { talents: true, worldState: true },
+        });
+        if (
+          character.worldState?.currentLocation !==
+          WorldLocation.CINDERHAVEN_GATE
+        )
+          throw new ConflictException('Talents are trained in Cinderhaven');
+        const definition = DEFINITIONS[input.type];
+        const spent = character.talents.reduce(
+          (total, talent) => total + talent.rank,
+          0,
+        );
+        const currentRank =
+          character.talents.find((talent) => talent.type === input.type)
+            ?.rank ?? 0;
+        if (character.level < definition.requiredLevel)
+          throw new ConflictException('Talent is still locked');
+        if (character.level - 1 - spent < 1)
+          throw new ConflictException('No talent points available');
+        if (currentRank >= 10)
+          throw new ConflictException('Talent has reached maximum rank');
+        const updated = await tx.character.updateMany({
+          where: { id: characterId, version: input.expectedCharacterVersion },
+          data: { version: { increment: 1 } },
+        });
+        if (updated.count !== 1)
+          throw new ConflictException('Character state changed');
+        await tx.characterTalent.upsert({
+          where: { characterId_type: { characterId, type: input.type } },
+          create: { characterId, type: input.type, rank: 1 },
+          update: { rank: { increment: 1 } },
+        });
+        await tx.talentCommand.create({
+          data: {
+            characterId,
+            idempotencyKey: input.idempotencyKey,
+            payloadHash,
+          },
+        });
+      });
+      return this.read(characterId);
+    } catch (error) {
+      const raced = await this.prisma.client.talentCommand.findUnique({
+        where: {
+          characterId_idempotencyKey: {
+            characterId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      });
+      if (raced?.payloadHash === payloadHash) return this.read(characterId);
+      throw error;
+    }
+  }
+
+  private async read(characterId: string): Promise<TalentTreeModel> {
+    const character = await this.prisma.client.character.findUniqueOrThrow({
+      where: { id: characterId },
+      include: { talents: true },
+    });
+    const ranks = new Map(
+      character.talents.map((talent) => [talent.type, talent.rank]),
+    );
+    const spent = character.talents.reduce(
+      (total, talent) => total + talent.rank,
+      0,
+    );
+    return {
+      characterVersion: character.version,
+      availablePoints: Math.max(0, character.level - 1 - spent),
+      talents: Object.values(TalentType).map((type) => ({
+        type,
+        ...DEFINITIONS[type],
+        rank: ranks.get(type) ?? 0,
+        maxRank: 10,
+        unlocked: character.level >= DEFINITIONS[type].requiredLevel,
+      })),
+    };
+  }
+}

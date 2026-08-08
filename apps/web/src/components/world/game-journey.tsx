@@ -63,6 +63,23 @@ interface Inventory {
   mainHandVisualAssetId: string | null
 }
 
+type TalentType = 'VITALITY' | 'POWER' | 'RESILIENCE'
+
+interface TalentTree {
+  characterVersion: number
+  availablePoints: number
+  talents: Array<{
+    type: TalentType
+    name: string
+    description: string
+    rank: number
+    maxRank: number
+    requiredLevel: number
+    effectPerRank: number
+    unlocked: boolean
+  }>
+}
+
 const preparations = [
   {
     value: 'SEARCH_ARMORY' as const,
@@ -93,6 +110,7 @@ export function GameJourney() {
   const [hero, setHero] = useState<Hero | null>(null)
   const [world, setWorld] = useState<WorldState | null>(null)
   const [inventory, setInventory] = useState<Inventory | null>(null)
+  const [talents, setTalents] = useState<TalentTree | null>(null)
   const [view, setView] = useState<'LOBBY' | 'EQUIPMENT'>('LOBBY')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,6 +122,7 @@ export function GameJourney() {
         setHero(result.hero)
         setWorld(result.world)
         setInventory(result.inventory)
+        setTalents(result.talents)
       }
     })
   }, [])
@@ -130,7 +149,7 @@ export function GameJourney() {
     }
   }
 
-  async function travel(destination: 'HOLLOW_ROAD' | 'CINDERHAVEN_GATE') {
+  async function travel(destination: Location) {
     if (!world || pending) return
     setPending(true)
     setError(null)
@@ -165,7 +184,35 @@ export function GameJourney() {
     return <HollowRoad hero={hero} preparation={world.preparationChoice} />
 
   if (world.currentLocation === 'CINDERHAVEN_GATE')
-    return <CinderhavenGate hero={hero} inventory={inventory} />
+    return (
+      <CinderhavenGate
+        hero={hero}
+        inventory={inventory}
+        talents={talents}
+        pending={pending}
+        error={error}
+        onReturn={() => travel('BROKEN_WATCHPOST')}
+        onUpgrade={async (type) => {
+          if (!talents || pending) return
+          setPending(true)
+          setError(null)
+          try {
+            await executeTalentMutation(type, talents.characterVersion)
+            const refreshed = await loadJourney()
+            setHero(refreshed.hero)
+            setWorld(refreshed.world)
+            setInventory(refreshed.inventory)
+            setTalents(refreshed.talents)
+          } catch {
+            setError(
+              'Не вдалося розвинути талант. Оновіть стан і спробуйте ще раз.',
+            )
+          } finally {
+            setPending(false)
+          }
+        }}
+      />
+    )
 
   if (view === 'EQUIPMENT' && inventory)
     return (
@@ -399,9 +446,19 @@ export function GameJourney() {
 function CinderhavenGate({
   hero,
   inventory,
+  talents,
+  pending,
+  error,
+  onReturn,
+  onUpgrade,
 }: {
   hero: Hero
   inventory: Inventory | null
+  talents: TalentTree | null
+  pending: boolean
+  error: string | null
+  onReturn: () => void
+  onUpgrade: (type: TalentType) => void
 }) {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-5 py-10 text-foreground">
@@ -438,6 +495,72 @@ function CinderhavenGate({
             героя.
           </p>
         </div>
+        {talents ? (
+          <section className="mt-8 border-t border-border/70 pt-7">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ember">
+                  Базові таланти
+                </p>
+                <h2 className="mt-2 text-xl font-medium">Розвиток героя</h2>
+              </div>
+              <span className="font-mono text-sm text-moss">
+                Очки: {talents.availablePoints}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-3">
+              {talents.talents.map((talent) => (
+                <div key={talent.type} className="bg-background/70 p-4">
+                  <div className="flex justify-between gap-3">
+                    <h3 className="font-medium">{talent.name}</h3>
+                    <span className="font-mono text-xs text-ember">
+                      {talent.rank}/{talent.maxRank}
+                    </span>
+                  </div>
+                  <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">
+                    {talent.description}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      pending ||
+                      !talent.unlocked ||
+                      talents.availablePoints < 1 ||
+                      talent.rank >= talent.maxRank
+                    }
+                    onClick={() => onUpgrade(talent.type)}
+                    className="mt-4 h-8 w-full rounded-sm"
+                  >
+                    {talent.unlocked
+                      ? talent.rank >= talent.maxRank
+                        ? 'Максимум'
+                        : 'Підвищити ранг'
+                      : `Рівень ${talent.requiredLevel}`}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {error ? (
+          <p
+            role="alert"
+            className="mt-5 border-l-2 border-destructive px-3 py-2 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={onReturn}
+          className="mt-7 h-10 rounded-sm"
+        >
+          <ArrowLeft aria-hidden="true" />
+          Повернутися на заставу
+        </Button>
       </section>
     </main>
   )
@@ -648,6 +771,7 @@ async function loadJourney(): Promise<{
   hero: Hero | null
   world: WorldState | null
   inventory: Inventory | null
+  talents: TalentTree | null
   redirect: string | null
 }> {
   try {
@@ -657,7 +781,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints talents { type name description rank maxRank requiredLevel effectPerRank unlocked } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -666,27 +790,71 @@ async function loadJourney(): Promise<{
         myCharacter?: Hero
         currentLocation?: WorldState
         myInventory?: Inventory
+        myTalents?: TalentTree
       }
       errors?: unknown
     }
     if (payload.errors || !payload.data?.viewer)
-      return { hero: null, world: null, inventory: null, redirect: '/auth' }
+      return {
+        hero: null,
+        world: null,
+        inventory: null,
+        talents: null,
+        redirect: '/auth',
+      }
     if (!payload.data.myCharacter)
       return {
         hero: null,
         world: null,
         inventory: null,
+        talents: null,
         redirect: '/character/create',
       }
     return {
       hero: payload.data.myCharacter,
       world: payload.data.currentLocation ?? null,
       inventory: payload.data.myInventory ?? null,
+      talents: payload.data.myTalents ?? null,
       redirect: null,
     }
   } catch {
-    return { hero: null, world: null, inventory: null, redirect: '/auth' }
+    return {
+      hero: null,
+      world: null,
+      inventory: null,
+      talents: null,
+      redirect: '/auth',
+    }
   }
+}
+
+async function executeTalentMutation(
+  type: TalentType,
+  expectedCharacterVersion: number,
+): Promise<TalentTree> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query:
+        'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints talents { type name description rank maxRank requiredLevel effectPerRank unlocked } } }',
+      variables: {
+        input: {
+          type,
+          expectedCharacterVersion,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { upgradeTalent: TalentTree }
+    errors?: unknown
+  }
+  if (!response.ok || payload.errors || !payload.data)
+    throw new Error('TALENT_UPGRADE_FAILED')
+  return payload.data.upgradeTalent
 }
 
 async function executeWorldMutation(

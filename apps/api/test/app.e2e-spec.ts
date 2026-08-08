@@ -545,6 +545,66 @@ describe('Health (e2e)', () => {
     expect(gatePayload.data.travel.currentLocation).toBe('CINDERHAVEN_GATE');
     expect(gatePayload.data.travel.version).toBe(gateVersion + 1);
 
+    const talentState = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myTalents { characterVersion availablePoints talents { type rank unlocked } } }',
+      })
+      .expect(200);
+    const talentPayload = JSON.parse(talentState.text) as {
+      data: {
+        myTalents: {
+          characterVersion: number;
+          availablePoints: number;
+        };
+      };
+    };
+    expect(talentPayload.data.myTalents.availablePoints).toBe(1);
+    const talentKey = `talent-${Date.now()}`;
+    const upgradeTalent = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints talents { type rank } } }',
+          variables: {
+            input: {
+              type: 'POWER',
+              expectedCharacterVersion:
+                talentPayload.data.myTalents.characterVersion,
+              idempotencyKey: talentKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstTalent = await upgradeTalent();
+    const retriedTalent = await upgradeTalent();
+    expect(firstTalent.body).toEqual(retriedTalent.body);
+    expect(firstTalent.text).toContain('"availablePoints":0');
+    expect(firstTalent.text).toContain('"type":"POWER","rank":1');
+
+    const returnToWatchpost = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Travel($input: TravelInput!) { travel(input: $input) { currentLocation version } }',
+        variables: {
+          input: {
+            destination: 'BROKEN_WATCHPOST',
+            expectedVersion: gatePayload.data.travel.version,
+            idempotencyKey: `return-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(returnToWatchpost.text).toContain(
+      '"currentLocation":"BROKEN_WATCHPOST"',
+    );
+
     const duplicate = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

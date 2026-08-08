@@ -14,6 +14,7 @@ export {
   ItemLocation,
   ItemRarity,
   PreparationChoice,
+  TalentType,
   UserRole,
   UserStatus,
   WorldLocation,

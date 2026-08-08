@@ -1,9 +1,10 @@
-import { BattleStatus, Prisma } from '@veilfall/database';
+import { BattleStatus, Prisma, TalentType } from '@veilfall/database';
 import {
   actionsFor,
   createBattle,
   INTENTS,
   resolveTurn,
+  talentBonuses,
   type ActionId,
   type BattleState,
 } from '@veilfall/game-engine';
@@ -86,6 +87,7 @@ export class CombatService {
       select: {
         archetype: true,
         level: true,
+        talents: { select: { type: true, rank: true } },
         equipment: {
           where: { slot: 'MAIN_HAND' },
           select: { item: { select: { damage: true } } },
@@ -98,6 +100,7 @@ export class CombatService {
       character.equipment[0]?.item.damage ?? 0,
       1,
       character.level,
+      this.combatTalentBonuses(character.talents),
     );
     const battle = await this.prisma.client.battle.create({
       data: {
@@ -269,6 +272,7 @@ export class CombatService {
       select: {
         archetype: true,
         level: true,
+        talents: { select: { type: true, rank: true } },
         equipment: {
           where: { slot: 'MAIN_HAND' },
           select: { item: { select: { damage: true } } },
@@ -283,6 +287,7 @@ export class CombatService {
       character.equipment[0]?.item.damage ?? 0,
       tier,
       character.level,
+      this.combatTalentBonuses(character.talents),
     );
     const battle = await this.prisma.client.$transaction(async (tx) => {
       const acknowledged = await tx.battle.updateMany({
@@ -487,5 +492,18 @@ export class CombatService {
           : entry,
       ),
     };
+  }
+
+  private combatTalentBonuses(
+    talents: Array<{ type: TalentType; rank: number }>,
+  ) {
+    const ranks = Object.fromEntries(
+      talents.map((talent) => [talent.type, talent.rank]),
+    );
+    return talentBonuses({
+      vitality: ranks[TalentType.VITALITY] ?? 0,
+      power: ranks[TalentType.POWER] ?? 0,
+      resilience: ranks[TalentType.RESILIENCE] ?? 0,
+    });
   }
 }

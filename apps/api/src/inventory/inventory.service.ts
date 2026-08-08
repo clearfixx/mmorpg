@@ -4,8 +4,9 @@ import {
   ItemBinding,
   ItemLineageType,
   ItemLocation,
+  TalentType,
 } from '@veilfall/database';
-import { levelBonuses } from '@veilfall/game-engine';
+import { levelBonuses, talentBonuses } from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -152,6 +153,7 @@ export class InventoryService {
           orderBy: { createdAt: 'desc' },
         },
         equipment: { include: { item: true } },
+        talents: true,
       },
     });
     const equipped = character.equipment.map((assignment) => ({
@@ -161,8 +163,13 @@ export class InventoryService {
     const mainHand = character.equipment.find(
       (entry) => entry.slot === EquipmentSlot.MAIN_HAND,
     )?.item;
+    const powerRank =
+      character.talents.find((talent) => talent.type === TalentType.POWER)
+        ?.rank ?? 0;
     const baseDamage =
-      BASE_DAMAGE[character.archetype] + levelBonuses(character.level).damage;
+      BASE_DAMAGE[character.archetype] +
+      levelBonuses(character.level).damage +
+      talentBonuses({ vitality: 0, power: powerRank, resilience: 0 }).damage;
     return {
       characterVersion: character.version,
       baseDamage,

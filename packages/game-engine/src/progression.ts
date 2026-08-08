@@ -10,6 +10,20 @@ export interface LevelBonuses {
   armor: number
 }
 
+export interface TalentRanks {
+  vitality: number
+  power: number
+  resilience: number
+}
+
+export function talentBonuses(ranks: TalentRanks): LevelBonuses {
+  return {
+    health: Math.max(0, ranks.vitality) * 12,
+    damage: Math.max(0, ranks.power) * 3,
+    armor: Math.max(0, ranks.resilience) * 2,
+  }
+}
+
 export function levelBonuses(level: number): LevelBonuses {
   const ranks = Math.max(0, Math.floor(level) - 1)
   return { health: ranks * 8, damage: ranks * 2, armor: ranks }

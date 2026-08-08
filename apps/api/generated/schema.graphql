@@ -191,6 +191,7 @@ type Mutation {
   startEncounter(input: StartEncounterInput!): BattleModel!
   submitCombatCommand(input: SubmitCombatCommandInput!): BattleModel!
   travel(input: TravelInput!): WorldStateModel!
+  upgradeTalent(input: UpgradeTalentInput!): TalentTreeModel!
 }
 
 enum PreparationChoice {
@@ -211,6 +212,7 @@ type Query {
   latestBattle: BattleModel
   myCharacter: CharacterModel
   myInventory: InventoryModel!
+  myTalents: TalentTreeModel!
 
   """API readiness probe for the foundation milestone."""
   status: String!
@@ -249,10 +251,39 @@ input SubmitCombatCommandInput {
   idempotencyKey: String!
 }
 
+type TalentNodeModel {
+  description: String!
+  effectPerRank: Int!
+  maxRank: Int!
+  name: String!
+  rank: Int!
+  requiredLevel: Int!
+  type: TalentType!
+  unlocked: Boolean!
+}
+
+type TalentTreeModel {
+  availablePoints: Int!
+  characterVersion: Int!
+  talents: [TalentNodeModel!]!
+}
+
+enum TalentType {
+  POWER
+  RESILIENCE
+  VITALITY
+}
+
 input TravelInput {
   destination: WorldLocation!
   expectedVersion: Int!
   idempotencyKey: String!
+}
+
+input UpgradeTalentInput {
+  expectedCharacterVersion: Int!
+  idempotencyKey: String!
+  type: TalentType!
 }
 
 enum UserRole {

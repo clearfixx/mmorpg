@@ -2,8 +2,13 @@ import {
   AvatarMode,
   CharacterArchetype,
   CharacterOrigin,
+  TalentType,
 } from '@veilfall/database';
-import { levelBonuses, progressionForExperience } from '@veilfall/game-engine';
+import {
+  levelBonuses,
+  progressionForExperience,
+  talentBonuses,
+} from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -57,7 +62,10 @@ export class CharactersService {
   async findForUser(userId: string): Promise<CharacterModel | null> {
     const character = await this.prisma.client.character.findUnique({
       where: { userId },
-      include: { equipment: { include: { item: true } } },
+      include: {
+        equipment: { include: { item: true } },
+        talents: true,
+      },
     });
     return character ? this.toModel(character) : null;
   }
@@ -131,22 +139,36 @@ export class CharactersService {
     version: number;
     createdAt: Date;
     equipment?: Array<{ item: { damage: number } }>;
+    talents?: Array<{ type: TalentType; rank: number }>;
   }): CharacterModel {
     const weaponDamage = character.equipment?.[0]?.item.damage ?? 0;
     const progression = progressionForExperience(character.experience);
     const bonuses = levelBonuses(progression.level);
+    const talentRanks = Object.fromEntries(
+      (character.talents ?? []).map((talent) => [talent.type, talent.rank]),
+    );
+    const trained = talentBonuses({
+      vitality: talentRanks[TalentType.VITALITY] ?? 0,
+      power: talentRanks[TalentType.POWER] ?? 0,
+      resilience: talentRanks[TalentType.RESILIENCE] ?? 0,
+    });
     return {
       ...character,
       level: progression.level,
       experienceIntoLevel: progression.experienceIntoLevel,
       experienceForNextLevel: progression.experienceForNextLevel,
       baseStats: {
-        health: BASE_STATS[character.archetype].health + bonuses.health,
+        health:
+          BASE_STATS[character.archetype].health +
+          bonuses.health +
+          trained.health,
         damage:
           BASE_STATS[character.archetype].damage +
           bonuses.damage +
+          trained.damage +
           weaponDamage,
-        armor: BASE_STATS[character.archetype].armor + bonuses.armor,
+        armor:
+          BASE_STATS[character.archetype].armor + bonuses.armor + trained.armor,
         speed: BASE_STATS[character.archetype].speed,
         reaction: BASE_STATS[character.archetype].reaction,
       },

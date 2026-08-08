@@ -13,6 +13,7 @@ import { IdentityModule } from './identity/identity.module';
 import type { GraphqlContext } from './identity/identity.types';
 import { InventoryModule } from './inventory/inventory.module';
 import { RewardsModule } from './rewards/rewards.module';
+import { TalentsModule } from './talents/talents.module';
 import { WorldModule } from './world/world.module';
 
 @Module({
@@ -33,6 +34,7 @@ import { WorldModule } from './world/world.module';
     CharactersModule,
     CombatModule,
     RewardsModule,
+    TalentsModule,
     WorldModule,
   ],
   controllers: [HealthController],
