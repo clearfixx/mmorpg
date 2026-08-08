@@ -71,12 +71,16 @@ enum ItemBinding {
 
 enum ItemLocation {
   CHEST
+  BACKPACK
   EQUIPPED
+  LOST
 }
 
 enum ItemLineageType {
   CREATED_FROM_BATTLE_REWARD
+  STORED_IN_CHEST
   EQUIPPED
+  LOST_IN_BATTLE
 }
 
 enum EquipmentSlot {

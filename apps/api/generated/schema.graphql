@@ -154,6 +154,7 @@ type InventoryItemModel {
 }
 
 type InventoryModel {
+  backpack: [InventoryItemModel!]!
   baseDamage: Int!
   characterVersion: Int!
   chest: [InventoryItemModel!]!
@@ -166,6 +167,13 @@ enum ItemBinding {
   BOUND
   BOUND_ON_EQUIP
   UNBOUND
+}
+
+enum ItemLocation {
+  BACKPACK
+  CHEST
+  EQUIPPED
+  LOST
 }
 
 enum ItemRarity {
@@ -248,6 +256,7 @@ type RewardItemModel {
   definitionId: String!
   id: ID!
   itemLevel: Int!
+  location: ItemLocation!
   name: String!
   rarity: ItemRarity!
   setName: String!

@@ -3,6 +3,7 @@ import {
   CharacterArchetype,
   ItemBinding,
   ItemLineageType,
+  ItemLocation,
   ItemRarity,
   ResourceType,
 } from '@veilfall/database';
@@ -101,6 +102,7 @@ export class RewardsService {
             rarity: roll.rarity,
             damage: roll.damage,
             binding: ItemBinding.BOUND_ON_EQUIP,
+            location: tier === 1 ? ItemLocation.CHEST : ItemLocation.BACKPACK,
             setId: 'veteran',
             visualAssetId: definition.visualAssetId,
           },
@@ -218,6 +220,7 @@ export class RewardsService {
       rarity: ItemRarity;
       damage: number;
       binding: ItemBinding;
+      location: ItemLocation;
       setId: string;
       visualAssetId: string;
     } | null;

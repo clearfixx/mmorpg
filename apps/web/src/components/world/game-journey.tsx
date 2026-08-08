@@ -59,6 +59,7 @@ interface Inventory {
   baseDamage: number
   totalDamage: number
   chest: InventoryItem[]
+  backpack: InventoryItem[]
   equipped: Array<{ slot: 'MAIN_HAND'; item: InventoryItem }>
   mainHandVisualAssetId: string | null
 }
@@ -761,7 +762,7 @@ async function executeInventoryMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
+        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
       variables: {
         input: {
           itemId,
@@ -795,7 +796,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } }',
       }),
     })
     const payload = (await response.json()) as {

@@ -317,7 +317,7 @@ describe('Health (e2e)', () => {
         .set('Cookie', cookie)
         .send({
           query:
-            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold item { id definitionId name rarity damage binding setName visualAssetId } } }',
+            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold item { id definitionId name rarity damage binding setName visualAssetId location } } }',
           variables: {
             input: { battleId, idempotencyKey: rewardKey },
           },
@@ -328,6 +328,7 @@ describe('Health (e2e)', () => {
     expect(firstReward.body).toEqual(retriedReward.body);
     expect(firstReward.text).toContain('veteran-notched-blade-v1');
     expect(firstReward.text).toContain('BOUND_ON_EQUIP');
+    expect(firstReward.text).toContain('"location":"CHEST"');
     expect(firstReward.text).toContain('"experience":40');
     expect(firstReward.text).toContain('"gold":18');
     expect(
@@ -456,7 +457,7 @@ describe('Health (e2e)', () => {
       .set('Cookie', cookie)
       .send({
         query:
-          'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { experience gold item { damage } } }',
+          'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { experience gold item { id damage location } } }',
         variables: {
           input: {
             battleId: secondBattle.id,
@@ -467,6 +468,12 @@ describe('Health (e2e)', () => {
       .expect(200);
     expect(secondReward.text).toContain('"experience":60');
     expect(secondReward.text).toContain('"gold":30');
+    expect(secondReward.text).toContain('"location":"BACKPACK"');
+    const secondRewardPayload = JSON.parse(secondReward.text) as {
+      data: { claimBattleReward: { item: { id: string } } };
+    };
+    const secondRewardItemId =
+      secondRewardPayload.data.claimBattleReward.item.id;
     await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
@@ -506,6 +513,20 @@ describe('Health (e2e)', () => {
       .send({ query: 'mutation { returnToWatchpost }' })
       .expect(200)
       .expect({ data: { returnToWatchpost: true } });
+    expect(
+      await prisma.client.itemInstance.findUniqueOrThrow({
+        where: { id: secondRewardItemId },
+        select: { location: true },
+      }),
+    ).toEqual({ location: 'CHEST' });
+    expect(
+      await prisma.client.itemLineageEvent.count({
+        where: {
+          itemId: secondRewardItemId,
+          type: 'STORED_IN_CHEST',
+        },
+      }),
+    ).toBe(1);
     await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

@@ -149,7 +149,9 @@ export class InventoryService {
       where: { id: characterId },
       include: {
         items: {
-          where: { location: ItemLocation.CHEST },
+          where: {
+            location: { in: [ItemLocation.CHEST, ItemLocation.BACKPACK] },
+          },
           orderBy: { createdAt: 'desc' },
         },
         equipment: { include: { item: true } },
@@ -174,7 +176,12 @@ export class InventoryService {
       characterVersion: character.version,
       baseDamage,
       totalDamage: baseDamage + (mainHand?.damage ?? 0),
-      chest: character.items.map((item) => this.itemModel(item)),
+      chest: character.items
+        .filter((item) => item.location === ItemLocation.CHEST)
+        .map((item) => this.itemModel(item)),
+      backpack: character.items
+        .filter((item) => item.location === ItemLocation.BACKPACK)
+        .map((item) => this.itemModel(item)),
       equipped,
       mainHandVisualAssetId: mainHand?.visualAssetId ?? null,
     };

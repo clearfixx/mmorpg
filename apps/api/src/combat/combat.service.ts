@@ -1,4 +1,10 @@
-import { BattleStatus, Prisma, TalentType } from '@veilfall/database';
+import {
+  BattleStatus,
+  ItemLineageType,
+  ItemLocation,
+  Prisma,
+  TalentType,
+} from '@veilfall/database';
 import {
   actionsFor,
   createBattle,
@@ -221,6 +227,7 @@ export class CombatService {
         },
       });
       if (status === BattleStatus.LOST) {
+        await this.loseBackpack(tx, characterId, battle.id);
         await tx.characterWorldState.update({
           where: { characterId },
           data: {
@@ -341,8 +348,8 @@ export class CombatService {
         message: 'Герой відступає до Зламаної застави.',
       },
     ];
-    await this.prisma.client.$transaction([
-      this.prisma.client.battle.update({
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.battle.update({
         where: { id: battle.id },
         data: {
           state: state as unknown as Prisma.InputJsonValue,
@@ -351,16 +358,17 @@ export class CombatService {
           completedAt: new Date(),
           activeCharacterId: null,
         },
-      }),
-      this.prisma.client.characterWorldState.update({
+      });
+      await this.storeBackpack(tx, characterId);
+      await tx.characterWorldState.update({
         where: { characterId },
         data: {
           currentLocation: 'BROKEN_WATCHPOST',
           preparationChoice: null,
           version: { increment: 1 },
         },
-      }),
-    ]);
+      });
+    });
     return this.toModel(battle.id, state);
   }
 
@@ -384,24 +392,25 @@ export class CombatService {
       latestResult.rewardClaim === null
     )
       throw new ConflictException('Claim the battle reward before returning');
-    await this.prisma.client.$transaction([
-      this.prisma.client.battle.updateMany({
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.battle.updateMany({
         where: {
           characterId,
           status: { not: BattleStatus.ACTIVE },
           resultAcknowledgedAt: null,
         },
         data: { resultAcknowledgedAt: new Date() },
-      }),
-      this.prisma.client.characterWorldState.update({
+      });
+      await this.storeBackpack(tx, characterId);
+      await tx.characterWorldState.update({
         where: { characterId },
         data: {
           currentLocation: 'BROKEN_WATCHPOST',
           preparationChoice: null,
           version: { increment: 1 },
         },
-      }),
-    ]);
+      });
+    });
     return true;
   }
 
@@ -416,23 +425,38 @@ export class CombatService {
       return this.toModel(battle.id, battle.state as unknown as BattleState);
     const next = battle.pendingState as unknown as BattleState;
     const status = next.status;
-    const result = await this.prisma.client.battle.updateMany({
-      where: {
-        id: battleId,
-        version: battle.version,
-        enemyReadyAt: battle.enemyReadyAt,
-      },
-      data: {
-        state: next as unknown as Prisma.InputJsonValue,
-        pendingState: Prisma.DbNull,
-        enemyReadyAt: null,
-        version: next.version,
-        status,
-        completedAt: status === BattleStatus.ACTIVE ? null : new Date(),
-        activeCharacterId: status === BattleStatus.ACTIVE ? characterId : null,
-      },
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      const result = await tx.battle.updateMany({
+        where: {
+          id: battleId,
+          version: battle.version,
+          enemyReadyAt: battle.enemyReadyAt,
+        },
+        data: {
+          state: next as unknown as Prisma.InputJsonValue,
+          pendingState: Prisma.DbNull,
+          enemyReadyAt: null,
+          version: next.version,
+          status,
+          completedAt: status === BattleStatus.ACTIVE ? null : new Date(),
+          activeCharacterId:
+            status === BattleStatus.ACTIVE ? characterId : null,
+        },
+      });
+      if (result.count === 1 && status === BattleStatus.LOST) {
+        await this.loseBackpack(tx, characterId, battleId);
+        await tx.characterWorldState.update({
+          where: { characterId },
+          data: {
+            currentLocation: 'BROKEN_WATCHPOST',
+            preparationChoice: null,
+            version: { increment: 1 },
+          },
+        });
+      }
+      return result.count === 1;
     });
-    if (result.count !== 1) {
+    if (!updated) {
       const current = await this.prisma.client.battle.findUniqueOrThrow({
         where: { id: battleId },
       });
@@ -442,20 +466,66 @@ export class CombatService {
         current.pendingState ? 'ENEMY_RESOLVING' : undefined,
       );
     }
-    if (status === BattleStatus.LOST)
-      await this.prisma.client.characterWorldState.update({
-        where: { characterId },
-        data: {
-          currentLocation: 'BROKEN_WATCHPOST',
-          preparationChoice: null,
-          version: { increment: 1 },
-        },
-      });
     return this.toModel(
       battle.id,
       next,
       status === BattleStatus.ACTIVE ? 'PLAYER_TURN' : 'COMPLETED',
     );
+  }
+
+  private async storeBackpack(
+    tx: Prisma.TransactionClient,
+    characterId: string,
+  ): Promise<void> {
+    const items = await tx.itemInstance.findMany({
+      where: { ownerId: characterId, location: ItemLocation.BACKPACK },
+      select: { id: true },
+    });
+    if (items.length === 0) return;
+    const itemIds = items.map(({ id }) => id);
+    await tx.itemInstance.updateMany({
+      where: {
+        id: { in: itemIds },
+        ownerId: characterId,
+        location: ItemLocation.BACKPACK,
+      },
+      data: { location: ItemLocation.CHEST },
+    });
+    await tx.itemLineageEvent.createMany({
+      data: itemIds.map((itemId) => ({
+        itemId,
+        type: ItemLineageType.STORED_IN_CHEST,
+        payload: { reason: 'RETURNED_TO_WATCHPOST' },
+      })),
+    });
+  }
+
+  private async loseBackpack(
+    tx: Prisma.TransactionClient,
+    characterId: string,
+    battleId: string,
+  ): Promise<void> {
+    const items = await tx.itemInstance.findMany({
+      where: { ownerId: characterId, location: ItemLocation.BACKPACK },
+      select: { id: true },
+    });
+    if (items.length === 0) return;
+    const itemIds = items.map(({ id }) => id);
+    await tx.itemInstance.updateMany({
+      where: {
+        id: { in: itemIds },
+        ownerId: characterId,
+        location: ItemLocation.BACKPACK,
+      },
+      data: { location: ItemLocation.LOST },
+    });
+    await tx.itemLineageEvent.createMany({
+      data: itemIds.map((itemId) => ({
+        itemId,
+        type: ItemLineageType.LOST_IN_BATTLE,
+        payload: { battleId },
+      })),
+    });
   }
 
   private toModel(

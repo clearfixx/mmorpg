@@ -28,6 +28,7 @@ export class InventoryModel {
   @Field(() => Int) baseDamage!: number;
   @Field(() => Int) totalDamage!: number;
   @Field(() => [InventoryItemModel]) chest!: InventoryItemModel[];
+  @Field(() => [InventoryItemModel]) backpack!: InventoryItemModel[];
   @Field(() => [EquippedItemModel]) equipped!: EquippedItemModel[];
   @Field(() => String, { nullable: true }) mainHandVisualAssetId!:
     string | null;

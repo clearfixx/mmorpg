@@ -1,10 +1,11 @@
-import { ItemBinding, ItemRarity } from '@veilfall/database';
+import { ItemBinding, ItemLocation, ItemRarity } from '@veilfall/database';
 import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 import { ResourceBalanceModel } from '../../resources/models/resource-balance.model';
 
 registerEnumType(ItemRarity, { name: 'ItemRarity' });
 registerEnumType(ItemBinding, { name: 'ItemBinding' });
+registerEnumType(ItemLocation, { name: 'ItemLocation' });
 
 @ObjectType()
 export class RewardItemModel {
@@ -15,6 +16,7 @@ export class RewardItemModel {
   @Field(() => ItemRarity) rarity!: ItemRarity;
   @Field(() => Int) damage!: number;
   @Field(() => ItemBinding) binding!: ItemBinding;
+  @Field(() => ItemLocation) location!: ItemLocation;
   @Field() setName!: string;
   @Field() visualAssetId!: string;
 }

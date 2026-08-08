@@ -55,6 +55,7 @@ interface BattleReward {
     damage: number
     binding: string
     setName: string
+    location: 'CHEST' | 'BACKPACK'
   }
 }
 
@@ -182,7 +183,7 @@ export function BattleEncounter({
         `mutation Claim($input: ClaimBattleRewardInput!) {
           claimBattleReward(input: $input) {
             claimId experience gold resources { type amount }
-            item { id name itemLevel rarity damage binding setName }
+            item { id name itemLevel rarity damage binding setName location }
           }
         }`,
         {
@@ -493,11 +494,19 @@ function BattleResult({
       ) : null}
       {reward ? <RewardReveal reward={reward} /> : null}
       {won && reward ? (
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">
-          Етап {encounterTier + 1}: ворог матиме на 40 більше здоров’я та
-          завдаватиме на 6 більше шкоди. Нагорода: +{40 + encounterTier * 20}{' '}
-          досвіду і +{18 + encounterTier * 12} золота.
-        </p>
+        <div className="mt-4 space-y-2 text-xs leading-5 text-muted-foreground">
+          <p>
+            Етап {encounterTier + 1}: ворог матиме на 40 більше здоров’я та
+            завдаватиме на 6 більше шкоди. Нагорода: +{40 + encounterTier * 20}{' '}
+            досвіду і +{18 + encounterTier * 12} золота.
+          </p>
+          {reward.item.location === 'BACKPACK' ? (
+            <p className="text-destructive">
+              Продовження залишить трофей у похідному рюкзаку. Загибель у
+              наступному бою знищить усю незбережену здобич.
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {!won || reward ? (
         <div className="mt-5 flex flex-wrap gap-3">
@@ -519,7 +528,9 @@ function BattleResult({
             >
               {pending
                 ? 'Шукаємо шлях…'
-                : `Продовжити пригоду · етап ${encounterTier + 1}`}
+                : reward.item.location === 'BACKPACK'
+                  ? `Ризикнути · етап ${encounterTier + 1}`
+                  : `Продовжити пригоду · етап ${encounterTier + 1}`}
             </Button>
           ) : null}
         </div>
@@ -555,9 +566,12 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
               value={`+${reward.resources[0]?.amount ?? 0}`}
             />
           </dl>
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            Предмет переміщено до постійного сундука. Він прив’яжеться до героя
-            після екіпірування.
+          <p
+            className={`mt-3 text-xs leading-5 ${reward.item.location === 'BACKPACK' ? 'text-destructive' : 'text-muted-foreground'}`}
+          >
+            {reward.item.location === 'BACKPACK'
+              ? 'Предмет лежить у похідному рюкзаку. Поверніться на заставу, щоб перенести його до постійного сундука. Якщо продовжите шлях і загинете — трофей буде втрачено.'
+              : 'Предмет переміщено до постійного сундука. Він прив’яжеться до героя після екіпірування.'}
           </p>
         </div>
       </div>
