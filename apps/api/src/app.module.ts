@@ -13,6 +13,7 @@ import { IdentityModule } from './identity/identity.module';
 import type { GraphqlContext } from './identity/identity.types';
 import { InventoryModule } from './inventory/inventory.module';
 import { RewardsModule } from './rewards/rewards.module';
+import { ResourcesModule } from './resources/resources.module';
 import { TalentsModule } from './talents/talents.module';
 import { WorldModule } from './world/world.module';
 
@@ -34,6 +35,7 @@ import { WorldModule } from './world/world.module';
     CharactersModule,
     CombatModule,
     RewardsModule,
+    ResourcesModule,
     TalentsModule,
     WorldModule,
   ],

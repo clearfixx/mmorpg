@@ -1,4 +1,4 @@
-import { TalentType, WorldLocation } from '@veilfall/database';
+import { ResourceType, TalentType, WorldLocation } from '@veilfall/database';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 
@@ -65,7 +65,7 @@ export class TalentsService {
       await this.prisma.client.$transaction(async (tx) => {
         const character = await tx.character.findUniqueOrThrow({
           where: { id: characterId },
-          include: { talents: true, worldState: true },
+          include: { talents: true, worldState: true, resources: true },
         });
         if (
           character.worldState?.currentLocation !==
@@ -86,6 +86,17 @@ export class TalentsService {
           throw new ConflictException('No talent points available');
         if (currentRank >= 10)
           throw new ConflictException('Talent has reached maximum rank');
+        const cost = this.costForRank(currentRank + 1);
+        const paid = await tx.characterResource.updateMany({
+          where: {
+            characterId,
+            type: cost.type,
+            balance: { gte: cost.amount },
+          },
+          data: { balance: { decrement: cost.amount } },
+        });
+        if (paid.count !== 1)
+          throw new ConflictException('Not enough resources');
         const updated = await tx.character.updateMany({
           where: { id: characterId, version: input.expectedCharacterVersion },
           data: { version: { increment: 1 } },
@@ -102,6 +113,15 @@ export class TalentsService {
             characterId,
             idempotencyKey: input.idempotencyKey,
             payloadHash,
+          },
+        });
+        await tx.resourceLedgerEntry.create({
+          data: {
+            characterId,
+            type: cost.type,
+            amount: -cost.amount,
+            reason: 'TALENT_UPGRADE',
+            referenceId: input.idempotencyKey,
           },
         });
       });
@@ -123,7 +143,7 @@ export class TalentsService {
   private async read(characterId: string): Promise<TalentTreeModel> {
     const character = await this.prisma.client.character.findUniqueOrThrow({
       where: { id: characterId },
-      include: { talents: true },
+      include: { talents: true, resources: true },
     });
     const ranks = new Map(
       character.talents.map((talent) => [talent.type, talent.rank]),
@@ -132,16 +152,37 @@ export class TalentsService {
       (total, talent) => total + talent.rank,
       0,
     );
+    const resources = new Map(
+      character.resources.map((resource) => [resource.type, resource.balance]),
+    );
     return {
       characterVersion: character.version,
       availablePoints: Math.max(0, character.level - 1 - spent),
-      talents: Object.values(TalentType).map((type) => ({
+      talents: Object.values(TalentType).map((type) => {
+        const rank = ranks.get(type) ?? 0;
+        const cost = this.costForRank(rank + 1);
+        return {
+          type,
+          ...DEFINITIONS[type],
+          rank,
+          maxRank: 10,
+          unlocked: character.level >= DEFINITIONS[type].requiredLevel,
+          costResource: cost.type,
+          costAmount: cost.amount,
+          affordable: (resources.get(cost.type) ?? 0) >= cost.amount,
+        };
+      }),
+      resources: Object.values(ResourceType).map((type) => ({
         type,
-        ...DEFINITIONS[type],
-        rank: ranks.get(type) ?? 0,
-        maxRank: 10,
-        unlocked: character.level >= DEFINITIONS[type].requiredLevel,
+        amount: resources.get(type) ?? 0,
       })),
     };
+  }
+
+  private costForRank(rank: number): { type: ResourceType; amount: number } {
+    if (rank >= 7) return { type: ResourceType.BRONZE, amount: (rank - 6) * 8 };
+    if (rank >= 4)
+      return { type: ResourceType.COPPER, amount: (rank - 3) * 10 };
+    return { type: ResourceType.IRON, amount: rank * 12 };
   }
 }

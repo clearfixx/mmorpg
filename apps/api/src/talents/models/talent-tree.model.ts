@@ -1,5 +1,7 @@
-import { TalentType } from '@veilfall/database';
+import { ResourceType, TalentType } from '@veilfall/database';
 import { Field, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+
+import { ResourceBalanceModel } from '../../resources/models/resource-balance.model';
 
 registerEnumType(TalentType, { name: 'TalentType' });
 
@@ -28,6 +30,15 @@ export class TalentNodeModel {
 
   @Field()
   unlocked!: boolean;
+
+  @Field(() => ResourceType)
+  costResource!: ResourceType;
+
+  @Field(() => Int)
+  costAmount!: number;
+
+  @Field()
+  affordable!: boolean;
 }
 
 @ObjectType()
@@ -40,4 +51,7 @@ export class TalentTreeModel {
 
   @Field(() => [TalentNodeModel])
   talents!: TalentNodeModel[];
+
+  @Field(() => [ResourceBalanceModel])
+  resources!: ResourceBalanceModel[];
 }

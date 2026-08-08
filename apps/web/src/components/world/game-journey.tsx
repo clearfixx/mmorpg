@@ -64,6 +64,7 @@ interface Inventory {
 }
 
 type TalentType = 'VITALITY' | 'POWER' | 'RESILIENCE'
+type ResourceType = 'IRON' | 'COPPER' | 'BRONZE'
 
 interface TalentTree {
   characterVersion: number
@@ -77,7 +78,11 @@ interface TalentTree {
     requiredLevel: number
     effectPerRank: number
     unlocked: boolean
+    costResource: ResourceType
+    costAmount: number
+    affordable: boolean
   }>
+  resources: Array<{ type: ResourceType; amount: number }>
 }
 
 const preparations = [
@@ -504,9 +509,17 @@ function CinderhavenGate({
                 </p>
                 <h2 className="mt-2 text-xl font-medium">Розвиток героя</h2>
               </div>
-              <span className="font-mono text-sm text-moss">
-                Очки: {talents.availablePoints}
-              </span>
+              <div className="text-right font-mono text-xs">
+                <p className="text-moss">Очки: {talents.availablePoints}</p>
+                <p className="mt-1 text-muted-foreground">
+                  {talents.resources
+                    .map(
+                      (resource) =>
+                        `${resourceName(resource.type)}: ${resource.amount}`,
+                    )
+                    .join(' · ')}
+                </p>
+              </div>
             </div>
             <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-3">
               {talents.talents.map((talent) => (
@@ -527,6 +540,7 @@ function CinderhavenGate({
                       pending ||
                       !talent.unlocked ||
                       talents.availablePoints < 1 ||
+                      !talent.affordable ||
                       talent.rank >= talent.maxRank
                     }
                     onClick={() => onUpgrade(talent.type)}
@@ -535,7 +549,7 @@ function CinderhavenGate({
                     {talent.unlocked
                       ? talent.rank >= talent.maxRank
                         ? 'Максимум'
-                        : 'Підвищити ранг'
+                        : `Підвищити · ${talent.costAmount} ${resourceName(talent.costResource)}`
                       : `Рівень ${talent.requiredLevel}`}
                   </Button>
                 </div>
@@ -781,7 +795,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints talents { type name description rank maxRank requiredLevel effectPerRank unlocked } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -838,7 +852,7 @@ async function executeTalentMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints talents { type name description rank maxRank requiredLevel effectPerRank unlocked } } }',
+        'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } }',
       variables: {
         input: {
           type,
@@ -876,6 +890,10 @@ async function executeWorldMutation(
   if (!response.ok || payload.errors || !result)
     throw new Error('WORLD_COMMAND_FAILED')
   return result
+}
+
+function resourceName(value: ResourceType): string {
+  return { IRON: 'залізо', COPPER: 'мідь', BRONZE: 'бронза' }[value]
 }
 
 function archetypeName(value: Hero['archetype']): string {

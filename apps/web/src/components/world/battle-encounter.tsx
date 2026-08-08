@@ -46,6 +46,7 @@ interface BattleReward {
   claimId: string
   experience: number
   gold: number
+  resources: Array<{ type: 'IRON' | 'COPPER' | 'BRONZE'; amount: number }>
   item: {
     id: string
     name: string
@@ -180,7 +181,7 @@ export function BattleEncounter({
       const data = await graphQl<{ claimBattleReward: BattleReward }>(
         `mutation Claim($input: ClaimBattleRewardInput!) {
           claimBattleReward(input: $input) {
-            claimId experience gold
+            claimId experience gold resources { type amount }
             item { id name itemLevel rarity damage binding setName }
           }
         }`,
@@ -545,10 +546,14 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
           <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-wider text-ember">
             {rarityName(reward.item.rarity)} · комплект {reward.item.setName}
           </p>
-          <dl className="mt-3 grid grid-cols-3 gap-px bg-border/60 text-center">
+          <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-center sm:grid-cols-4">
             <RewardStat label="DMG" value={`+${reward.item.damage}`} />
             <RewardStat label="EXP" value={`+${reward.experience}`} />
             <RewardStat label="Золото" value={`+${reward.gold}`} />
+            <RewardStat
+              label={resourceName(reward.resources[0]?.type)}
+              value={`+${reward.resources[0]?.amount ?? 0}`}
+            />
           </dl>
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
             Предмет переміщено до постійного сундука. Він прив’яжеться до героя
@@ -569,6 +574,10 @@ function RewardStat({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 font-mono text-xs text-foreground">{value}</dd>
     </div>
   )
+}
+
+function resourceName(type?: 'IRON' | 'COPPER' | 'BRONZE'): string {
+  return { IRON: 'Залізо', COPPER: 'Мідь', BRONZE: 'Бронза' }[type ?? 'IRON']
 }
 
 function HealthPanel({

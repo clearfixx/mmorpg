@@ -34,6 +34,7 @@ type BattleRewardModel {
   experience: Int!
   gold: Int!
   item: RewardItemModel!
+  resources: [ResourceBalanceModel!]!
 }
 
 enum CharacterArchetype {
@@ -212,6 +213,7 @@ type Query {
   latestBattle: BattleModel
   myCharacter: CharacterModel
   myInventory: InventoryModel!
+  myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
 
   """API readiness probe for the foundation milestone."""
@@ -222,6 +224,17 @@ type Query {
 input RegisterInput {
   email: String!
   password: String!
+}
+
+type ResourceBalanceModel {
+  amount: Int!
+  type: ResourceType!
+}
+
+enum ResourceType {
+  BRONZE
+  COPPER
+  IRON
 }
 
 input RetreatInput {
@@ -252,6 +265,9 @@ input SubmitCombatCommandInput {
 }
 
 type TalentNodeModel {
+  affordable: Boolean!
+  costAmount: Int!
+  costResource: ResourceType!
   description: String!
   effectPerRank: Int!
   maxRank: Int!
@@ -265,6 +281,7 @@ type TalentNodeModel {
 type TalentTreeModel {
   availablePoints: Int!
   characterVersion: Int!
+  resources: [ResourceBalanceModel!]!
   talents: [TalentNodeModel!]!
 }
 

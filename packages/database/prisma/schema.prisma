@@ -89,6 +89,12 @@ enum TalentType {
   RESILIENCE
 }
 
+enum ResourceType {
+  IRON
+  COPPER
+  BRONZE
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -128,6 +134,8 @@ model Character {
   inventoryCommands InventoryCommand[]
   talents           CharacterTalent[]
   talentCommands    TalentCommand[]
+  resources         CharacterResource[]
+  resourceLedger    ResourceLedgerEntry[]
 
   @@map("characters")
 }
@@ -154,6 +162,33 @@ model TalentCommand {
 
   @@unique([characterId, idempotencyKey])
   @@map("talent_commands")
+}
+
+model CharacterResource {
+  id          String       @id @default(uuid()) @db.Uuid
+  characterId String       @map("character_id") @db.Uuid
+  type        ResourceType
+  balance     Int          @default(0)
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  character   Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, type])
+  @@map("character_resources")
+}
+
+model ResourceLedgerEntry {
+  id          String       @id @default(uuid()) @db.Uuid
+  characterId String       @map("character_id") @db.Uuid
+  type        ResourceType
+  amount      Int
+  reason      String       @db.VarChar(32)
+  referenceId String       @map("reference_id") @db.VarChar(64)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  character   Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, type, reason, referenceId])
+  @@index([characterId, createdAt])
+  @@map("resource_ledger_entries")
 }
 
 model Battle {
@@ -214,6 +249,8 @@ model RewardClaim {
   idempotencyKey String        @map("idempotency_key") @db.VarChar(64)
   experience     Int
   gold           Int
+  resourceType   ResourceType  @default(IRON) @map("resource_type")
+  resourceAmount Int           @default(0) @map("resource_amount")
   createdAt      DateTime      @default(now()) @map("created_at")
   battle         Battle        @relation(fields: [battleId], references: [id], onDelete: Restrict)
   character      Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)

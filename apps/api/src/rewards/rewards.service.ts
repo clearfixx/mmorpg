@@ -4,6 +4,7 @@ import {
   ItemBinding,
   ItemLineageType,
   ItemRarity,
+  ResourceType,
 } from '@veilfall/database';
 import { progressionForExperience } from '@veilfall/game-engine';
 import {
@@ -75,6 +76,7 @@ export class RewardsService {
     const roll = this.rollForBattle(battle.id, tier);
     const experience = 40 + (tier - 1) * 20;
     const gold = 18 + (tier - 1) * 12;
+    const resource = this.resourceReward(tier);
 
     try {
       const claim = await this.prisma.client.$transaction(async (tx) => {
@@ -85,6 +87,8 @@ export class RewardsService {
             idempotencyKey: input.idempotencyKey,
             experience,
             gold,
+            resourceType: resource.type,
+            resourceAmount: resource.amount,
           },
         });
         const item = await tx.itemInstance.create({
@@ -125,6 +129,26 @@ export class RewardsService {
         await tx.character.updateMany({
           where: { id: characterId, level: { lt: progression.level } },
           data: { level: progression.level },
+        });
+        await tx.characterResource.upsert({
+          where: {
+            characterId_type: { characterId, type: resource.type },
+          },
+          create: {
+            characterId,
+            type: resource.type,
+            balance: resource.amount,
+          },
+          update: { balance: { increment: resource.amount } },
+        });
+        await tx.resourceLedgerEntry.create({
+          data: {
+            characterId,
+            type: resource.type,
+            amount: resource.amount,
+            reason: 'BATTLE_REWARD',
+            referenceId: createdClaim.id,
+          },
         });
         await tx.characterWorldState.update({
           where: { characterId },
@@ -171,11 +195,22 @@ export class RewardsService {
     return { rarity, damage };
   }
 
+  private resourceReward(tier: number): {
+    type: ResourceType;
+    amount: number;
+  } {
+    if (tier >= 5) return { type: ResourceType.BRONZE, amount: 8 + tier * 2 };
+    if (tier >= 3) return { type: ResourceType.COPPER, amount: 12 + tier * 3 };
+    return { type: ResourceType.IRON, amount: 10 + tier * 10 };
+  }
+
   private toModel(claim: {
     id: string;
     battleId: string;
     experience: number;
     gold: number;
+    resourceType: ResourceType;
+    resourceAmount: number;
     item: {
       id: string;
       definitionId: string;
@@ -198,6 +233,7 @@ export class RewardsService {
       battleId: claim.battleId,
       experience: claim.experience,
       gold: claim.gold,
+      resources: [{ type: claim.resourceType, amount: claim.resourceAmount }],
       item: {
         ...claim.item,
         name: definition.name,

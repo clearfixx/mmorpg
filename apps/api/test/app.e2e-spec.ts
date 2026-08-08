@@ -330,6 +330,16 @@ describe('Health (e2e)', () => {
     expect(firstReward.text).toContain('BOUND_ON_EQUIP');
     expect(firstReward.text).toContain('"experience":40');
     expect(firstReward.text).toContain('"gold":18');
+    expect(
+      await prisma.client.characterResource.findUnique({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'IRON',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 20 });
 
     expect(await prisma.client.rewardClaim.count({ where: { battleId } })).toBe(
       1,
@@ -550,7 +560,7 @@ describe('Health (e2e)', () => {
       .set('Cookie', cookie)
       .send({
         query:
-          '{ myTalents { characterVersion availablePoints talents { type rank unlocked } } }',
+          '{ myTalents { characterVersion availablePoints resources { type amount } talents { type rank unlocked costResource costAmount affordable } } }',
       })
       .expect(200);
     const talentPayload = JSON.parse(talentState.text) as {
@@ -558,10 +568,29 @@ describe('Health (e2e)', () => {
         myTalents: {
           characterVersion: number;
           availablePoints: number;
+          resources: Array<{ type: string; amount: number }>;
+          talents: Array<{
+            type: string;
+            costResource: string;
+            costAmount: number;
+            affordable: boolean;
+          }>;
         };
       };
     };
     expect(talentPayload.data.myTalents.availablePoints).toBe(1);
+    expect(talentPayload.data.myTalents.resources).toContainEqual({
+      type: 'IRON',
+      amount: 50,
+    });
+    expect(talentPayload.data.myTalents.talents).toContainEqual(
+      expect.objectContaining({
+        type: 'POWER',
+        costResource: 'IRON',
+        costAmount: 12,
+        affordable: true,
+      }),
+    );
     const talentKey = `talent-${Date.now()}`;
     const upgradeTalent = () =>
       request(server)
@@ -569,7 +598,7 @@ describe('Health (e2e)', () => {
         .set('Cookie', cookie)
         .send({
           query:
-            'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints talents { type rank } } }',
+            'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints resources { type amount } talents { type rank } } }',
           variables: {
             input: {
               type: 'POWER',
@@ -585,6 +614,12 @@ describe('Health (e2e)', () => {
     expect(firstTalent.body).toEqual(retriedTalent.body);
     expect(firstTalent.text).toContain('"availablePoints":0');
     expect(firstTalent.text).toContain('"type":"POWER","rank":1');
+    expect(firstTalent.text).toContain('"type":"IRON","amount":38');
+    expect(
+      await prisma.client.resourceLedgerEntry.count({
+        where: { characterId: rewardedCharacter.id },
+      }),
+    ).toBe(3);
 
     const returnToWatchpost = await request(server)
       .post('/graphql')
