@@ -2,6 +2,12 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+input AttackClanBossInput {
+  encounterId: ID!
+  expectedVersion: Int!
+  idempotencyKey: String!
+}
+
 type AuthPayload {
   authenticated: Boolean!
   viewer: Viewer
@@ -77,6 +83,31 @@ type CharacterStats {
 input ClaimBattleRewardInput {
   battleId: ID!
   idempotencyKey: String!
+}
+
+type ClanBossModel {
+  canSummon: Boolean!
+  currentHealth: Int!
+  id: ID!
+  maxHealth: Int!
+  name: String!
+  participants: [ClanBossParticipantModel!]!
+  status: ClanBossStatus!
+  tier: Int!
+  version: Int!
+}
+
+type ClanBossParticipantModel {
+  actions: Int!
+  characterId: ID!
+  damage: Int!
+  name: String!
+}
+
+enum ClanBossStatus {
+  ACTIVE
+  EXPIRED
+  WON
 }
 
 enum ClanDevelopmentBranch {
@@ -264,6 +295,7 @@ input LoginInput {
 }
 
 type Mutation {
+  attackClanBoss(input: AttackClanBossInput!): ClanBossModel!
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
   continueAdventure(input: ContinueAdventureInput!): BattleModel!
   contributeClanResource(input: ContributeClanResourceInput!): ClanModel!
@@ -279,6 +311,7 @@ type Mutation {
   returnToWatchpost: Boolean!
   startEncounter(input: StartEncounterInput!): BattleModel!
   submitCombatCommand(input: SubmitCombatCommandInput!): BattleModel!
+  summonClanBoss(input: SummonClanBossInput!): ClanBossModel!
   travel(input: TravelInput!): WorldStateModel!
   upgradeClanDevelopment(input: UpgradeClanDevelopmentInput!): ClanModel!
   upgradeTalent(input: UpgradeTalentInput!): TalentTreeModel!
@@ -298,6 +331,7 @@ input PrepareLocationInput {
 
 type Query {
   activeBattle: BattleModel
+  currentClanBoss: ClanBossModel
   currentLocation: WorldStateModel!
   latestBattle: BattleModel
   myCharacter: CharacterModel
@@ -352,6 +386,11 @@ input StartEncounterInput {
 input SubmitCombatCommandInput {
   actionId: String!
   expectedVersion: Int!
+  idempotencyKey: String!
+}
+
+input SummonClanBossInput {
+  expectedClanVersion: Int!
   idempotencyKey: String!
 }
 

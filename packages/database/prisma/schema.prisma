@@ -113,6 +113,12 @@ enum ClanDevelopmentBranch {
   MYSTIC
 }
 
+enum ClanBossStatus {
+  ACTIVE
+  WON
+  EXPIRED
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -157,6 +163,7 @@ model Character {
   clanMembership    ClanMembership?
   clanCommands      ClanCommand[]
   clanContributions ClanContribution[]
+  clanBossParticipations ClanBossParticipant[]
 
   @@map("characters")
 }
@@ -176,8 +183,42 @@ model Clan {
   resources  ClanResource[]
   contributions ClanContribution[]
   developments  ClanDevelopment[]
+  bossEncounters ClanBossEncounter[]
 
   @@map("clans")
+}
+
+model ClanBossEncounter {
+  id            String             @id @default(uuid()) @db.Uuid
+  clanId        String             @map("clan_id") @db.Uuid
+  activeClanId  String?            @unique @map("active_clan_id") @db.Uuid
+  tier          Int                @default(1)
+  status        ClanBossStatus     @default(ACTIVE)
+  maxHealth     Int                @map("max_health")
+  currentHealth Int                @map("current_health")
+  version       Int                @default(1)
+  createdAt     DateTime           @default(now()) @map("created_at")
+  completedAt   DateTime?          @map("completed_at")
+  clan          Clan               @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  participants  ClanBossParticipant[]
+
+  @@index([clanId, createdAt])
+  @@map("clan_boss_encounters")
+}
+
+model ClanBossParticipant {
+  id          String            @id @default(uuid()) @db.Uuid
+  encounterId String            @map("encounter_id") @db.Uuid
+  characterId String            @map("character_id") @db.Uuid
+  damage      Int               @default(0)
+  actions     Int               @default(0)
+  joinedAt    DateTime          @default(now()) @map("joined_at")
+  encounter   ClanBossEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  character   Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([encounterId, characterId])
+  @@index([encounterId, damage])
+  @@map("clan_boss_participants")
 }
 
 model ClanDevelopment {

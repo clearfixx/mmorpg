@@ -10,6 +10,7 @@ export {
   CharacterOrigin,
   ClanRole,
   ClanDevelopmentBranch,
+  ClanBossStatus,
   EquipmentSlot,
   ItemBinding,
   ItemLineageType,

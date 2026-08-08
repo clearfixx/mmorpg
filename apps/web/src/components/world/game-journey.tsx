@@ -125,6 +125,23 @@ interface Clan {
   }>
 }
 
+interface ClanBoss {
+  id: string
+  name: string
+  tier: number
+  status: 'ACTIVE' | 'WON' | 'EXPIRED'
+  maxHealth: number
+  currentHealth: number
+  version: number
+  canSummon: boolean
+  participants: Array<{
+    characterId: string
+    name: string
+    damage: number
+    actions: number
+  }>
+}
+
 const preparations = [
   {
     value: 'SEARCH_ARMORY' as const,
@@ -157,6 +174,7 @@ export function GameJourney() {
   const [inventory, setInventory] = useState<Inventory | null>(null)
   const [talents, setTalents] = useState<TalentTree | null>(null)
   const [clan, setClan] = useState<Clan | null>(null)
+  const [clanBoss, setClanBoss] = useState<ClanBoss | null>(null)
   const [view, setView] = useState<'LOBBY' | 'EQUIPMENT'>('LOBBY')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -170,6 +188,7 @@ export function GameJourney() {
         setInventory(result.inventory)
         setTalents(result.talents)
         setClan(result.clan)
+        setClanBoss(result.clanBoss)
       }
     })
   }, [])
@@ -285,6 +304,7 @@ export function GameJourney() {
         inventory={inventory}
         talents={talents}
         clan={clan}
+        clanBoss={clanBoss}
         pending={pending}
         error={error}
         onReturn={() => travel('BROKEN_WATCHPOST')}
@@ -360,6 +380,43 @@ export function GameJourney() {
             setError(
               'Розвиток не завершено. Перевірте повноваження, рівень і скарбницю клану.',
             )
+          } finally {
+            setPending(false)
+          }
+        }}
+        onSummonClanBoss={async () => {
+          if (!clan || pending) return
+          setPending(true)
+          setError(null)
+          try {
+            const result = await executeClanBossMutation('SUMMON', {
+              expectedClanVersion: clan.version,
+              idempotencyKey: crypto.randomUUID(),
+            })
+            setClanBoss(result)
+            setClan({ ...clan, version: clan.version + 1 })
+          } catch {
+            setError('Не вдалося викликати кланового боса.')
+          } finally {
+            setPending(false)
+          }
+        }}
+        onAttackClanBoss={async () => {
+          if (!clanBoss || pending) return
+          setPending(true)
+          setError(null)
+          try {
+            setClanBoss(
+              await executeClanBossMutation('ATTACK', {
+                encounterId: clanBoss.id,
+                expectedVersion: clanBoss.version,
+                idempotencyKey: crypto.randomUUID(),
+              }),
+            )
+          } catch {
+            const refreshed = await loadJourney()
+            setClanBoss(refreshed.clanBoss)
+            setError('Стан лігва змінився. Дані оновлено.')
           } finally {
             setPending(false)
           }
@@ -651,6 +708,7 @@ function CinderhavenGate({
   inventory,
   talents,
   clan,
+  clanBoss,
   pending,
   error,
   onReturn,
@@ -659,12 +717,15 @@ function CinderhavenGate({
   onJoinClan,
   onContributeClan,
   onUpgradeClanDevelopment,
+  onSummonClanBoss,
+  onAttackClanBoss,
   onUpgrade,
 }: {
   hero: Hero
   inventory: Inventory | null
   talents: TalentTree | null
   clan: Clan | null
+  clanBoss: ClanBoss | null
   pending: boolean
   error: string | null
   onReturn: () => void
@@ -676,6 +737,8 @@ function CinderhavenGate({
     amount: number,
   ) => Promise<void>
   onUpgradeClanDevelopment: (branch: ClanDevelopmentBranch) => Promise<void>
+  onSummonClanBoss: () => Promise<void>
+  onAttackClanBoss: () => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<'HUB' | 'TRAINING' | 'CLAN'>('HUB')
@@ -829,6 +892,9 @@ function CinderhavenGate({
                 pending={pending}
                 onContribute={onContributeClan}
                 onUpgradeDevelopment={onUpgradeClanDevelopment}
+                boss={clanBoss}
+                onSummonBoss={onSummonClanBoss}
+                onAttackBoss={onAttackClanBoss}
               />
             ) : (
               <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
@@ -981,12 +1047,18 @@ function ClanHall({
   pending,
   onContribute,
   onUpgradeDevelopment,
+  boss,
+  onSummonBoss,
+  onAttackBoss,
 }: {
   clan: Clan
   personalResources: Array<{ type: ResourceType; amount: number }>
   pending: boolean
   onContribute: (resourceType: ResourceType, amount: number) => Promise<void>
   onUpgradeDevelopment: (branch: ClanDevelopmentBranch) => Promise<void>
+  boss: ClanBoss | null
+  onSummonBoss: () => Promise<void>
+  onAttackBoss: () => Promise<void>
 }) {
   const [resourceType, setResourceType] = useState<ResourceType>('IRON')
   const [amount, setAmount] = useState(1)
@@ -1132,6 +1204,83 @@ function ClanHall({
             )
           })}
         </div>
+      </section>
+      <section className="mt-6 border border-border/70 bg-background/45 p-5">
+        <p className="font-mono text-[0.6rem] uppercase tracking-wider text-destructive">
+          Кланове лігво
+        </p>
+        {boss ? (
+          <div className="mt-3">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <h2 className="font-medium">
+                  {boss.name} · рівень {boss.tier}
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Спільний ворог для всього складу клану
+                </p>
+              </div>
+              <span className="font-mono text-sm">
+                {boss.currentHealth}/{boss.maxHealth} HP
+              </span>
+            </div>
+            <div className="mt-3 h-2 bg-panel">
+              <div
+                className="h-full bg-destructive"
+                style={{
+                  width: `${(boss.currentHealth / boss.maxHealth) * 100}%`,
+                }}
+              />
+            </div>
+            <Button
+              type="button"
+              disabled={pending || boss.status !== 'ACTIVE'}
+              onClick={() => void onAttackBoss()}
+              className="mt-4 h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
+            >
+              {pending
+                ? 'Удар готується…'
+                : boss.status === 'WON'
+                  ? 'Боса переможено'
+                  : 'Атакувати боса'}
+            </Button>
+            {boss.participants.length > 0 ? (
+              <div className="mt-4 space-y-2">
+                {boss.participants.map((participant) => (
+                  <div
+                    key={participant.characterId}
+                    className="flex justify-between text-xs"
+                  >
+                    <span>{participant.name}</span>
+                    <span className="font-mono text-muted-foreground">
+                      {participant.damage} шкоди · {participant.actions} дій
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+            <p className="max-w-xl text-xs leading-5 text-muted-foreground">
+              Перший ранг військового шляху відкриває виклик Кістяного велетня.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                pending ||
+                clan.viewerRole !== 'LEADER' ||
+                (clan.developments.find((item) => item.branch === 'MILITARY')
+                  ?.rank ?? 0) < 1
+              }
+              onClick={() => void onSummonBoss()}
+              className="h-9 rounded-sm"
+            >
+              Викликати боса
+            </Button>
+          </div>
+        )}
       </section>
       <div className="mt-6">
         <div className="flex items-center justify-between">
@@ -1357,6 +1506,7 @@ async function loadJourney(): Promise<{
   inventory: Inventory | null
   talents: TalentTree | null
   clan: Clan | null
+  clanBoss: ClanBoss | null
   redirect: string | null
 }> {
   try {
@@ -1366,7 +1516,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon participants { characterId name damage actions } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -1377,6 +1527,7 @@ async function loadJourney(): Promise<{
         myInventory?: Inventory
         myTalents?: TalentTree
         myClan?: Clan | null
+        currentClanBoss?: ClanBoss | null
       }
       errors?: unknown
     }
@@ -1387,6 +1538,7 @@ async function loadJourney(): Promise<{
         inventory: null,
         talents: null,
         clan: null,
+        clanBoss: null,
         redirect: '/auth',
       }
     if (!payload.data.myCharacter)
@@ -1396,6 +1548,7 @@ async function loadJourney(): Promise<{
         inventory: null,
         talents: null,
         clan: null,
+        clanBoss: null,
         redirect: '/character/create',
       }
     return {
@@ -1404,6 +1557,7 @@ async function loadJourney(): Promise<{
       inventory: payload.data.myInventory ?? null,
       talents: payload.data.myTalents ?? null,
       clan: payload.data.myClan ?? null,
+      clanBoss: payload.data.currentClanBoss ?? null,
       redirect: null,
     }
   } catch {
@@ -1413,6 +1567,7 @@ async function loadJourney(): Promise<{
       inventory: null,
       talents: null,
       clan: null,
+      clanBoss: null,
       redirect: '/auth',
     }
   }
@@ -1510,6 +1665,34 @@ async function executeClanDevelopment(
   if (!response.ok || payload.errors || !payload.data)
     throw new Error('CLAN_DEVELOPMENT_FAILED')
   return payload.data.upgradeClanDevelopment
+}
+
+async function executeClanBossMutation(
+  action: 'SUMMON' | 'ATTACK',
+  input: Record<string, unknown>,
+): Promise<ClanBoss> {
+  const summoning = action === 'SUMMON'
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query: summoning
+        ? 'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon participants { characterId name damage actions } } }'
+        : 'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon participants { characterId name damage actions } } }',
+      variables: { input },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { summonClanBoss?: ClanBoss; attackClanBoss?: ClanBoss }
+    errors?: unknown
+  }
+  const result = summoning
+    ? payload.data?.summonClanBoss
+    : payload.data?.attackClanBoss
+  if (!response.ok || payload.errors || !result)
+    throw new Error('CLAN_BOSS_COMMAND_FAILED')
+  return result
 }
 
 async function executeTalentMutation(

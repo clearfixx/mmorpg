@@ -756,6 +756,57 @@ describe('Health (e2e)', () => {
       }),
     ).toBe(1);
 
+    const developmentResult = JSON.parse(firstDevelopment.text) as {
+      data: { upgradeClanDevelopment: { version: number } };
+    };
+    const summonedBoss = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id status maxHealth currentHealth version } }',
+        variables: {
+          input: {
+            expectedClanVersion:
+              developmentResult.data.upgradeClanDevelopment.version,
+            idempotencyKey: `summon-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const bossPayload = JSON.parse(summonedBoss.text) as {
+      data: {
+        summonClanBoss: { id: string; version: number; maxHealth: number };
+      };
+    };
+    expect(bossPayload.data.summonClanBoss.maxHealth).toBe(500);
+    const attackKey = `boss-attack-${Date.now()}`;
+    const attackBoss = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { currentHealth version participants { name damage actions } } }',
+          variables: {
+            input: {
+              encounterId: bossPayload.data.summonClanBoss.id,
+              expectedVersion: bossPayload.data.summonClanBoss.version,
+              idempotencyKey: attackKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstBossAttack = await attackBoss();
+    const retriedBossAttack = await attackBoss();
+    expect(firstBossAttack.body).toEqual(retriedBossAttack.body);
+    expect(firstBossAttack.text).toContain('"actions":1');
+    expect(
+      await prisma.client.clanBossParticipant.count({
+        where: { encounterId: bossPayload.data.summonClanBoss.id },
+      }),
+    ).toBe(1);
+
     const recruitEmail = `recruit-${Date.now()}@example.test`;
     createdEmails.push(recruitEmail);
     const recruitRegistration = await request(server)
