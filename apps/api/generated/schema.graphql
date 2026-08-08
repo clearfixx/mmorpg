@@ -48,6 +48,9 @@ type CharacterModel {
   baseStats: CharacterStats!
   createdAt: DateTime!
   experience: Int!
+  experienceForNextLevel: Int!
+  experienceIntoLevel: Int!
+  gold: Int!
   id: ID!
   level: Int!
   name: String!

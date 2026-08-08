@@ -36,6 +36,10 @@ interface Hero {
   name: string
   archetype: 'VANGUARD' | 'RANGER' | 'ARCANIST'
   level: number
+  experience: number
+  experienceIntoLevel: number
+  experienceForNextLevel: number
+  gold: number
   baseStats: { health: number; damage: number; armor: number }
 }
 
@@ -215,6 +219,25 @@ export function GameJourney() {
           <p className="mt-1 text-sm text-muted-foreground">
             Рівень {hero.level} · {archetypeName(hero.archetype)}
           </p>
+          <div className="mt-5">
+            <div className="flex justify-between font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
+              <span>Досвід</span>
+              <span>
+                {hero.experienceIntoLevel}/{hero.experienceForNextLevel}
+              </span>
+            </div>
+            <div className="mt-2 h-1 bg-background">
+              <div
+                className="h-full bg-moss"
+                style={{
+                  width: `${Math.min(100, (hero.experienceIntoLevel / hero.experienceForNextLevel) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="mt-2 font-mono text-xs text-ember">
+              {hero.gold} золота
+            </p>
+          </div>
           <dl className="mt-7 grid grid-cols-3 gap-px bg-border/60">
             {[
               ['HP', hero.baseStats.health],
@@ -394,13 +417,17 @@ function CinderhavenGate({
           {hero.name} уперше бачить місто, де починається справжня боротьба за
           вплив, ремесла та місце серед майбутніх кланів.
         </p>
-        <dl className="mt-8 grid gap-px bg-border/60 sm:grid-cols-3">
+        <dl className="mt-8 grid gap-px bg-border/60 sm:grid-cols-4">
           <EndingStat label="Рівень" value={hero.level} />
           <EndingStat
             label="Сила"
             value={inventory?.totalDamage ?? hero.baseStats.damage}
           />
           <EndingStat label="Етап" value="I завершено" />
+          <EndingStat
+            label="До рівня"
+            value={`${hero.experienceIntoLevel}/${hero.experienceForNextLevel} XP`}
+          />
         </dl>
         <div className="mt-8 border-l-2 border-moss bg-moss/5 px-4 py-4">
           <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
@@ -630,7 +657,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
       }),
     })
     const payload = (await response.json()) as {

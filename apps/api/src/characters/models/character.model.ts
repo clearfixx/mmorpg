@@ -38,6 +38,15 @@ export class CharacterModel {
   experience!: number;
 
   @Field(() => Int)
+  experienceIntoLevel!: number;
+
+  @Field(() => Int)
+  experienceForNextLevel!: number;
+
+  @Field(() => Int)
+  gold!: number;
+
+  @Field(() => Int)
   version!: number;
 
   @Field(() => CharacterStats)

@@ -3,6 +3,7 @@ import {
   CharacterArchetype,
   CharacterOrigin,
 } from '@veilfall/database';
+import { progressionForExperience } from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -126,13 +127,18 @@ export class CharactersService {
     staticAvatarId: string | null;
     level: number;
     experience: number;
+    gold: number;
     version: number;
     createdAt: Date;
     equipment?: Array<{ item: { damage: number } }>;
   }): CharacterModel {
     const weaponDamage = character.equipment?.[0]?.item.damage ?? 0;
+    const progression = progressionForExperience(character.experience);
     return {
       ...character,
+      level: progression.level,
+      experienceIntoLevel: progression.experienceIntoLevel,
+      experienceForNextLevel: progression.experienceForNextLevel,
       baseStats: {
         ...BASE_STATS[character.archetype],
         damage: BASE_STATS[character.archetype].damage + weaponDamage,

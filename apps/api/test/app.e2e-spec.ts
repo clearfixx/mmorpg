@@ -457,6 +457,25 @@ describe('Health (e2e)', () => {
       .expect(200);
     expect(secondReward.text).toContain('"experience":60');
     expect(secondReward.text).toContain('"gold":30');
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myCharacter { level experience experienceIntoLevel experienceForNextLevel gold } }',
+      })
+      .expect(200)
+      .expect({
+        data: {
+          myCharacter: {
+            level: 2,
+            experience: 100,
+            experienceIntoLevel: 0,
+            experienceForNextLevel: 300,
+            gold: 48,
+          },
+        },
+      });
 
     await prisma.client.battle.create({
       data: {

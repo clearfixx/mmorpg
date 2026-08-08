@@ -5,6 +5,7 @@ import {
   ItemLineageType,
   ItemRarity,
 } from '@veilfall/database';
+import { progressionForExperience } from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -110,13 +111,20 @@ export class RewardsService {
             },
           },
         });
-        await tx.character.update({
+        const progressedCharacter = await tx.character.update({
           where: { id: characterId },
           data: {
             experience: { increment: experience },
             gold: { increment: gold },
             version: { increment: 1 },
           },
+        });
+        const progression = progressionForExperience(
+          progressedCharacter.experience,
+        );
+        await tx.character.updateMany({
+          where: { id: characterId, level: { lt: progression.level } },
+          data: { level: progression.level },
         });
         await tx.characterWorldState.update({
           where: { characterId },
