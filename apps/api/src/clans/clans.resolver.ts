@@ -6,6 +6,7 @@ import { ClansService } from './clans.service';
 import { CreateClanInput } from './dto/create-clan.input';
 import { ContributeClanResourceInput } from './dto/contribute-clan-resource.input';
 import { JoinClanInput } from './dto/join-clan.input';
+import { UpgradeClanDevelopmentInput } from './dto/upgrade-clan-development.input';
 import { ClanModel } from './models/clan.model';
 
 @Resolver(() => ClanModel)
@@ -46,5 +47,14 @@ export class ClansResolver {
   ) {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.clans.contribute(viewer.id, input);
+  }
+
+  @Mutation(() => ClanModel)
+  async upgradeClanDevelopment(
+    @Args('input') input: UpgradeClanDevelopmentInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.clans.upgradeDevelopment(viewer.id, input);
   }
 }

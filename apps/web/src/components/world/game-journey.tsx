@@ -88,6 +88,8 @@ interface TalentTree {
 }
 
 type ClanRole = 'LEADER' | 'ELDER' | 'MEMBER'
+type ClanDevelopmentBranch =
+  'MILITARY' | 'HUNTING' | 'CRAFTING' | 'ECONOMIC' | 'MYSTIC'
 
 interface Clan {
   id: string
@@ -109,6 +111,18 @@ interface Clan {
     contribution: number
   }>
   treasury: Array<{ type: ResourceType; amount: number }>
+  developments: Array<{
+    branch: ClanDevelopmentBranch
+    name: string
+    description: string
+    rank: number
+    maxRank: number
+    requiredClanLevel: number
+    costResource: ResourceType
+    costAmount: number
+    affordable: boolean
+    unlocked: boolean
+  }>
 }
 
 const preparations = [
@@ -323,6 +337,28 @@ export function GameJourney() {
             }
             setError(
               'Внесок не прийнято. Перевірте залишок ресурсів і стан клану.',
+            )
+          } finally {
+            setPending(false)
+          }
+        }}
+        onUpgradeClanDevelopment={async (branch) => {
+          if (!clan || pending) return
+          setPending(true)
+          setError(null)
+          try {
+            setClan(await executeClanDevelopment(branch, clan.version))
+          } catch {
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) {
+              setHero(refreshed.hero)
+              setWorld(refreshed.world)
+              setInventory(refreshed.inventory)
+              setTalents(refreshed.talents)
+              setClan(refreshed.clan)
+            }
+            setError(
+              'Розвиток не завершено. Перевірте повноваження, рівень і скарбницю клану.',
             )
           } finally {
             setPending(false)
@@ -622,6 +658,7 @@ function CinderhavenGate({
   onCreateClan,
   onJoinClan,
   onContributeClan,
+  onUpgradeClanDevelopment,
   onUpgrade,
 }: {
   hero: Hero
@@ -638,6 +675,7 @@ function CinderhavenGate({
     resourceType: ResourceType,
     amount: number,
   ) => Promise<void>
+  onUpgradeClanDevelopment: (branch: ClanDevelopmentBranch) => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<'HUB' | 'TRAINING' | 'CLAN'>('HUB')
@@ -790,6 +828,7 @@ function CinderhavenGate({
                 personalResources={talents?.resources ?? []}
                 pending={pending}
                 onContribute={onContributeClan}
+                onUpgradeDevelopment={onUpgradeClanDevelopment}
               />
             ) : (
               <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
@@ -941,11 +980,13 @@ function ClanHall({
   personalResources,
   pending,
   onContribute,
+  onUpgradeDevelopment,
 }: {
   clan: Clan
   personalResources: Array<{ type: ResourceType; amount: number }>
   pending: boolean
   onContribute: (resourceType: ResourceType, amount: number) => Promise<void>
+  onUpgradeDevelopment: (branch: ClanDevelopmentBranch) => Promise<void>
 }) {
   const [resourceType, setResourceType] = useState<ResourceType>('IRON')
   const [amount, setAmount] = useState(1)
@@ -1035,6 +1076,62 @@ function ClanHall({
           Внесок безповоротний: передані особисті ресурси стають власністю
           клану. Особистий залишок: {personalBalance}.
         </p>
+      </section>
+      <section className="mt-6">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[0.6rem] uppercase tracking-wider text-ember">
+              Розвиток клану
+            </p>
+            <h2 className="mt-2 font-medium">Шляхи спеціалізації</h2>
+          </div>
+          <p className="text-right text-xs text-muted-foreground">
+            Рішення приймає голова клану
+          </p>
+        </div>
+        <div className="mt-3 grid gap-px bg-border/60 sm:grid-cols-2">
+          {clan.developments.map((development) => {
+            const complete = development.rank >= development.maxRank
+            const canUpgrade =
+              clan.viewerRole === 'LEADER' &&
+              development.unlocked &&
+              development.affordable &&
+              !complete
+            return (
+              <article
+                key={development.branch}
+                className="bg-background/60 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium">{development.name}</h3>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      {development.description}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-mono text-xs text-ember">
+                    {development.rank}/{development.maxRank}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending || !canUpgrade}
+                  onClick={() => void onUpgradeDevelopment(development.branch)}
+                  className="mt-4 h-8 w-full rounded-sm"
+                >
+                  {complete
+                    ? 'Гілку завершено'
+                    : !development.unlocked
+                      ? `Потрібен рівень клану ${development.requiredClanLevel}`
+                      : clan.viewerRole !== 'LEADER'
+                        ? 'Рішення голови'
+                        : `Розвинути · ${development.costAmount} ${resourceName(development.costResource)}`}
+                </Button>
+              </article>
+            )
+          })}
+        </div>
       </section>
       <div className="mt-6">
         <div className="flex items-center justify-between">
@@ -1269,7 +1366,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -1333,8 +1430,8 @@ async function executeClanMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query: creating
-        ? 'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }'
-        : 'mutation JoinClan($input: JoinClanInput!) { joinClan(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }',
+        ? 'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } }'
+        : 'mutation JoinClan($input: JoinClanInput!) { joinClan(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } }',
       variables: {
         input: {
           [creating ? 'name' : 'inviteCode']: value,
@@ -1365,7 +1462,7 @@ async function executeClanContribution(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Contribute($input: ContributeClanResourceInput!) { contributeClanResource(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }',
+        'mutation Contribute($input: ContributeClanResourceInput!) { contributeClanResource(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } }',
       variables: {
         input: {
           resourceType,
@@ -1384,6 +1481,35 @@ async function executeClanContribution(
   if (!response.ok || payload.errors || !payload.data)
     throw new Error('CLAN_CONTRIBUTION_FAILED')
   return payload.data.contributeClanResource
+}
+
+async function executeClanDevelopment(
+  branch: ClanDevelopmentBranch,
+  expectedClanVersion: number,
+): Promise<Clan> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query:
+        'mutation Develop($input: UpgradeClanDevelopmentInput!) { upgradeClanDevelopment(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } }',
+      variables: {
+        input: {
+          branch,
+          expectedClanVersion,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { upgradeClanDevelopment: Clan }
+    errors?: unknown
+  }
+  if (!response.ok || payload.errors || !payload.data)
+    throw new Error('CLAN_DEVELOPMENT_FAILED')
+  return payload.data.upgradeClanDevelopment
 }
 
 async function executeTalentMutation(

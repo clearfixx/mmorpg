@@ -724,6 +724,38 @@ describe('Health (e2e)', () => {
       }),
     ).toEqual({ balance: 18 });
 
+    const contributionResult = JSON.parse(firstContribution.text) as {
+      data: { contributeClanResource: { version: number } };
+    };
+    const developmentKey = `development-${Date.now()}`;
+    const developMilitary = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Develop($input: UpgradeClanDevelopmentInput!) { upgradeClanDevelopment(input: $input) { version treasury { type amount } developments { branch rank costResource costAmount } } }',
+          variables: {
+            input: {
+              branch: 'MILITARY',
+              expectedClanVersion:
+                contributionResult.data.contributeClanResource.version,
+              idempotencyKey: developmentKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstDevelopment = await developMilitary();
+    const retriedDevelopment = await developMilitary();
+    expect(firstDevelopment.body).toEqual(retriedDevelopment.body);
+    expect(firstDevelopment.text).toContain('"branch":"MILITARY","rank":1');
+    expect(firstDevelopment.text).toContain('"type":"IRON","amount":0');
+    expect(
+      await prisma.client.clanDevelopment.count({
+        where: { branch: 'MILITARY', rank: 1 },
+      }),
+    ).toBe(1);
+
     const recruitEmail = `recruit-${Date.now()}@example.test`;
     createdEmails.push(recruitEmail);
     const recruitRegistration = await request(server)

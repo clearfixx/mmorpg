@@ -9,6 +9,7 @@ export {
   CharacterArchetype,
   CharacterOrigin,
   ClanRole,
+  ClanDevelopmentBranch,
   EquipmentSlot,
   ItemBinding,
   ItemLineageType,

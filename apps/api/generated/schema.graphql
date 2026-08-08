@@ -79,6 +79,27 @@ input ClaimBattleRewardInput {
   idempotencyKey: String!
 }
 
+enum ClanDevelopmentBranch {
+  CRAFTING
+  ECONOMIC
+  HUNTING
+  MILITARY
+  MYSTIC
+}
+
+type ClanDevelopmentModel {
+  affordable: Boolean!
+  branch: ClanDevelopmentBranch!
+  costAmount: Int!
+  costResource: ResourceType!
+  description: String!
+  maxRank: Int!
+  name: String!
+  rank: Int!
+  requiredClanLevel: Int!
+  unlocked: Boolean!
+}
+
 type ClanMemberModel {
   characterId: ID!
   contribution: Int!
@@ -90,6 +111,7 @@ type ClanMemberModel {
 
 type ClanModel {
   characterVersion: Int!
+  developments: [ClanDevelopmentModel!]!
   experience: Int!
   experienceForNextLevel: Int!
   experienceIntoLevel: Int!
@@ -258,6 +280,7 @@ type Mutation {
   startEncounter(input: StartEncounterInput!): BattleModel!
   submitCombatCommand(input: SubmitCombatCommandInput!): BattleModel!
   travel(input: TravelInput!): WorldStateModel!
+  upgradeClanDevelopment(input: UpgradeClanDevelopmentInput!): ClanModel!
   upgradeTalent(input: UpgradeTalentInput!): TalentTreeModel!
 }
 
@@ -362,6 +385,12 @@ enum TalentType {
 input TravelInput {
   destination: WorldLocation!
   expectedVersion: Int!
+  idempotencyKey: String!
+}
+
+input UpgradeClanDevelopmentInput {
+  branch: ClanDevelopmentBranch!
+  expectedClanVersion: Int!
   idempotencyKey: String!
 }
 

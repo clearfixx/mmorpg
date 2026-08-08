@@ -1,4 +1,9 @@
-import { ClanRole, ResourceType, WorldLocation } from '@veilfall/database';
+import {
+  ClanDevelopmentBranch,
+  ClanRole,
+  ResourceType,
+  WorldLocation,
+} from '@veilfall/database';
 import {
   BadRequestException,
   ConflictException,
@@ -11,7 +16,31 @@ import { PrismaService } from '../database/prisma.service';
 import { CreateClanInput } from './dto/create-clan.input';
 import { ContributeClanResourceInput } from './dto/contribute-clan-resource.input';
 import { JoinClanInput } from './dto/join-clan.input';
+import { UpgradeClanDevelopmentInput } from './dto/upgrade-clan-development.input';
 import { ClanModel } from './models/clan.model';
+
+const DEVELOPMENT_DEFINITIONS = {
+  [ClanDevelopmentBranch.MILITARY]: {
+    name: 'Військовий шлях',
+    description: 'Відкриває бойові споруди, спроби босів і захисні бонуси.',
+  },
+  [ClanDevelopmentBranch.HUNTING]: {
+    name: 'Мисливський шлях',
+    description: 'Покращує розвідку, відомості про ворогів і кланову здобич.',
+  },
+  [ClanDevelopmentBranch.CRAFTING]: {
+    name: 'Ремісничий шлях',
+    description: 'Відкриває кузню, рецепти та ефективніше вдосконалення речей.',
+  },
+  [ClanDevelopmentBranch.ECONOMIC]: {
+    name: 'Економічний шлях',
+    description: 'Розвиває сховища, торгівлю та місткість клану.',
+  },
+  [ClanDevelopmentBranch.MYSTIC]: {
+    name: 'Містичний шлях',
+    description: 'Готує доступ до рун, зачарувань і сезонних печер.',
+  },
+} as const;
 
 @Injectable()
 export class ClansService {
@@ -268,6 +297,104 @@ export class ClansService {
     return (await this.readForCharacter(characterId))!;
   }
 
+  async upgradeDevelopment(
+    userId: string,
+    input: UpgradeClanDevelopmentInput,
+  ): Promise<ClanModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const payloadHash = this.hash(
+      `DEVELOP:${input.branch}:${input.expectedClanVersion}`,
+    );
+    const existing = await this.findCommand(characterId, input.idempotencyKey);
+    if (existing)
+      return this.resolveExisting(
+        characterId,
+        existing.payloadHash,
+        payloadHash,
+      );
+
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        const membership = await tx.clanMembership.findUnique({
+          where: { characterId },
+          include: {
+            character: { include: { worldState: true } },
+            clan: { include: { developments: true } },
+          },
+        });
+        if (!membership)
+          throw new BadRequestException('Clan membership required');
+        if (membership.role !== ClanRole.LEADER)
+          throw new ConflictException(
+            'Only the clan leader can develop branches',
+          );
+        if (
+          membership.character.worldState?.currentLocation !==
+          WorldLocation.CINDERHAVEN_GATE
+        )
+          throw new ConflictException(
+            'Clan development is managed in Cinderhaven',
+          );
+        const currentRank =
+          membership.clan.developments.find(
+            (development) => development.branch === input.branch,
+          )?.rank ?? 0;
+        if (currentRank >= 3)
+          throw new ConflictException('Development branch is complete');
+        const cost = this.developmentCost(currentRank + 1);
+        if (membership.clan.level < cost.requiredClanLevel)
+          throw new ConflictException('Clan level is too low');
+
+        const paid = await tx.clanResource.updateMany({
+          where: {
+            clanId: membership.clanId,
+            type: cost.resource,
+            balance: { gte: cost.amount },
+          },
+          data: { balance: { decrement: cost.amount } },
+        });
+        if (paid.count !== 1)
+          throw new ConflictException('Clan treasury lacks resources');
+        const updated = await tx.clan.updateMany({
+          where: {
+            id: membership.clanId,
+            version: input.expectedClanVersion,
+          },
+          data: { version: { increment: 1 } },
+        });
+        if (updated.count !== 1)
+          throw new ConflictException('Clan state changed');
+        await tx.clanDevelopment.upsert({
+          where: {
+            clanId_branch: {
+              clanId: membership.clanId,
+              branch: input.branch,
+            },
+          },
+          create: {
+            clanId: membership.clanId,
+            branch: input.branch,
+            rank: 1,
+          },
+          update: { rank: { increment: 1 } },
+        });
+        await tx.clanCommand.create({
+          data: {
+            clanId: membership.clanId,
+            characterId,
+            idempotencyKey: input.idempotencyKey,
+            commandType: 'UPGRADE_DEVELOPMENT',
+            payloadHash,
+          },
+        });
+      });
+    } catch (error) {
+      const raced = await this.findCommand(characterId, input.idempotencyKey);
+      if (!raced || raced.payloadHash !== payloadHash) throw error;
+    }
+    return (await this.readForCharacter(characterId))!;
+  }
+
   private async readForCharacter(
     characterId: string,
   ): Promise<ClanModel | null> {
@@ -278,6 +405,7 @@ export class ClansService {
         clan: {
           include: {
             resources: true,
+            developments: true,
             members: {
               orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
               include: {
@@ -312,6 +440,28 @@ export class ClansService {
           membership.clan.resources.find((resource) => resource.type === type)
             ?.balance ?? 0,
       })),
+      developments: Object.values(ClanDevelopmentBranch).map((branch) => {
+        const rank =
+          membership.clan.developments.find(
+            (development) => development.branch === branch,
+          )?.rank ?? 0;
+        const cost = this.developmentCost(Math.min(3, rank + 1));
+        const balance =
+          membership.clan.resources.find(
+            (resource) => resource.type === cost.resource,
+          )?.balance ?? 0;
+        return {
+          branch,
+          ...DEVELOPMENT_DEFINITIONS[branch],
+          rank,
+          maxRank: 3,
+          requiredClanLevel: cost.requiredClanLevel,
+          costResource: cost.resource,
+          costAmount: cost.amount,
+          affordable: balance >= cost.amount,
+          unlocked: membership.clan.level >= cost.requiredClanLevel,
+        };
+      }),
     };
   }
 
@@ -364,6 +514,30 @@ export class ClansService {
       level,
       experienceIntoLevel: experience - spent,
       experienceForNextLevel: threshold,
+    };
+  }
+
+  private developmentCost(rank: number): {
+    resource: ResourceType;
+    amount: number;
+    requiredClanLevel: number;
+  } {
+    if (rank >= 3)
+      return {
+        resource: ResourceType.BRONZE,
+        amount: 20,
+        requiredClanLevel: 3,
+      };
+    if (rank === 2)
+      return {
+        resource: ResourceType.COPPER,
+        amount: 30,
+        requiredClanLevel: 2,
+      };
+    return {
+      resource: ResourceType.IRON,
+      amount: 20,
+      requiredClanLevel: 1,
     };
   }
 }
