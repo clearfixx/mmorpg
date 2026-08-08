@@ -26,4 +26,12 @@ describe('deterministic first battle', () => {
     state.status = 'WON'
     expect(() => resolveTurn(state, 'ARCANE_BOLT')).toThrow('BATTLE_COMPLETE')
   })
+
+  it('applies server-provided hero level bonuses', () => {
+    const state = createBattle('VANGUARD', 'INSPECT_TRACKS', 0, 1, 3)
+    expect(state.hero.maxHealth).toBe(156)
+    expect(state.levelDamageBonus).toBe(4)
+    expect(state.levelArmorBonus).toBe(2)
+    expect(resolveTurn(state, 'STRIKE').enemy.health).toBe(103)
+  })
 })

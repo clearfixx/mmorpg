@@ -85,6 +85,7 @@ export class CombatService {
       where: { id: context.characterId },
       select: {
         archetype: true,
+        level: true,
         equipment: {
           where: { slot: 'MAIN_HAND' },
           select: { item: { select: { damage: true } } },
@@ -95,6 +96,8 @@ export class CombatService {
       character.archetype,
       context.preparation,
       character.equipment[0]?.item.damage ?? 0,
+      1,
+      character.level,
     );
     const battle = await this.prisma.client.battle.create({
       data: {
@@ -265,6 +268,7 @@ export class CombatService {
       where: { id: characterId },
       select: {
         archetype: true,
+        level: true,
         equipment: {
           where: { slot: 'MAIN_HAND' },
           select: { item: { select: { damage: true } } },
@@ -278,6 +282,7 @@ export class CombatService {
       previousState.preparation,
       character.equipment[0]?.item.damage ?? 0,
       tier,
+      character.level,
     );
     const battle = await this.prisma.client.$transaction(async (tx) => {
       const acknowledged = await tx.battle.updateMany({

@@ -326,10 +326,11 @@ export function BattleEncounter({
                 <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-destructive">
                   Хід ворога
                 </p>
-                <p className="mt-2 font-medium">Мародер відповідає…</p>
+                <p className="mt-2 font-medium">
+                  Настала черга відповіді ворога…
+                </p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Команду прийнято. Уміння заблоковані, доки сервер не завершить
-                  відповідь ворога.
+                  {battle.enemyName} перехоплює ініціативу й готує свій хід.
                 </p>
               </div>
             ) : (

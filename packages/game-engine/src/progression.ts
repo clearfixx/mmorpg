@@ -4,6 +4,17 @@ export interface LevelProgression {
   experienceForNextLevel: number
 }
 
+export interface LevelBonuses {
+  health: number
+  damage: number
+  armor: number
+}
+
+export function levelBonuses(level: number): LevelBonuses {
+  const ranks = Math.max(0, Math.floor(level) - 1)
+  return { health: ranks * 8, damage: ranks * 2, armor: ranks }
+}
+
 export function totalExperienceForLevel(level: number): number {
   const safeLevel = Math.max(1, Math.floor(level))
   return 100 * (safeLevel - 1) ** 2

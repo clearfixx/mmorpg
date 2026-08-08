@@ -3,7 +3,7 @@ import {
   CharacterArchetype,
   CharacterOrigin,
 } from '@veilfall/database';
-import { progressionForExperience } from '@veilfall/game-engine';
+import { levelBonuses, progressionForExperience } from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -134,14 +134,21 @@ export class CharactersService {
   }): CharacterModel {
     const weaponDamage = character.equipment?.[0]?.item.damage ?? 0;
     const progression = progressionForExperience(character.experience);
+    const bonuses = levelBonuses(progression.level);
     return {
       ...character,
       level: progression.level,
       experienceIntoLevel: progression.experienceIntoLevel,
       experienceForNextLevel: progression.experienceForNextLevel,
       baseStats: {
-        ...BASE_STATS[character.archetype],
-        damage: BASE_STATS[character.archetype].damage + weaponDamage,
+        health: BASE_STATS[character.archetype].health + bonuses.health,
+        damage:
+          BASE_STATS[character.archetype].damage +
+          bonuses.damage +
+          weaponDamage,
+        armor: BASE_STATS[character.archetype].armor + bonuses.armor,
+        speed: BASE_STATS[character.archetype].speed,
+        reaction: BASE_STATS[character.archetype].reaction,
       },
     };
   }

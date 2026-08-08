@@ -46,6 +46,8 @@ export interface BattleState {
   archetype: CombatArchetype
   preparation: Preparation
   weaponDamageBonus: number
+  levelDamageBonus: number
+  levelArmorBonus: number
   encounterTier: number
   enemyLabel: string
   enemyDamageBonus: number
@@ -177,8 +179,11 @@ export function createBattle(
   preparation: Preparation,
   weaponDamageBonus = 0,
   encounterTier = 1,
+  heroLevel = 1,
 ): BattleState {
-  const maxHealth = { VANGUARD: 140, RANGER: 100, ARCANIST: 90 }[archetype]
+  const levelRanks = Math.max(0, Math.floor(heroLevel) - 1)
+  const maxHealth =
+    { VANGUARD: 140, RANGER: 100, ARCANIST: 90 }[archetype] + levelRanks * 8
   const enemyMaxHealth = 125 + (encounterTier - 1) * 40
   const enemyLabel =
     encounterTier > 1
@@ -191,6 +196,8 @@ export function createBattle(
     archetype,
     preparation,
     weaponDamageBonus,
+    levelDamageBonus: levelRanks * 2,
+    levelArmorBonus: levelRanks,
     encounterTier,
     enemyLabel,
     enemyDamageBonus: (encounterTier - 1) * 6,
@@ -275,7 +282,8 @@ export function resolveTurn(
     }
   }
 
-  if (damage > 0) damage += state.weaponDamageBonus ?? 0
+  if (damage > 0)
+    damage += (state.weaponDamageBonus ?? 0) + (state.levelDamageBonus ?? 0)
 
   if (state.exposed && damage > 0) damage = Math.ceil(damage * 1.5)
   next.enemy.health = Math.max(0, next.enemy.health - damage)
@@ -324,7 +332,9 @@ export function resolveTurn(
     })
     next.stunned = false
   } else if (intent.damage > 0) {
-    const armorReduction = state.preparation === 'SEARCH_ARMORY' ? 4 : 0
+    const armorReduction =
+      (state.preparation === 'SEARCH_ARMORY' ? 4 : 0) +
+      (state.levelArmorBonus ?? 0)
     const raw = Math.max(
       0,
       intent.damage + (state.enemyDamageBonus ?? 0) - armorReduction,

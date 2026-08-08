@@ -5,6 +5,7 @@ import {
   ItemLineageType,
   ItemLocation,
 } from '@veilfall/database';
+import { levelBonuses } from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -160,7 +161,8 @@ export class InventoryService {
     const mainHand = character.equipment.find(
       (entry) => entry.slot === EquipmentSlot.MAIN_HAND,
     )?.item;
-    const baseDamage = BASE_DAMAGE[character.archetype];
+    const baseDamage =
+      BASE_DAMAGE[character.archetype] + levelBonuses(character.level).damage;
     return {
       characterVersion: character.version,
       baseDamage,
