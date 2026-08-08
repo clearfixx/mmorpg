@@ -25,6 +25,7 @@ describe('Health (e2e)', () => {
       await prisma.client.user.deleteMany({
         where: { email: { in: createdEmails.splice(0) } },
       });
+      await prisma.client.clan.deleteMany({ where: { members: { none: {} } } });
     }
     await app.close();
   });
@@ -653,7 +654,7 @@ describe('Health (e2e)', () => {
         .set('Cookie', cookie)
         .send({
           query:
-            'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level characterVersion viewerRole members { name role level } } }',
+            'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { name role level contribution } } }',
           variables: {
             input: {
               name: clanName,
@@ -670,7 +671,13 @@ describe('Health (e2e)', () => {
     expect(firstClan.text).toContain('"viewerRole":"LEADER"');
     expect(firstClan.text).toContain('"level":1');
     const clanResult = JSON.parse(firstClan.text) as {
-      data: { createClan: { inviteCode: string } };
+      data: {
+        createClan: {
+          inviteCode: string;
+          characterVersion: number;
+          version: number;
+        };
+      };
     };
     expect(clanResult.data.createClan.inviteCode).toMatch(/^[A-F0-9]{8}$/);
     expect(
@@ -678,6 +685,44 @@ describe('Health (e2e)', () => {
         where: { characterId: rewardedCharacter.id },
       }),
     ).toBe(1);
+
+    const contributionKey = `contribution-${Date.now()}`;
+    const contribute = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Contribute($input: ContributeClanResourceInput!) { contributeClanResource(input: $input) { level experience experienceIntoLevel experienceForNextLevel version characterVersion treasury { type amount } members { name contribution } } }',
+          variables: {
+            input: {
+              resourceType: 'IRON',
+              amount: 20,
+              expectedCharacterVersion:
+                clanResult.data.createClan.characterVersion,
+              expectedClanVersion: clanResult.data.createClan.version,
+              idempotencyKey: contributionKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstContribution = await contribute();
+    const retriedContribution = await contribute();
+    expect(firstContribution.body).toEqual(retriedContribution.body);
+    expect(firstContribution.text).toContain('"experience":20');
+    expect(firstContribution.text).toContain('"type":"IRON","amount":20');
+    expect(firstContribution.text).toContain('"contribution":20');
+    expect(
+      await prisma.client.characterResource.findUniqueOrThrow({
+        where: {
+          characterId_type: {
+            characterId: rewardedCharacter.id,
+            type: 'IRON',
+          },
+        },
+        select: { balance: true },
+      }),
+    ).toEqual({ balance: 18 });
 
     const recruitEmail = `recruit-${Date.now()}@example.test`;
     createdEmails.push(recruitEmail);

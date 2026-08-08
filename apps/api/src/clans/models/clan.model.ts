@@ -1,7 +1,17 @@
-import { ClanRole } from '@veilfall/database';
+import { ClanRole, ResourceType } from '@veilfall/database';
 import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 registerEnumType(ClanRole, { name: 'ClanRole' });
+registerEnumType(ResourceType, { name: 'ResourceType' });
+
+@ObjectType()
+export class ClanResourceModel {
+  @Field(() => ResourceType)
+  type!: ResourceType;
+
+  @Field(() => Int)
+  amount!: number;
+}
 
 @ObjectType()
 export class ClanMemberModel {
@@ -19,6 +29,9 @@ export class ClanMemberModel {
 
   @Field()
   joinedAt!: Date;
+
+  @Field(() => Int)
+  contribution!: number;
 }
 
 @ObjectType()
@@ -39,6 +52,12 @@ export class ClanModel {
   experience!: number;
 
   @Field(() => Int)
+  experienceIntoLevel!: number;
+
+  @Field(() => Int)
+  experienceForNextLevel!: number;
+
+  @Field(() => Int)
   version!: number;
 
   @Field(() => Int)
@@ -49,4 +68,7 @@ export class ClanModel {
 
   @Field(() => [ClanMemberModel])
   members!: ClanMemberModel[];
+
+  @Field(() => [ClanResourceModel])
+  treasury!: ClanResourceModel[];
 }

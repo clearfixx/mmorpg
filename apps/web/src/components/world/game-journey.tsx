@@ -95,6 +95,8 @@ interface Clan {
   inviteCode: string
   level: number
   experience: number
+  experienceIntoLevel: number
+  experienceForNextLevel: number
   version: number
   characterVersion: number
   viewerRole: ClanRole
@@ -104,7 +106,9 @@ interface Clan {
     level: number
     role: ClanRole
     joinedAt: string
+    contribution: number
   }>
+  treasury: Array<{ type: ResourceType; amount: number }>
 }
 
 const preparations = [
@@ -278,6 +282,51 @@ export function GameJourney() {
         onJoinClan={async (inviteCode) => {
           if (!inventory || pending) return
           await runClanAction('JOIN', inviteCode, inventory.characterVersion)
+        }}
+        onContributeClan={async (resourceType, amount) => {
+          if (!inventory || !clan || pending) return
+          setPending(true)
+          setError(null)
+          try {
+            const next = await executeClanContribution(
+              resourceType,
+              amount,
+              inventory.characterVersion,
+              clan.version,
+            )
+            setClan(next)
+            setInventory({
+              ...inventory,
+              characterVersion: next.characterVersion,
+            })
+            setTalents((current) =>
+              current
+                ? {
+                    ...current,
+                    characterVersion: next.characterVersion,
+                    resources: current.resources.map((resource) =>
+                      resource.type === resourceType
+                        ? { ...resource, amount: resource.amount - amount }
+                        : resource,
+                    ),
+                  }
+                : current,
+            )
+          } catch {
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) {
+              setHero(refreshed.hero)
+              setWorld(refreshed.world)
+              setInventory(refreshed.inventory)
+              setTalents(refreshed.talents)
+              setClan(refreshed.clan)
+            }
+            setError(
+              'Внесок не прийнято. Перевірте залишок ресурсів і стан клану.',
+            )
+          } finally {
+            setPending(false)
+          }
         }}
         onUpgrade={async (type) => {
           if (!talents || pending) return
@@ -572,6 +621,7 @@ function CinderhavenGate({
   onOpenEquipment,
   onCreateClan,
   onJoinClan,
+  onContributeClan,
   onUpgrade,
 }: {
   hero: Hero
@@ -584,6 +634,10 @@ function CinderhavenGate({
   onOpenEquipment: () => void
   onCreateClan: (name: string) => Promise<void>
   onJoinClan: (inviteCode: string) => Promise<void>
+  onContributeClan: (
+    resourceType: ResourceType,
+    amount: number,
+  ) => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<'HUB' | 'TRAINING' | 'CLAN'>('HUB')
@@ -731,7 +785,12 @@ function CinderhavenGate({
               Клановий двір
             </p>
             {clan ? (
-              <ClanHall clan={clan} />
+              <ClanHall
+                clan={clan}
+                personalResources={talents?.resources ?? []}
+                pending={pending}
+                onContribute={onContributeClan}
+              />
             ) : (
               <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
                 <form
@@ -877,7 +936,22 @@ function CityDistrict({
   )
 }
 
-function ClanHall({ clan }: { clan: Clan }) {
+function ClanHall({
+  clan,
+  personalResources,
+  pending,
+  onContribute,
+}: {
+  clan: Clan
+  personalResources: Array<{ type: ResourceType; amount: number }>
+  pending: boolean
+  onContribute: (resourceType: ResourceType, amount: number) => Promise<void>
+}) {
+  const [resourceType, setResourceType] = useState<ResourceType>('IRON')
+  const [amount, setAmount] = useState(1)
+  const personalBalance =
+    personalResources.find((resource) => resource.type === resourceType)
+      ?.amount ?? 0
   return (
     <div className="mt-4">
       <div className="grid gap-px bg-border/60 sm:grid-cols-3">
@@ -896,6 +970,72 @@ function ClanHall({ clan }: { clan: Clan }) {
           Передавайте код лише тим героям, яких хочете бачити у складі.
         </p>
       </div>
+      <section className="mt-6 border border-border/70 bg-background/45 p-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[0.6rem] uppercase tracking-wider text-ember">
+              Кланова скарбниця
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {clan.treasury
+                .map(
+                  (resource) =>
+                    `${resourceName(resource.type)}: ${resource.amount}`,
+                )
+                .join(' · ')}
+            </p>
+          </div>
+          <p className="font-mono text-xs text-moss">
+            {clan.experienceIntoLevel}/{clan.experienceForNextLevel} досвіду
+          </p>
+        </div>
+        <div className="mt-3 h-1 bg-panel">
+          <div
+            className="h-full bg-moss"
+            style={{
+              width: `${Math.min(100, (clan.experienceIntoLevel / clan.experienceForNextLevel) * 100)}%`,
+            }}
+          />
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_8rem_auto]">
+          <div className="grid grid-cols-3 gap-px bg-border/60">
+            {(['IRON', 'COPPER', 'BRONZE'] as ResourceType[]).map((type) => (
+              <Button
+                key={type}
+                type="button"
+                variant={resourceType === type ? 'default' : 'ghost'}
+                onClick={() => setResourceType(type)}
+                className="h-9 rounded-none"
+              >
+                {resourceName(type)}
+              </Button>
+            ))}
+          </div>
+          <Input
+            type="number"
+            min={1}
+            max={Math.max(1, personalBalance)}
+            value={amount}
+            onChange={(event) =>
+              setAmount(Math.max(1, Number(event.target.value)))
+            }
+            aria-label="Кількість ресурсів для клану"
+            className="h-9 rounded-sm font-mono"
+          />
+          <Button
+            type="button"
+            disabled={pending || amount > personalBalance || amount < 1}
+            onClick={() => void onContribute(resourceType, amount)}
+            className="h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
+          >
+            {pending ? 'Передаємо…' : 'Зробити внесок'}
+          </Button>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-destructive">
+          Внесок безповоротний: передані особисті ресурси стають власністю
+          клану. Особистий залишок: {personalBalance}.
+        </p>
+      </section>
       <div className="mt-6">
         <div className="flex items-center justify-between">
           <h2 className="font-medium">Склад клану</h2>
@@ -912,7 +1052,7 @@ function ClanHall({ clan }: { clan: Clan }) {
               <div>
                 <p className="text-sm font-medium">{member.name}</p>
                 <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
-                  Рівень {member.level}
+                  Рівень {member.level} · внесок {member.contribution}
                 </p>
               </div>
               <span
@@ -1129,7 +1269,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience version characterVersion viewerRole members { characterId name level role joinedAt } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -1193,8 +1333,8 @@ async function executeClanMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query: creating
-        ? 'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level experience version characterVersion viewerRole members { characterId name level role joinedAt } } }'
-        : 'mutation JoinClan($input: JoinClanInput!) { joinClan(input: $input) { id name inviteCode level experience version characterVersion viewerRole members { characterId name level role joinedAt } } }',
+        ? 'mutation CreateClan($input: CreateClanInput!) { createClan(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }'
+        : 'mutation JoinClan($input: JoinClanInput!) { joinClan(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }',
       variables: {
         input: {
           [creating ? 'name' : 'inviteCode']: value,
@@ -1211,6 +1351,39 @@ async function executeClanMutation(
   const clan = creating ? payload.data?.createClan : payload.data?.joinClan
   if (!response.ok || payload.errors || !clan) throw new Error('CLAN_FAILED')
   return clan
+}
+
+async function executeClanContribution(
+  resourceType: ResourceType,
+  amount: number,
+  expectedCharacterVersion: number,
+  expectedClanVersion: number,
+): Promise<Clan> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query:
+        'mutation Contribute($input: ContributeClanResourceInput!) { contributeClanResource(input: $input) { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } members { characterId name level role joinedAt contribution } } }',
+      variables: {
+        input: {
+          resourceType,
+          amount,
+          expectedCharacterVersion,
+          expectedClanVersion,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { contributeClanResource: Clan }
+    errors?: unknown
+  }
+  if (!response.ok || payload.errors || !payload.data)
+    throw new Error('CLAN_CONTRIBUTION_FAILED')
+  return payload.data.contributeClanResource
 }
 
 async function executeTalentMutation(

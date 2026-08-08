@@ -1,4 +1,4 @@
-import { ClanRole, WorldLocation } from '@veilfall/database';
+import { ClanRole, ResourceType, WorldLocation } from '@veilfall/database';
 import {
   BadRequestException,
   ConflictException,
@@ -9,6 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { CreateClanInput } from './dto/create-clan.input';
+import { ContributeClanResourceInput } from './dto/contribute-clan-resource.input';
 import { JoinClanInput } from './dto/join-clan.input';
 import { ClanModel } from './models/clan.model';
 
@@ -142,6 +143,131 @@ export class ClansService {
     return (await this.readForCharacter(characterId))!;
   }
 
+  async contribute(
+    userId: string,
+    input: ContributeClanResourceInput,
+  ): Promise<ClanModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const payloadHash = this.hash(
+      `CONTRIBUTE:${input.resourceType}:${input.amount}:${input.expectedClanVersion}`,
+    );
+    const existing = await this.findCommand(characterId, input.idempotencyKey);
+    if (existing)
+      return this.resolveExisting(
+        characterId,
+        existing.payloadHash,
+        payloadHash,
+      );
+
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        const membership = await tx.clanMembership.findUnique({
+          where: { characterId },
+          include: {
+            character: { include: { worldState: true } },
+            clan: true,
+          },
+        });
+        if (!membership)
+          throw new BadRequestException('Clan membership required');
+        if (
+          membership.character.worldState?.currentLocation !==
+          WorldLocation.CINDERHAVEN_GATE
+        )
+          throw new ConflictException(
+            'Clan treasury is managed in Cinderhaven',
+          );
+
+        const paid = await tx.characterResource.updateMany({
+          where: {
+            characterId,
+            type: input.resourceType,
+            balance: { gte: input.amount },
+          },
+          data: { balance: { decrement: input.amount } },
+        });
+        if (paid.count !== 1)
+          throw new ConflictException('Not enough personal resources');
+        const characterUpdated = await tx.character.updateMany({
+          where: { id: characterId, version: input.expectedCharacterVersion },
+          data: { version: { increment: 1 } },
+        });
+        if (characterUpdated.count !== 1)
+          throw new ConflictException('Character state changed');
+
+        const experienceGain =
+          input.amount * this.resourceWeight(input.resourceType);
+        const progression = this.progressionFor(
+          membership.clan.experience + experienceGain,
+        );
+        const clanUpdated = await tx.clan.updateMany({
+          where: {
+            id: membership.clanId,
+            version: input.expectedClanVersion,
+          },
+          data: {
+            experience: { increment: experienceGain },
+            level: progression.level,
+            version: { increment: 1 },
+          },
+        });
+        if (clanUpdated.count !== 1)
+          throw new ConflictException('Clan state changed');
+
+        await tx.clanResource.upsert({
+          where: {
+            clanId_type: {
+              clanId: membership.clanId,
+              type: input.resourceType,
+            },
+          },
+          create: {
+            clanId: membership.clanId,
+            type: input.resourceType,
+            balance: input.amount,
+          },
+          update: { balance: { increment: input.amount } },
+        });
+        await tx.clanMembership.update({
+          where: { characterId },
+          data: { contribution: { increment: experienceGain } },
+        });
+        await tx.resourceLedgerEntry.create({
+          data: {
+            characterId,
+            type: input.resourceType,
+            amount: -input.amount,
+            reason: 'CLAN_CONTRIBUTION',
+            referenceId: input.idempotencyKey,
+          },
+        });
+        await tx.clanContribution.create({
+          data: {
+            clanId: membership.clanId,
+            characterId,
+            resourceType: input.resourceType,
+            amount: input.amount,
+            experienceGain,
+            referenceId: input.idempotencyKey,
+          },
+        });
+        await tx.clanCommand.create({
+          data: {
+            clanId: membership.clanId,
+            characterId,
+            idempotencyKey: input.idempotencyKey,
+            commandType: 'CONTRIBUTE_RESOURCE',
+            payloadHash,
+          },
+        });
+      });
+    } catch (error) {
+      const raced = await this.findCommand(characterId, input.idempotencyKey);
+      if (!raced || raced.payloadHash !== payloadHash) throw error;
+    }
+    return (await this.readForCharacter(characterId))!;
+  }
+
   private async readForCharacter(
     characterId: string,
   ): Promise<ClanModel | null> {
@@ -151,6 +277,7 @@ export class ClansService {
         character: { select: { version: true } },
         clan: {
           include: {
+            resources: true,
             members: {
               orderBy: [{ role: 'asc' }, { joinedAt: 'asc' }],
               include: {
@@ -166,8 +293,8 @@ export class ClansService {
       id: membership.clan.id,
       name: membership.clan.name,
       inviteCode: membership.clan.inviteCode,
-      level: membership.clan.level,
       experience: membership.clan.experience,
+      ...this.progressionFor(membership.clan.experience),
       version: membership.clan.version,
       characterVersion: membership.character.version,
       viewerRole: membership.role,
@@ -177,6 +304,13 @@ export class ClansService {
         level: member.character.level,
         role: member.role,
         joinedAt: member.joinedAt,
+        contribution: member.contribution,
+      })),
+      treasury: Object.values(ResourceType).map((type) => ({
+        type,
+        amount:
+          membership.clan.resources.find((resource) => resource.type === type)
+            ?.balance ?? 0,
       })),
     };
   }
@@ -203,5 +337,33 @@ export class ClansService {
 
   private hash(payload: string): string {
     return createHash('sha256').update(payload).digest('hex');
+  }
+
+  private resourceWeight(type: ResourceType): number {
+    return {
+      [ResourceType.IRON]: 1,
+      [ResourceType.COPPER]: 3,
+      [ResourceType.BRONZE]: 8,
+    }[type];
+  }
+
+  private progressionFor(experience: number): {
+    level: number;
+    experienceIntoLevel: number;
+    experienceForNextLevel: number;
+  } {
+    let level = 1;
+    let spent = 0;
+    let threshold = 250;
+    while (experience - spent >= threshold) {
+      spent += threshold;
+      level += 1;
+      threshold = level * 250;
+    }
+    return {
+      level,
+      experienceIntoLevel: experience - spent,
+      experienceForNextLevel: threshold,
+    };
   }
 }

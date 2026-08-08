@@ -148,6 +148,7 @@ model Character {
   resourceLedger    ResourceLedgerEntry[]
   clanMembership    ClanMembership?
   clanCommands      ClanCommand[]
+  clanContributions ClanContribution[]
 
   @@map("characters")
 }
@@ -164,6 +165,8 @@ model Clan {
   updatedAt  DateTime         @updatedAt @map("updated_at")
   members    ClanMembership[]
   commands   ClanCommand[]
+  resources  ClanResource[]
+  contributions ClanContribution[]
 
   @@map("clans")
 }
@@ -175,11 +178,41 @@ model ClanMembership {
   role        ClanRole  @default(MEMBER)
   joinedAt    DateTime  @default(now()) @map("joined_at")
   roleSince   DateTime  @default(now()) @map("role_since")
+  contribution Int      @default(0)
   clan        Clan      @relation(fields: [clanId], references: [id], onDelete: Cascade)
   character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@index([clanId, joinedAt])
   @@map("clan_memberships")
+}
+
+model ClanResource {
+  id        String       @id @default(uuid()) @db.Uuid
+  clanId    String       @map("clan_id") @db.Uuid
+  type      ResourceType
+  balance   Int          @default(0)
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  clan      Clan         @relation(fields: [clanId], references: [id], onDelete: Cascade)
+
+  @@unique([clanId, type])
+  @@map("clan_resources")
+}
+
+model ClanContribution {
+  id             String       @id @default(uuid()) @db.Uuid
+  clanId         String       @map("clan_id") @db.Uuid
+  characterId    String       @map("character_id") @db.Uuid
+  resourceType   ResourceType @map("resource_type")
+  amount         Int
+  experienceGain Int          @map("experience_gain")
+  referenceId    String       @map("reference_id") @db.VarChar(64)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  clan           Clan         @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  character      Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, referenceId])
+  @@index([clanId, createdAt])
+  @@map("clan_contributions")
 }
 
 model ClanCommand {

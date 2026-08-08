@@ -4,6 +4,7 @@ import type { GraphqlContext } from '../identity/identity.types';
 import { SessionService } from '../identity/session.service';
 import { ClansService } from './clans.service';
 import { CreateClanInput } from './dto/create-clan.input';
+import { ContributeClanResourceInput } from './dto/contribute-clan-resource.input';
 import { JoinClanInput } from './dto/join-clan.input';
 import { ClanModel } from './models/clan.model';
 
@@ -36,5 +37,14 @@ export class ClansResolver {
   ) {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.clans.join(viewer.id, input);
+  }
+
+  @Mutation(() => ClanModel)
+  async contributeClanResource(
+    @Args('input') input: ContributeClanResourceInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.clans.contribute(viewer.id, input);
   }
 }

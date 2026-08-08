@@ -81,6 +81,7 @@ input ClaimBattleRewardInput {
 
 type ClanMemberModel {
   characterId: ID!
+  contribution: Int!
   joinedAt: DateTime!
   level: Int!
   name: String!
@@ -90,13 +91,21 @@ type ClanMemberModel {
 type ClanModel {
   characterVersion: Int!
   experience: Int!
+  experienceForNextLevel: Int!
+  experienceIntoLevel: Int!
   id: ID!
   inviteCode: String!
   level: Int!
   members: [ClanMemberModel!]!
   name: String!
+  treasury: [ClanResourceModel!]!
   version: Int!
   viewerRole: ClanRole!
+}
+
+type ClanResourceModel {
+  amount: Int!
+  type: ResourceType!
 }
 
 enum ClanRole {
@@ -130,6 +139,14 @@ type CombatantModel {
 input ContinueAdventureInput {
   battleId: ID!
   idempotencyKey: String!
+}
+
+input ContributeClanResourceInput {
+  amount: Int!
+  expectedCharacterVersion: Int!
+  expectedClanVersion: Int!
+  idempotencyKey: String!
+  resourceType: ResourceType!
 }
 
 input CreateCharacterInput {
@@ -227,6 +244,7 @@ input LoginInput {
 type Mutation {
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
   continueAdventure(input: ContinueAdventureInput!): BattleModel!
+  contributeClanResource(input: ContributeClanResourceInput!): ClanModel!
   createCharacter(input: CreateCharacterInput!): CharacterModel!
   createClan(input: CreateClanInput!): ClanModel!
   equipItem(input: EquipItemInput!): InventoryModel!
