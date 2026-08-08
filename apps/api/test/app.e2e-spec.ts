@@ -673,6 +673,7 @@ describe('Health (e2e)', () => {
     const clanResult = JSON.parse(firstClan.text) as {
       data: {
         createClan: {
+          id: string;
           inviteCode: string;
           characterVersion: number;
           version: number;
@@ -868,6 +869,69 @@ describe('Health (e2e)', () => {
         },
       }),
     ).toMatchObject({ balance: 5 });
+
+    const clanVersionAfterFirstSummon =
+      developmentResult.data.upgradeClanDevelopment.version + 1;
+    const lockedSecondTier = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id } }',
+        variables: {
+          input: {
+            expectedClanVersion: clanVersionAfterFirstSummon,
+            idempotencyKey: `summon-tier-2-locked-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const lockedSecondTierPayload = JSON.parse(lockedSecondTier.text) as {
+      errors?: unknown[];
+    };
+    expect(lockedSecondTierPayload.errors).toBeDefined();
+
+    await prisma.client.clanDevelopment.update({
+      where: {
+        clanId_branch: {
+          clanId: clanResult.data.createClan.id,
+          branch: 'MILITARY',
+        },
+      },
+      data: { rank: 2 },
+    });
+    const secondTier = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { tier maxHealth currentHealth rewardAmount nextTier } }',
+        variables: {
+          input: {
+            expectedClanVersion: clanVersionAfterFirstSummon,
+            idempotencyKey: `summon-tier-2-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const secondTierPayload = JSON.parse(secondTier.text) as {
+      data: {
+        summonClanBoss: {
+          tier: number;
+          maxHealth: number;
+          currentHealth: number;
+          rewardAmount: number;
+          nextTier: number;
+        };
+      };
+    };
+    expect(secondTierPayload.data.summonClanBoss).toEqual({
+      tier: 2,
+      maxHealth: 1500,
+      currentHealth: 1500,
+      rewardAmount: 10,
+      nextTier: 2,
+    });
 
     const recruitEmail = `recruit-${Date.now()}@example.test`;
     createdEmails.push(recruitEmail);

@@ -44,6 +44,7 @@ export class ClanBossesService {
     const characterId = await this.characters.requireIdForUser(userId);
     const membership = await this.prisma.client.clanMembership.findUnique({
       where: { characterId },
+      include: { clan: { include: { developments: true } } },
     });
     if (!membership) return null;
     const boss = await this.prisma.client.clanBossEncounter.findFirst({
@@ -60,7 +61,12 @@ export class ClanBossesService {
       },
     });
     return boss
-      ? this.toModel(boss, membership.role === ClanRole.LEADER, characterId)
+      ? this.toModel(
+          boss,
+          membership.role === ClanRole.LEADER,
+          characterId,
+          this.militaryRank(membership.clan.developments),
+        )
       : null;
   }
 
@@ -97,6 +103,29 @@ export class ClanBossesService {
           throw new ConflictException(
             'Military development rank one is required',
           );
+        const latest = await tx.clanBossEncounter.findFirst({
+          where: { clanId: member.clanId },
+          orderBy: { createdAt: 'desc' },
+          include: { participants: { include: { rewardClaim: true } } },
+        });
+        if (latest?.status === ClanBossStatus.ACTIVE)
+          throw new ConflictException('The current clan boss is still active');
+        if (
+          latest?.status === ClanBossStatus.WON &&
+          latest.participants.some((participant) => !participant.rewardClaim)
+        )
+          throw new ConflictException(
+            'All participants must claim the previous reward',
+          );
+        const nextTier =
+          latest?.status === ClanBossStatus.WON
+            ? latest.tier + 1
+            : (latest?.tier ?? 1);
+        if (nextTier > military)
+          throw new ConflictException(
+            'Improve the military clan branch for the next boss tier',
+          );
+        const maxHealth = this.healthForTier(nextTier);
         const updated = await tx.clan.updateMany({
           where: { id: member.clanId, version: input.expectedClanVersion },
           data: { version: { increment: 1 } },
@@ -107,8 +136,9 @@ export class ClanBossesService {
           data: {
             clanId: member.clanId,
             activeClanId: member.clanId,
-            maxHealth: 500,
-            currentHealth: 500,
+            tier: nextTier,
+            maxHealth,
+            currentHealth: maxHealth,
           },
         });
         await tx.clanCommand.create({
@@ -304,7 +334,11 @@ export class ClanBossesService {
   }
 
   private rewardAmount(tier: number): number {
-    return 3 + tier * 2;
+    return 5 * 2 ** (tier - 1);
+  }
+
+  private healthForTier(tier: number): number {
+    return 500 * 3 ** (tier - 1);
   }
 
   private damageFor(character: {
@@ -333,6 +367,7 @@ export class ClanBossesService {
   ): Promise<ClanBossModel> {
     const member = await this.prisma.client.clanMembership.findUniqueOrThrow({
       where: { characterId },
+      include: { clan: { include: { developments: true } } },
     });
     const boss = await this.prisma.client.clanBossEncounter.findFirstOrThrow({
       where: { id: encounterId, clanId: member.clanId },
@@ -346,7 +381,12 @@ export class ClanBossesService {
         },
       },
     });
-    return this.toModel(boss, member.role === ClanRole.LEADER, characterId);
+    return this.toModel(
+      boss,
+      member.role === ClanRole.LEADER,
+      characterId,
+      this.militaryRank(member.clan.developments),
+    );
   }
   private async resolveExisting(
     characterId: string,
@@ -357,6 +397,7 @@ export class ClanBossesService {
       throw new ConflictException('Command key was reused');
     const member = await this.prisma.client.clanMembership.findUniqueOrThrow({
       where: { characterId },
+      include: { clan: { include: { developments: true } } },
     });
     const boss = await this.prisma.client.clanBossEncounter.findFirstOrThrow({
       where: { clanId: member.clanId },
@@ -370,7 +411,12 @@ export class ClanBossesService {
         },
       },
     });
-    return this.toModel(boss, member.role === ClanRole.LEADER, characterId);
+    return this.toModel(
+      boss,
+      member.role === ClanRole.LEADER,
+      characterId,
+      this.militaryRank(member.clan.developments),
+    );
   }
   private async resolveEncounter(
     characterId: string,
@@ -394,10 +440,21 @@ export class ClanBossesService {
     boss: BossWithParticipants,
     canSummon: boolean,
     viewerCharacterId: string,
+    militaryRank: number,
   ): ClanBossModel {
     const viewerParticipation = boss.participants.find(
       (entry) => entry.characterId === viewerCharacterId,
     );
+    const rewardsPending = boss.participants.some(
+      (participant) => !participant.rewardClaim,
+    );
+    const nextTier =
+      boss.status === ClanBossStatus.WON ? boss.tier + 1 : boss.tier;
+    const canSummonNext =
+      canSummon &&
+      boss.status !== ClanBossStatus.ACTIVE &&
+      !rewardsPending &&
+      nextTier <= militaryRank;
     return {
       id: boss.id,
       name: 'Кістяний велетень',
@@ -406,7 +463,16 @@ export class ClanBossesService {
       maxHealth: boss.maxHealth,
       currentHealth: boss.currentHealth,
       version: boss.version,
-      canSummon,
+      canSummon: canSummonNext,
+      nextTier,
+      nextMaxHealth: this.healthForTier(nextTier),
+      summonLockedReason: this.summonLockedReason({
+        isLeader: canSummon,
+        status: boss.status,
+        rewardsPending,
+        nextTier,
+        militaryRank,
+      }),
       viewerEligibleForReward:
         boss.status === ClanBossStatus.WON &&
         (viewerParticipation?.actions ?? 0) > 0 &&
@@ -421,6 +487,33 @@ export class ClanBossesService {
         actions: entry.actions,
       })),
     };
+  }
+
+  private militaryRank(
+    developments: Array<{ branch: ClanDevelopmentBranch; rank: number }>,
+  ): number {
+    return (
+      developments.find(
+        (development) => development.branch === ClanDevelopmentBranch.MILITARY,
+      )?.rank ?? 0
+    );
+  }
+
+  private summonLockedReason(input: {
+    isLeader: boolean;
+    status: ClanBossStatus;
+    rewardsPending: boolean;
+    nextTier: number;
+    militaryRank: number;
+  }): string | null {
+    if (!input.isLeader) return 'Наступного боса викликає голова клану.';
+    if (input.status === ClanBossStatus.ACTIVE)
+      return 'Спочатку здолайте поточного боса.';
+    if (input.rewardsPending)
+      return 'Усі учасники мають забрати нагороду попереднього бою.';
+    if (input.nextTier > input.militaryRank)
+      return `Потрібен ${input.nextTier} ранг військового шляху.`;
+    return null;
   }
 
   private isUniqueConstraintError(error: unknown): boolean {

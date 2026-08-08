@@ -96,10 +96,13 @@ type ClanBossModel {
   id: ID!
   maxHealth: Int!
   name: String!
+  nextMaxHealth: Int!
+  nextTier: Int!
   participants: [ClanBossParticipantModel!]!
   rewardAmount: Int!
   rewardType: ResourceType!
   status: ClanBossStatus!
+  summonLockedReason: String
   tier: Int!
   version: Int!
   viewerEligibleForReward: Boolean!
@@ -350,7 +353,9 @@ type Query {
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
 
-  """API readiness probe for the foundation milestone."""
+  """
+  API readiness probe for the foundation milestone.
+  """
   status: String!
   viewer: Viewer
 }

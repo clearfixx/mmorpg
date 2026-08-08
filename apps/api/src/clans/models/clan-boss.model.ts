@@ -33,6 +33,12 @@ export class ClanBossModel {
   version!: number;
   @Field()
   canSummon!: boolean;
+  @Field(() => Int)
+  nextTier!: number;
+  @Field(() => Int)
+  nextMaxHealth!: number;
+  @Field(() => String, { nullable: true })
+  summonLockedReason!: string | null;
   @Field()
   viewerEligibleForReward!: boolean;
   @Field()
