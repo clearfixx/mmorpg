@@ -218,6 +218,9 @@ model ClanBossParticipant {
   characterId String            @map("character_id") @db.Uuid
   damage      Int               @default(0)
   actions     Int               @default(0)
+  maxHealth   Int               @default(0) @map("max_health")
+  currentHealth Int             @default(0) @map("current_health")
+  defeatedAt DateTime?          @map("defeated_at")
   joinedAt    DateTime          @default(now()) @map("joined_at")
   encounter   ClanBossEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
   character   Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)

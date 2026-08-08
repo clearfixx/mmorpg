@@ -13,6 +13,12 @@ export class ClanBossParticipantModel {
   damage!: number;
   @Field(() => Int)
   actions!: number;
+  @Field(() => Int)
+  maxHealth!: number;
+  @Field(() => Int)
+  currentHealth!: number;
+  @Field()
+  defeated!: boolean;
 }
 
 @ObjectType()
@@ -43,6 +49,12 @@ export class ClanBossModel {
   viewerEligibleForReward!: boolean;
   @Field()
   viewerRewardClaimed!: boolean;
+  @Field()
+  viewerCanAttack!: boolean;
+  @Field(() => Int)
+  viewerCurrentHealth!: number;
+  @Field(() => Int)
+  viewerMaxHealth!: number;
   @Field(() => ResourceType)
   rewardType!: ResourceType;
   @Field(() => Int)

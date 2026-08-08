@@ -146,6 +146,9 @@ interface ClanBoss {
   summonLockedReason: string | null
   viewerEligibleForReward: boolean
   viewerRewardClaimed: boolean
+  viewerCanAttack: boolean
+  viewerCurrentHealth: number
+  viewerMaxHealth: number
   rewardType: ResourceType
   rewardAmount: number
   participants: Array<{
@@ -153,6 +156,9 @@ interface ClanBoss {
     name: string
     damage: number
     actions: number
+    maxHealth: number
+    currentHealth: number
+    defeated: boolean
   }>
 }
 
@@ -1326,7 +1332,9 @@ function ClanHall({
             </div>
             <Button
               type="button"
-              disabled={pending || boss.status !== 'ACTIVE'}
+              disabled={
+                pending || boss.status !== 'ACTIVE' || !boss.viewerCanAttack
+              }
               onClick={() => void onAttackBoss()}
               className="mt-4 h-9 rounded-sm bg-ember text-ink hover:bg-ember-bright"
             >
@@ -1334,8 +1342,17 @@ function ClanHall({
                 ? 'Удар готується…'
                 : boss.status === 'WON'
                   ? 'Боса переможено'
-                  : 'Атакувати боса'}
+                  : !boss.viewerCanAttack
+                    ? 'Герой вибув із бою'
+                    : 'Атакувати боса'}
             </Button>
+            {boss.viewerMaxHealth > 0 ? (
+              <p
+                className={`mt-2 font-mono text-xs ${boss.viewerCanAttack ? 'text-muted-foreground' : 'text-destructive'}`}
+              >
+                Ваш стан: {boss.viewerCurrentHealth}/{boss.viewerMaxHealth} HP
+              </p>
+            ) : null}
             {boss.status === 'WON' ? (
               <div className="mt-4 border-l-2 border-moss bg-moss/5 px-4 py-4">
                 <p className="font-mono text-[0.6rem] uppercase tracking-wider text-moss">
@@ -1397,8 +1414,13 @@ function ClanHall({
                     className="flex justify-between text-xs"
                   >
                     <span>{participant.name}</span>
-                    <span className="font-mono text-muted-foreground">
-                      {participant.damage} шкоди · {participant.actions} дій
+                    <span
+                      className={`font-mono ${participant.defeated ? 'text-destructive' : 'text-muted-foreground'}`}
+                    >
+                      {participant.damage} шкоди · {participant.actions} дій ·{' '}
+                      {participant.defeated
+                        ? 'вибув'
+                        : `${participant.currentHealth}/${participant.maxHealth} HP`}
                     </span>
                   </div>
                 ))}
@@ -1661,7 +1683,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -1823,8 +1845,8 @@ async function executeClanBossMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query: summoning
-        ? 'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }'
-        : 'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
+        ? 'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }'
+        : 'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       variables: { input },
     }),
   })
@@ -1849,7 +1871,7 @@ async function executeClanBossRewardMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Claim($input: ClaimClanBossRewardInput!) { claimClanBossReward(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
+        'mutation Claim($input: ClaimClanBossRewardInput!) { claimClanBossReward(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       variables: {
         input: { encounterId, idempotencyKey: crypto.randomUUID() },
       },

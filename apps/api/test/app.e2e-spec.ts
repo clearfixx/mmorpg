@@ -981,7 +981,7 @@ describe('Health (e2e)', () => {
       .set('Cookie', cookie)
       .send({
         query:
-          'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { tier maxHealth currentHealth rewardAmount nextTier } }',
+          'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id tier maxHealth currentHealth version rewardAmount nextTier } }',
         variables: {
           input: {
             expectedClanVersion: clanVersionAfterFirstSummon,
@@ -993,21 +993,83 @@ describe('Health (e2e)', () => {
     const secondTierPayload = JSON.parse(secondTier.text) as {
       data: {
         summonClanBoss: {
+          id: string;
           tier: number;
           maxHealth: number;
           currentHealth: number;
+          version: number;
           rewardAmount: number;
           nextTier: number;
         };
       };
     };
-    expect(secondTierPayload.data.summonClanBoss).toEqual({
+    expect(secondTierPayload.data.summonClanBoss).toMatchObject({
       tier: 2,
       maxHealth: 1500,
       currentHealth: 1500,
       rewardAmount: 10,
       nextTier: 2,
     });
+    const secondTierBoss = secondTierPayload.data.summonClanBoss;
+    const secondTierAttack = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { version viewerCanAttack viewerCurrentHealth viewerMaxHealth participants { characterId currentHealth maxHealth defeated } } }',
+        variables: {
+          input: {
+            encounterId: secondTierBoss.id,
+            expectedVersion: secondTierBoss.version,
+            idempotencyKey: `boss-tier-2-attack-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const secondTierAttackPayload = JSON.parse(secondTierAttack.text) as {
+      data: {
+        attackClanBoss: {
+          version: number;
+          viewerCanAttack: boolean;
+          viewerCurrentHealth: number;
+          viewerMaxHealth: number;
+        };
+      };
+    };
+    expect(secondTierAttackPayload.data.attackClanBoss.viewerCanAttack).toBe(
+      true,
+    );
+    expect(
+      secondTierAttackPayload.data.attackClanBoss.viewerCurrentHealth,
+    ).toBeLessThan(secondTierAttackPayload.data.attackClanBoss.viewerMaxHealth);
+    await prisma.client.clanBossParticipant.update({
+      where: {
+        encounterId_characterId: {
+          encounterId: secondTierBoss.id,
+          characterId: rewardedCharacter.id,
+        },
+      },
+      data: { currentHealth: 1 },
+    });
+    const knockout = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { version viewerCanAttack viewerCurrentHealth participants { defeated } } }',
+        variables: {
+          input: {
+            encounterId: secondTierBoss.id,
+            expectedVersion:
+              secondTierAttackPayload.data.attackClanBoss.version,
+            idempotencyKey: `boss-tier-2-knockout-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(knockout.text).toContain(
+      '"viewerCanAttack":false,"viewerCurrentHealth":0',
+    );
 
     const recruitEmail = `recruit-${Date.now()}@example.test`;
     createdEmails.push(recruitEmail);

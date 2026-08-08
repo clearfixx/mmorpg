@@ -105,14 +105,20 @@ type ClanBossModel {
   summonLockedReason: String
   tier: Int!
   version: Int!
+  viewerCanAttack: Boolean!
+  viewerCurrentHealth: Int!
   viewerEligibleForReward: Boolean!
+  viewerMaxHealth: Int!
   viewerRewardClaimed: Boolean!
 }
 
 type ClanBossParticipantModel {
   actions: Int!
   characterId: ID!
+  currentHealth: Int!
   damage: Int!
+  defeated: Boolean!
+  maxHealth: Int!
   name: String!
 }
 
