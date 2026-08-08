@@ -1,0 +1,2 @@
+ALTER INDEX "resource_ledger_entries_character_id_type_reason_reference_id_k"
+RENAME TO "resource_ledger_entries_character_id_type_reason_reference__key";

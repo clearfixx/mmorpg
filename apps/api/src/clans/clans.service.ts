@@ -494,6 +494,7 @@ export class ClansService {
       [ResourceType.IRON]: 1,
       [ResourceType.COPPER]: 3,
       [ResourceType.BRONZE]: 8,
+      [ResourceType.VEIL_ECHO]: 25,
     }[type];
   }
 

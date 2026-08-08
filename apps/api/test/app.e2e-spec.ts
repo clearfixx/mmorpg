@@ -806,6 +806,68 @@ describe('Health (e2e)', () => {
         where: { encounterId: bossPayload.data.summonClanBoss.id },
       }),
     ).toBe(1);
+    const firstAttackPayload = JSON.parse(firstBossAttack.text) as {
+      data: { attackClanBoss: { version: number } };
+    };
+    await prisma.client.clanBossEncounter.update({
+      where: { id: bossPayload.data.summonClanBoss.id },
+      data: { currentHealth: 1 },
+    });
+    const defeatedBoss = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { status currentHealth viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount } }',
+        variables: {
+          input: {
+            encounterId: bossPayload.data.summonClanBoss.id,
+            expectedVersion: firstAttackPayload.data.attackClanBoss.version,
+            idempotencyKey: `boss-finisher-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(defeatedBoss.text).toContain(
+      '"status":"WON","currentHealth":0,"viewerEligibleForReward":true,"viewerRewardClaimed":false,"rewardType":"VEIL_ECHO","rewardAmount":5',
+    );
+    const bossRewardKey = `boss-reward-${Date.now()}`;
+    const claimBossReward = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Claim($input: ClaimClanBossRewardInput!) { claimClanBossReward(input: $input) { viewerRewardClaimed rewardType rewardAmount } }',
+          variables: {
+            input: {
+              encounterId: bossPayload.data.summonClanBoss.id,
+              idempotencyKey: bossRewardKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstBossReward = await claimBossReward();
+    const retriedBossReward = await claimBossReward();
+    expect(firstBossReward.body).toEqual(retriedBossReward.body);
+    expect(firstBossReward.text).toContain(
+      '"viewerRewardClaimed":true,"rewardType":"VEIL_ECHO","rewardAmount":5',
+    );
+    expect(
+      await prisma.client.clanBossRewardClaim.count({
+        where: { encounterId: bossPayload.data.summonClanBoss.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.client.characterResource.findUnique({
+        where: {
+          characterId_type: {
+            characterId: rewardedCharacter.id,
+            type: 'VEIL_ECHO',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 5 });
 
     const recruitEmail = `recruit-${Date.now()}@example.test`;
     createdEmails.push(recruitEmail);

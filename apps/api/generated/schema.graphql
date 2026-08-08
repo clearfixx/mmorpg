@@ -85,6 +85,11 @@ input ClaimBattleRewardInput {
   idempotencyKey: String!
 }
 
+input ClaimClanBossRewardInput {
+  encounterId: ID!
+  idempotencyKey: String!
+}
+
 type ClanBossModel {
   canSummon: Boolean!
   currentHealth: Int!
@@ -92,9 +97,13 @@ type ClanBossModel {
   maxHealth: Int!
   name: String!
   participants: [ClanBossParticipantModel!]!
+  rewardAmount: Int!
+  rewardType: ResourceType!
   status: ClanBossStatus!
   tier: Int!
   version: Int!
+  viewerEligibleForReward: Boolean!
+  viewerRewardClaimed: Boolean!
 }
 
 type ClanBossParticipantModel {
@@ -297,6 +306,7 @@ input LoginInput {
 type Mutation {
   attackClanBoss(input: AttackClanBossInput!): ClanBossModel!
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
+  claimClanBossReward(input: ClaimClanBossRewardInput!): ClanBossModel!
   continueAdventure(input: ContinueAdventureInput!): BattleModel!
   contributeClanResource(input: ContributeClanResourceInput!): ClanModel!
   createCharacter(input: CreateCharacterInput!): CharacterModel!
@@ -359,6 +369,7 @@ enum ResourceType {
   BRONZE
   COPPER
   IRON
+  VEIL_ECHO
 }
 
 input RetreatInput {

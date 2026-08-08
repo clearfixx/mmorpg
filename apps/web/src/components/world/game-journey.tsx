@@ -66,7 +66,7 @@ interface Inventory {
 }
 
 type TalentType = 'VITALITY' | 'POWER' | 'RESILIENCE'
-type ResourceType = 'IRON' | 'COPPER' | 'BRONZE'
+type ResourceType = 'IRON' | 'COPPER' | 'BRONZE' | 'VEIL_ECHO'
 
 interface TalentTree {
   characterVersion: number
@@ -134,6 +134,10 @@ interface ClanBoss {
   currentHealth: number
   version: number
   canSummon: boolean
+  viewerEligibleForReward: boolean
+  viewerRewardClaimed: boolean
+  rewardType: ResourceType
+  rewardAmount: number
   participants: Array<{
     characterId: string
     name: string
@@ -417,6 +421,29 @@ export function GameJourney() {
             const refreshed = await loadJourney()
             setClanBoss(refreshed.clanBoss)
             setError('Стан лігва змінився. Дані оновлено.')
+          } finally {
+            setPending(false)
+          }
+        }}
+        onClaimClanBossReward={async () => {
+          if (!clanBoss || pending) return
+          setPending(true)
+          setError(null)
+          try {
+            setClanBoss(await executeClanBossRewardMutation(clanBoss.id))
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) {
+              setInventory(refreshed.inventory)
+              setTalents(refreshed.talents)
+            }
+          } catch {
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) {
+              setClanBoss(refreshed.clanBoss)
+              setInventory(refreshed.inventory)
+              setTalents(refreshed.talents)
+            }
+            setError('Не вдалося отримати нагороду. Стан лігва оновлено.')
           } finally {
             setPending(false)
           }
@@ -719,6 +746,7 @@ function CinderhavenGate({
   onUpgradeClanDevelopment,
   onSummonClanBoss,
   onAttackClanBoss,
+  onClaimClanBossReward,
   onUpgrade,
 }: {
   hero: Hero
@@ -739,6 +767,7 @@ function CinderhavenGate({
   onUpgradeClanDevelopment: (branch: ClanDevelopmentBranch) => Promise<void>
   onSummonClanBoss: () => Promise<void>
   onAttackClanBoss: () => Promise<void>
+  onClaimClanBossReward: () => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<'HUB' | 'TRAINING' | 'CLAN'>('HUB')
@@ -895,6 +924,7 @@ function CinderhavenGate({
                 boss={clanBoss}
                 onSummonBoss={onSummonClanBoss}
                 onAttackBoss={onAttackClanBoss}
+                onClaimReward={onClaimClanBossReward}
               />
             ) : (
               <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
@@ -1050,6 +1080,7 @@ function ClanHall({
   boss,
   onSummonBoss,
   onAttackBoss,
+  onClaimReward,
 }: {
   clan: Clan
   personalResources: Array<{ type: ResourceType; amount: number }>
@@ -1059,6 +1090,7 @@ function ClanHall({
   boss: ClanBoss | null
   onSummonBoss: () => Promise<void>
   onAttackBoss: () => Promise<void>
+  onClaimReward: () => Promise<void>
 }) {
   const [resourceType, setResourceType] = useState<ResourceType>('IRON')
   const [amount, setAmount] = useState(1)
@@ -1244,6 +1276,37 @@ function ClanHall({
                   ? 'Боса переможено'
                   : 'Атакувати боса'}
             </Button>
+            {boss.status === 'WON' ? (
+              <div className="mt-4 border-l-2 border-moss bg-moss/5 px-4 py-4">
+                <p className="font-mono text-[0.6rem] uppercase tracking-wider text-moss">
+                  Нагорода учасника
+                </p>
+                <p className="mt-2 text-sm">
+                  {boss.rewardAmount} {resourceName(boss.rewardType)}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Відгомін Завіси отримують лише герої, які брали участь у
+                  переможному бою.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    pending ||
+                    !boss.viewerEligibleForReward ||
+                    boss.viewerRewardClaimed
+                  }
+                  onClick={() => void onClaimReward()}
+                  className="mt-3 h-8 rounded-sm"
+                >
+                  {boss.viewerRewardClaimed
+                    ? 'Нагороду отримано'
+                    : boss.viewerEligibleForReward
+                      ? 'Забрати нагороду'
+                      : 'Потрібна участь у бою'}
+                </Button>
+              </div>
+            ) : null}
             {boss.participants.length > 0 ? (
               <div className="mt-4 space-y-2">
                 {boss.participants.map((participant) => (
@@ -1516,7 +1579,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon participants { characterId name damage actions } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -1678,8 +1741,8 @@ async function executeClanBossMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query: summoning
-        ? 'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon participants { characterId name damage actions } } }'
-        : 'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon participants { characterId name damage actions } } }',
+        ? 'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }'
+        : 'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
       variables: { input },
     }),
   })
@@ -1693,6 +1756,30 @@ async function executeClanBossMutation(
   if (!response.ok || payload.errors || !result)
     throw new Error('CLAN_BOSS_COMMAND_FAILED')
   return result
+}
+
+async function executeClanBossRewardMutation(
+  encounterId: string,
+): Promise<ClanBoss> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query:
+        'mutation Claim($input: ClaimClanBossRewardInput!) { claimClanBossReward(input: $input) { id name tier status maxHealth currentHealth version canSummon viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
+      variables: {
+        input: { encounterId, idempotencyKey: crypto.randomUUID() },
+      },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { claimClanBossReward: ClanBoss }
+    errors?: unknown
+  }
+  if (!response.ok || payload.errors || !payload.data)
+    throw new Error('CLAN_BOSS_REWARD_FAILED')
+  return payload.data.claimClanBossReward
 }
 
 async function executeTalentMutation(
@@ -1746,7 +1833,12 @@ async function executeWorldMutation(
 }
 
 function resourceName(value: ResourceType): string {
-  return { IRON: 'залізо', COPPER: 'мідь', BRONZE: 'бронза' }[value]
+  return {
+    IRON: 'залізо',
+    COPPER: 'мідь',
+    BRONZE: 'бронза',
+    VEIL_ECHO: 'відгомін Завіси',
+  }[value]
 }
 
 function archetypeName(value: Hero['archetype']): string {

@@ -1,4 +1,4 @@
-import { ClanBossStatus } from '@veilfall/database';
+import { ClanBossStatus, ResourceType } from '@veilfall/database';
 import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 registerEnumType(ClanBossStatus, { name: 'ClanBossStatus' });
@@ -33,6 +33,14 @@ export class ClanBossModel {
   version!: number;
   @Field()
   canSummon!: boolean;
+  @Field()
+  viewerEligibleForReward!: boolean;
+  @Field()
+  viewerRewardClaimed!: boolean;
+  @Field(() => ResourceType)
+  rewardType!: ResourceType;
+  @Field(() => Int)
+  rewardAmount!: number;
   @Field(() => [ClanBossParticipantModel])
   participants!: ClanBossParticipantModel[];
 }

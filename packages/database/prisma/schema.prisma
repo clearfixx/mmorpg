@@ -97,6 +97,7 @@ enum ResourceType {
   IRON
   COPPER
   BRONZE
+  VEIL_ECHO
 }
 
 enum ClanRole {
@@ -164,6 +165,7 @@ model Character {
   clanCommands      ClanCommand[]
   clanContributions ClanContribution[]
   clanBossParticipations ClanBossParticipant[]
+  clanBossRewardClaims   ClanBossRewardClaim[]
 
   @@map("characters")
 }
@@ -201,6 +203,7 @@ model ClanBossEncounter {
   completedAt   DateTime?          @map("completed_at")
   clan          Clan               @relation(fields: [clanId], references: [id], onDelete: Cascade)
   participants  ClanBossParticipant[]
+  rewardClaims  ClanBossRewardClaim[]
 
   @@index([clanId, createdAt])
   @@map("clan_boss_encounters")
@@ -215,10 +218,29 @@ model ClanBossParticipant {
   joinedAt    DateTime          @default(now()) @map("joined_at")
   encounter   ClanBossEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
   character   Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  rewardClaim ClanBossRewardClaim?
 
   @@unique([encounterId, characterId])
   @@index([encounterId, damage])
   @@map("clan_boss_participants")
+}
+
+model ClanBossRewardClaim {
+  id             String              @id @default(uuid()) @db.Uuid
+  encounterId    String              @map("encounter_id") @db.Uuid
+  characterId    String              @map("character_id") @db.Uuid
+  participantId  String              @unique @map("participant_id") @db.Uuid
+  idempotencyKey String              @map("idempotency_key") @db.VarChar(64)
+  resourceType   ResourceType        @default(VEIL_ECHO) @map("resource_type")
+  resourceAmount Int                 @map("resource_amount")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  encounter      ClanBossEncounter   @relation(fields: [encounterId], references: [id], onDelete: Restrict)
+  character      Character           @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  participant    ClanBossParticipant @relation(fields: [participantId], references: [id], onDelete: Restrict)
+
+  @@unique([encounterId, characterId])
+  @@unique([characterId, idempotencyKey])
+  @@map("clan_boss_reward_claims")
 }
 
 model ClanDevelopment {

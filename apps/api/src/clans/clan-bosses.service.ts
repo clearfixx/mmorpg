@@ -4,6 +4,7 @@ import {
   ClanDevelopmentBranch,
   ClanRole,
   Prisma,
+  ResourceType,
   TalentType,
   WorldLocation,
 } from '@veilfall/database';
@@ -17,12 +18,18 @@ import { createHash } from 'node:crypto';
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { AttackClanBossInput } from './dto/attack-clan-boss.input';
+import { ClaimClanBossRewardInput } from './dto/claim-clan-boss-reward.input';
 import { SummonClanBossInput } from './dto/summon-clan-boss.input';
 import { ClanBossModel } from './models/clan-boss.model';
 
 type BossWithParticipants = Prisma.ClanBossEncounterGetPayload<{
   include: {
-    participants: { include: { character: { select: { name: true } } } };
+    participants: {
+      include: {
+        character: { select: { name: true } };
+        rewardClaim: true;
+      };
+    };
   };
 }>;
 
@@ -45,12 +52,15 @@ export class ClanBossesService {
       include: {
         participants: {
           orderBy: { damage: 'desc' },
-          include: { character: { select: { name: true } } },
+          include: {
+            character: { select: { name: true } },
+            rewardClaim: true,
+          },
         },
       },
     });
     return boss
-      ? this.toModel(boss, membership.role === ClanRole.LEADER)
+      ? this.toModel(boss, membership.role === ClanRole.LEADER, characterId)
       : null;
   }
 
@@ -206,6 +216,97 @@ export class ClanBossesService {
     return this.readEncounter(characterId, input.encounterId);
   }
 
+  async claimReward(
+    userId: string,
+    input: ClaimClanBossRewardInput,
+  ): Promise<ClanBossModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const existing = await this.prisma.client.clanBossRewardClaim.findUnique({
+      where: {
+        encounterId_characterId: {
+          encounterId: input.encounterId,
+          characterId,
+        },
+      },
+    });
+    if (!existing) {
+      try {
+        await this.prisma.client.$transaction(async (tx) => {
+          const participant = await tx.clanBossParticipant.findUnique({
+            where: {
+              encounterId_characterId: {
+                encounterId: input.encounterId,
+                characterId,
+              },
+            },
+            include: { encounter: true },
+          });
+          if (!participant || participant.actions < 1 || participant.damage < 1)
+            throw new BadRequestException(
+              'Only battle participants can claim this reward',
+            );
+          if (participant.encounter.status !== ClanBossStatus.WON)
+            throw new ConflictException('The clan boss is not defeated');
+          const amount = this.rewardAmount(participant.encounter.tier);
+          const claim = await tx.clanBossRewardClaim.create({
+            data: {
+              encounterId: input.encounterId,
+              characterId,
+              participantId: participant.id,
+              idempotencyKey: input.idempotencyKey,
+              resourceType: ResourceType.VEIL_ECHO,
+              resourceAmount: amount,
+            },
+          });
+          await tx.characterResource.upsert({
+            where: {
+              characterId_type: {
+                characterId,
+                type: ResourceType.VEIL_ECHO,
+              },
+            },
+            create: {
+              characterId,
+              type: ResourceType.VEIL_ECHO,
+              balance: amount,
+            },
+            update: { balance: { increment: amount } },
+          });
+          await tx.resourceLedgerEntry.create({
+            data: {
+              characterId,
+              type: ResourceType.VEIL_ECHO,
+              amount,
+              reason: 'CLAN_BOSS_REWARD',
+              referenceId: claim.id,
+            },
+          });
+          await tx.character.update({
+            where: { id: characterId },
+            data: { version: { increment: 1 } },
+          });
+        });
+      } catch (error) {
+        if (!this.isUniqueConstraintError(error)) throw error;
+        const raced = await this.prisma.client.clanBossRewardClaim.findUnique({
+          where: {
+            encounterId_characterId: {
+              encounterId: input.encounterId,
+              characterId,
+            },
+          },
+        });
+        if (!raced)
+          throw new ConflictException('Reward claim conflicted; retry');
+      }
+    }
+    return this.readEncounter(characterId, input.encounterId);
+  }
+
+  private rewardAmount(tier: number): number {
+    return 3 + tier * 2;
+  }
+
   private damageFor(character: {
     archetype: CharacterArchetype;
     level: number;
@@ -238,11 +339,14 @@ export class ClanBossesService {
       include: {
         participants: {
           orderBy: { damage: 'desc' },
-          include: { character: { select: { name: true } } },
+          include: {
+            character: { select: { name: true } },
+            rewardClaim: true,
+          },
         },
       },
     });
-    return this.toModel(boss, member.role === ClanRole.LEADER);
+    return this.toModel(boss, member.role === ClanRole.LEADER, characterId);
   }
   private async resolveExisting(
     characterId: string,
@@ -258,10 +362,15 @@ export class ClanBossesService {
       where: { clanId: member.clanId },
       orderBy: { createdAt: 'desc' },
       include: {
-        participants: { include: { character: { select: { name: true } } } },
+        participants: {
+          include: {
+            character: { select: { name: true } },
+            rewardClaim: true,
+          },
+        },
       },
     });
-    return this.toModel(boss, member.role === ClanRole.LEADER);
+    return this.toModel(boss, member.role === ClanRole.LEADER, characterId);
   }
   private async resolveEncounter(
     characterId: string,
@@ -284,7 +393,11 @@ export class ClanBossesService {
   private toModel(
     boss: BossWithParticipants,
     canSummon: boolean,
+    viewerCharacterId: string,
   ): ClanBossModel {
+    const viewerParticipation = boss.participants.find(
+      (entry) => entry.characterId === viewerCharacterId,
+    );
     return {
       id: boss.id,
       name: 'Кістяний велетень',
@@ -294,6 +407,13 @@ export class ClanBossesService {
       currentHealth: boss.currentHealth,
       version: boss.version,
       canSummon,
+      viewerEligibleForReward:
+        boss.status === ClanBossStatus.WON &&
+        (viewerParticipation?.actions ?? 0) > 0 &&
+        (viewerParticipation?.damage ?? 0) > 0,
+      viewerRewardClaimed: Boolean(viewerParticipation?.rewardClaim),
+      rewardType: ResourceType.VEIL_ECHO,
+      rewardAmount: this.rewardAmount(boss.tier),
       participants: boss.participants.map((entry) => ({
         characterId: entry.characterId,
         name: entry.character.name,
@@ -301,5 +421,14 @@ export class ClanBossesService {
         actions: entry.actions,
       })),
     };
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    );
   }
 }
