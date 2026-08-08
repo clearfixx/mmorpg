@@ -168,10 +168,15 @@ export class InventoryService {
     const powerRank =
       character.talents.find((talent) => talent.type === TalentType.POWER)
         ?.rank ?? 0;
+    const ascendedPowerRank =
+      character.talents.find(
+        (talent) => talent.type === TalentType.ASCENDED_POWER,
+      )?.rank ?? 0;
     const baseDamage =
       BASE_DAMAGE[character.archetype] +
       levelBonuses(character.level).damage +
-      talentBonuses({ vitality: 0, power: powerRank, resilience: 0 }).damage;
+      talentBonuses({ vitality: 0, power: powerRank, resilience: 0 }).damage +
+      ascendedPowerRank * 8;
     return {
       characterVersion: character.version,
       baseDamage,

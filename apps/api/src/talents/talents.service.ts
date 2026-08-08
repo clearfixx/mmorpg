@@ -13,18 +13,48 @@ const DEFINITIONS = {
     description: '+12 до максимального здоров’я за ранг.',
     requiredLevel: 1,
     effectPerRank: 12,
+    maxRank: 10,
+    advanced: false,
   },
   [TalentType.POWER]: {
     name: 'Сила',
     description: '+3 до шкоди за ранг.',
     requiredLevel: 2,
     effectPerRank: 3,
+    maxRank: 10,
+    advanced: false,
   },
   [TalentType.RESILIENCE]: {
     name: 'Стійкість',
     description: '+2 до броні за ранг.',
     requiredLevel: 3,
     effectPerRank: 2,
+    maxRank: 10,
+    advanced: false,
+  },
+  [TalentType.ASCENDED_VITALITY]: {
+    name: 'Непохитна кров',
+    description: '+30 до максимального здоров’я за ранг.',
+    requiredLevel: 30,
+    effectPerRank: 30,
+    maxRank: 5,
+    advanced: true,
+  },
+  [TalentType.ASCENDED_POWER]: {
+    name: 'Воля руйнівника',
+    description: '+8 до шкоди за ранг.',
+    requiredLevel: 30,
+    effectPerRank: 8,
+    maxRank: 5,
+    advanced: true,
+  },
+  [TalentType.ASCENDED_RESILIENCE]: {
+    name: 'Шкіра Завіси',
+    description: '+6 до броні за ранг.',
+    requiredLevel: 30,
+    effectPerRank: 6,
+    maxRank: 5,
+    advanced: true,
   },
 } as const;
 
@@ -74,7 +104,8 @@ export class TalentsService {
           throw new ConflictException('Talents are trained in Cinderhaven');
         const definition = DEFINITIONS[input.type];
         const spent = character.talents.reduce(
-          (total, talent) => total + talent.rank,
+          (total, talent) =>
+            total + (DEFINITIONS[talent.type].advanced ? 0 : talent.rank),
           0,
         );
         const currentRank =
@@ -82,11 +113,11 @@ export class TalentsService {
             ?.rank ?? 0;
         if (character.level < definition.requiredLevel)
           throw new ConflictException('Talent is still locked');
-        if (character.level - 1 - spent < 1)
+        if (!definition.advanced && character.level - 1 - spent < 1)
           throw new ConflictException('No talent points available');
-        if (currentRank >= 10)
+        if (currentRank >= definition.maxRank)
           throw new ConflictException('Talent has reached maximum rank');
-        const cost = this.costForRank(currentRank + 1);
+        const cost = this.costForRank(input.type, currentRank + 1);
         const paid = await tx.characterResource.updateMany({
           where: {
             characterId,
@@ -149,7 +180,8 @@ export class TalentsService {
       character.talents.map((talent) => [talent.type, talent.rank]),
     );
     const spent = character.talents.reduce(
-      (total, talent) => total + talent.rank,
+      (total, talent) =>
+        total + (DEFINITIONS[talent.type].advanced ? 0 : talent.rank),
       0,
     );
     const resources = new Map(
@@ -160,12 +192,13 @@ export class TalentsService {
       availablePoints: Math.max(0, character.level - 1 - spent),
       talents: Object.values(TalentType).map((type) => {
         const rank = ranks.get(type) ?? 0;
-        const cost = this.costForRank(rank + 1);
+        const cost = this.costForRank(type, rank + 1);
         return {
           type,
           ...DEFINITIONS[type],
           rank,
-          maxRank: 10,
+          maxRank: DEFINITIONS[type].maxRank,
+          advanced: DEFINITIONS[type].advanced,
           unlocked: character.level >= DEFINITIONS[type].requiredLevel,
           costResource: cost.type,
           costAmount: cost.amount,
@@ -179,7 +212,12 @@ export class TalentsService {
     };
   }
 
-  private costForRank(rank: number): { type: ResourceType; amount: number } {
+  private costForRank(
+    type: TalentType,
+    rank: number,
+  ): { type: ResourceType; amount: number } {
+    if (DEFINITIONS[type].advanced)
+      return { type: ResourceType.VEIL_ECHO, amount: 5 * 2 ** (rank - 1) };
     if (rank >= 7) return { type: ResourceType.BRONZE, amount: (rank - 6) * 8 };
     if (rank >= 4)
       return { type: ResourceType.COPPER, amount: (rank - 3) * 10 };

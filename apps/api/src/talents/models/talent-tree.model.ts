@@ -31,6 +31,9 @@ export class TalentNodeModel {
   @Field()
   unlocked!: boolean;
 
+  @Field()
+  advanced!: boolean;
+
   @Field(() => ResourceType)
   costResource!: ResourceType;
 

@@ -870,6 +870,82 @@ describe('Health (e2e)', () => {
       }),
     ).toMatchObject({ balance: 5 });
 
+    await prisma.client.character.update({
+      where: { id: rewardedCharacter.id },
+      data: { level: 30 },
+    });
+    const ascendedState = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myInventory { baseDamage } myTalents { characterVersion availablePoints resources { type amount } talents { type rank maxRank advanced unlocked costResource costAmount affordable } } }',
+      })
+      .expect(200);
+    const ascendedPayload = JSON.parse(ascendedState.text) as {
+      data: {
+        myInventory: { baseDamage: number };
+        myTalents: {
+          characterVersion: number;
+          availablePoints: number;
+          talents: Array<{
+            type: string;
+            rank: number;
+            advanced: boolean;
+            unlocked: boolean;
+            costResource: string;
+            costAmount: number;
+            affordable: boolean;
+          }>;
+        };
+      };
+    };
+    expect(ascendedPayload.data.myTalents.talents).toContainEqual(
+      expect.objectContaining({
+        type: 'ASCENDED_POWER',
+        rank: 0,
+        advanced: true,
+        unlocked: true,
+        costResource: 'VEIL_ECHO',
+        costAmount: 5,
+        affordable: true,
+      }),
+    );
+    const pointsBeforeAscension =
+      ascendedPayload.data.myTalents.availablePoints;
+    const ascendedUpgrade = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { availablePoints resources { type amount } talents { type rank } } }',
+        variables: {
+          input: {
+            type: 'ASCENDED_POWER',
+            expectedCharacterVersion:
+              ascendedPayload.data.myTalents.characterVersion,
+            idempotencyKey: `ascended-power-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(ascendedUpgrade.text).toContain(
+      `"availablePoints":${pointsBeforeAscension}`,
+    );
+    expect(ascendedUpgrade.text).toContain('"type":"VEIL_ECHO","amount":0');
+    expect(ascendedUpgrade.text).toContain('"type":"ASCENDED_POWER","rank":1');
+    const ascendedCharacter = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: '{ myInventory { baseDamage } }' })
+      .expect(200);
+    const ascendedCharacterPayload = JSON.parse(ascendedCharacter.text) as {
+      data: { myInventory: { baseDamage: number } };
+    };
+    expect(ascendedCharacterPayload.data.myInventory.baseDamage).toBe(
+      ascendedPayload.data.myInventory.baseDamage + 8,
+    );
+
     const clanVersionAfterFirstSummon =
       developmentResult.data.upgradeClanDevelopment.version + 1;
     const lockedSecondTier = await request(server)

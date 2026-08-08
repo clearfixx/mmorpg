@@ -65,7 +65,13 @@ interface Inventory {
   mainHandVisualAssetId: string | null
 }
 
-type TalentType = 'VITALITY' | 'POWER' | 'RESILIENCE'
+type TalentType =
+  | 'VITALITY'
+  | 'POWER'
+  | 'RESILIENCE'
+  | 'ASCENDED_VITALITY'
+  | 'ASCENDED_POWER'
+  | 'ASCENDED_RESILIENCE'
 type ResourceType = 'IRON' | 'COPPER' | 'BRONZE' | 'VEIL_ECHO'
 
 interface TalentTree {
@@ -79,6 +85,7 @@ interface TalentTree {
     maxRank: number
     requiredLevel: number
     effectPerRank: number
+    advanced: boolean
     unlocked: boolean
     costResource: ResourceType
     costAmount: number
@@ -872,38 +879,86 @@ function CinderhavenGate({
               </div>
             </div>
             <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-3">
-              {talents.talents.map((talent) => (
-                <div key={talent.type} className="bg-background/70 p-4">
-                  <div className="flex justify-between gap-3">
-                    <h3 className="font-medium">{talent.name}</h3>
-                    <span className="font-mono text-xs text-ember">
-                      {talent.rank}/{talent.maxRank}
-                    </span>
+              {talents.talents
+                .filter((talent) => !talent.advanced)
+                .map((talent) => (
+                  <div key={talent.type} className="bg-background/70 p-4">
+                    <div className="flex justify-between gap-3">
+                      <h3 className="font-medium">{talent.name}</h3>
+                      <span className="font-mono text-xs text-ember">
+                        {talent.rank}/{talent.maxRank}
+                      </span>
+                    </div>
+                    <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">
+                      {talent.description}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        pending ||
+                        !talent.unlocked ||
+                        talents.availablePoints < 1 ||
+                        !talent.affordable ||
+                        talent.rank >= talent.maxRank
+                      }
+                      onClick={() => onUpgrade(talent.type)}
+                      className="mt-4 h-8 w-full rounded-sm"
+                    >
+                      {talent.unlocked
+                        ? talent.rank >= talent.maxRank
+                          ? 'Максимум'
+                          : `Підвищити · ${talent.costAmount} ${resourceName(talent.costResource)}`
+                        : `Рівень ${talent.requiredLevel}`}
+                    </Button>
                   </div>
-                  <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">
-                    {talent.description}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={
-                      pending ||
-                      !talent.unlocked ||
-                      talents.availablePoints < 1 ||
-                      !talent.affordable ||
-                      talent.rank >= talent.maxRank
-                    }
-                    onClick={() => onUpgrade(talent.type)}
-                    className="mt-4 h-8 w-full rounded-sm"
-                  >
-                    {talent.unlocked
-                      ? talent.rank >= talent.maxRank
-                        ? 'Максимум'
-                        : `Підвищити · ${talent.costAmount} ${resourceName(talent.costResource)}`
-                      : `Рівень ${talent.requiredLevel}`}
-                  </Button>
-                </div>
-              ))}
+                ))}
+            </div>
+            <div className="mt-8 border-l-2 border-ember bg-ember/5 px-4 py-4">
+              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ember">
+                Вознесені таланти
+              </p>
+              <h3 className="mt-2 text-lg font-medium">Сила за межею</h3>
+              <p className="mt-2 max-w-2xl text-xs leading-5 text-muted-foreground">
+                Відкриваються на 30 рівні та розвиваються лише за Відгомін
+                Завіси, здобутий у кланових лігвах. Звичайні очки талантів не
+                витрачаються.
+              </p>
+              <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-3">
+                {talents.talents
+                  .filter((talent) => talent.advanced)
+                  .map((talent) => (
+                    <div key={talent.type} className="bg-background/70 p-4">
+                      <div className="flex justify-between gap-3">
+                        <h3 className="font-medium">{talent.name}</h3>
+                        <span className="font-mono text-xs text-ember">
+                          {talent.rank}/{talent.maxRank}
+                        </span>
+                      </div>
+                      <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">
+                        {talent.description}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          pending ||
+                          !talent.unlocked ||
+                          !talent.affordable ||
+                          talent.rank >= talent.maxRank
+                        }
+                        onClick={() => onUpgrade(talent.type)}
+                        className="mt-4 h-8 w-full rounded-sm"
+                      >
+                        {talent.unlocked
+                          ? talent.rank >= talent.maxRank
+                            ? 'Максимум'
+                            : `Вознести · ${talent.costAmount} ${resourceName(talent.costResource)}`
+                          : `Відкриється на ${talent.requiredLevel} рівні`}
+                      </Button>
+                    </div>
+                  ))}
+              </div>
             </div>
           </section>
         ) : district === 'CLAN' ? (
@@ -1606,7 +1661,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed rewardType rewardAmount participants { characterId name damage actions } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -1819,7 +1874,7 @@ async function executeTalentMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank unlocked costResource costAmount affordable } } }',
+        'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } }',
       variables: {
         input: {
           type,

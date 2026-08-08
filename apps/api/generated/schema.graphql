@@ -353,9 +353,7 @@ type Query {
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
 
-  """
-  API readiness probe for the foundation milestone.
-  """
+  """API readiness probe for the foundation milestone."""
   status: String!
   viewer: Viewer
 }
@@ -411,6 +409,7 @@ input SummonClanBossInput {
 }
 
 type TalentNodeModel {
+  advanced: Boolean!
   affordable: Boolean!
   costAmount: Int!
   costResource: ResourceType!
@@ -432,6 +431,9 @@ type TalentTreeModel {
 }
 
 enum TalentType {
+  ASCENDED_POWER
+  ASCENDED_RESILIENCE
+  ASCENDED_VITALITY
   POWER
   RESILIENCE
   VITALITY

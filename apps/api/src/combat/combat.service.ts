@@ -570,10 +570,15 @@ export class CombatService {
     const ranks = Object.fromEntries(
       talents.map((talent) => [talent.type, talent.rank]),
     );
-    return talentBonuses({
+    const basic = talentBonuses({
       vitality: ranks[TalentType.VITALITY] ?? 0,
       power: ranks[TalentType.POWER] ?? 0,
       resilience: ranks[TalentType.RESILIENCE] ?? 0,
     });
+    return {
+      health: basic.health + (ranks[TalentType.ASCENDED_VITALITY] ?? 0) * 30,
+      damage: basic.damage + (ranks[TalentType.ASCENDED_POWER] ?? 0) * 8,
+      armor: basic.armor + (ranks[TalentType.ASCENDED_RESILIENCE] ?? 0) * 6,
+    };
   }
 }

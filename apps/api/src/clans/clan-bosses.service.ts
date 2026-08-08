@@ -353,10 +353,15 @@ export class ClanBossesService {
     const power =
       character.talents.find((talent) => talent.type === TalentType.POWER)
         ?.rank ?? 0;
+    const ascendedPower =
+      character.talents.find(
+        (talent) => talent.type === TalentType.ASCENDED_POWER,
+      )?.rank ?? 0;
     return (
       base +
       (character.level - 1) * 2 +
       power * 3 +
+      ascendedPower * 8 +
       (character.equipment[0]?.item.damage ?? 0)
     );
   }
