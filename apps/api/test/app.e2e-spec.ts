@@ -484,6 +484,48 @@ describe('Health (e2e)', () => {
       .expect(200)
       .expect({ data: { latestBattle: null } });
 
+    const watchpostState = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ currentLocation { currentLocation version routes { destination locked } } }',
+      })
+      .expect(200);
+    const watchpostPayload = JSON.parse(watchpostState.text) as {
+      data: {
+        currentLocation: {
+          version: number;
+          routes: Array<{ destination: string; locked: boolean }>;
+        };
+      };
+    };
+    expect(watchpostPayload.data.currentLocation.routes).toContainEqual({
+      destination: 'CINDERHAVEN_GATE',
+      locked: false,
+    });
+    const gateVersion = watchpostPayload.data.currentLocation.version;
+    const gateTravel = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Travel($input: TravelInput!) { travel(input: $input) { currentLocation version } }',
+        variables: {
+          input: {
+            destination: 'CINDERHAVEN_GATE',
+            expectedVersion: gateVersion,
+            idempotencyKey: `gate-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const gatePayload = JSON.parse(gateTravel.text) as {
+      data: { travel: { currentLocation: string; version: number } };
+    };
+    expect(gatePayload.data.travel.currentLocation).toBe('CINDERHAVEN_GATE');
+    expect(gatePayload.data.travel.version).toBe(gateVersion + 1);
+
     const duplicate = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

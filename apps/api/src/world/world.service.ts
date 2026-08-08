@@ -81,7 +81,10 @@ export class WorldService {
   }
 
   async travel(userId: string, input: TravelInput): Promise<WorldStateModel> {
-    if (input.destination !== WorldLocation.HOLLOW_ROAD)
+    if (
+      input.destination !== WorldLocation.HOLLOW_ROAD &&
+      input.destination !== WorldLocation.CINDERHAVEN_GATE
+    )
       throw new BadRequestException('Destination is currently locked');
 
     const characterId = await this.characters.requireIdForUser(userId);
@@ -92,12 +95,16 @@ export class WorldService {
       'WORLD_TRAVEL',
       payloadHash,
       async (tx) => {
+        const requiresPreparation =
+          input.destination === WorldLocation.HOLLOW_ROAD;
         const updated = await tx.characterWorldState.updateMany({
           where: {
             characterId,
             version: input.expectedVersion,
             currentLocation: WorldLocation.BROKEN_WATCHPOST,
-            preparationChoice: { not: null },
+            ...(requiresPreparation
+              ? { preparationChoice: { not: null } }
+              : { cinderhavenUnlocked: true }),
           },
           data: {
             currentLocation: input.destination,
@@ -106,7 +113,7 @@ export class WorldService {
         });
         if (updated.count !== 1)
           throw new ConflictException(
-            'Preparation is required or world state has changed',
+            'Destination is locked or world state has changed',
           );
       },
     );

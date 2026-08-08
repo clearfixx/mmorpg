@@ -126,7 +126,7 @@ export function GameJourney() {
     }
   }
 
-  async function travel() {
+  async function travel(destination: 'HOLLOW_ROAD' | 'CINDERHAVEN_GATE') {
     if (!world || pending) return
     setPending(true)
     setError(null)
@@ -134,7 +134,7 @@ export function GameJourney() {
       const next = await executeWorldMutation(
         'mutation Travel($input: TravelInput!) { travel(input: $input) { currentLocation preparationChoice version routes { destination locked lockReason } } }',
         {
-          destination: 'HOLLOW_ROAD',
+          destination,
           expectedVersion: world.version,
           idempotencyKey: crypto.randomUUID(),
         },
@@ -159,6 +159,9 @@ export function GameJourney() {
 
   if (world.currentLocation === 'HOLLOW_ROAD')
     return <HollowRoad hero={hero} preparation={world.preparationChoice} />
+
+  if (world.currentLocation === 'CINDERHAVEN_GATE')
+    return <CinderhavenGate hero={hero} inventory={inventory} />
 
   if (view === 'EQUIPMENT' && inventory)
     return (
@@ -194,6 +197,9 @@ export function GameJourney() {
 
   const hollowRoad = world.routes.find(
     (route) => route.destination === 'HOLLOW_ROAD',
+  )
+  const cinderhaven = world.routes.find(
+    (route) => route.destination === 'CINDERHAVEN_GATE',
   )
 
   return (
@@ -326,17 +332,104 @@ export function GameJourney() {
               <Button
                 type="button"
                 disabled={pending || hollowRoad?.locked !== false}
-                onClick={travel}
+                onClick={() => travel('HOLLOW_ROAD')}
                 className="h-12 rounded-sm bg-ember px-6 text-ink hover:bg-ember-bright"
               >
                 Вирушити в дорогу
                 <ArrowRight aria-hidden="true" />
               </Button>
             </div>
+
+            <div className="mt-6 border border-border/70 bg-panel/55 p-5">
+              <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
+                Наступний рубіж
+              </p>
+              <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">
+                    Ворота Попелястого Прихистку
+                  </h3>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {cinderhaven?.locked
+                      ? cinderhaven.lockReason
+                      : 'Трофей довів вашу силу. Вартові відчинили шлях до міста.'}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending || cinderhaven?.locked !== false}
+                  onClick={() => travel('CINDERHAVEN_GATE')}
+                  className="h-10 shrink-0 rounded-sm"
+                >
+                  Увійти до воріт <ArrowRight aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
           </div>
         </section>
       </div>
     </main>
+  )
+}
+
+function CinderhavenGate({
+  hero,
+  inventory,
+}: {
+  hero: Hero
+  inventory: Inventory | null
+}) {
+  return (
+    <main className="grid min-h-screen place-items-center bg-background px-5 py-10 text-foreground">
+      <section className="w-full max-w-4xl border border-border/70 bg-panel/60 p-6 sm:p-10">
+        <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-ember">
+          Попелястий край · шлях завершено
+        </p>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+          Ворота Попелястого Прихистку
+        </h1>
+        <p className="mt-6 max-w-3xl text-base leading-8 text-muted-foreground">
+          Варта впізнає клинок із Порожньої дороги. Важкі стулки розходяться, і{' '}
+          {hero.name} уперше бачить місто, де починається справжня боротьба за
+          вплив, ремесла та місце серед майбутніх кланів.
+        </p>
+        <dl className="mt-8 grid gap-px bg-border/60 sm:grid-cols-3">
+          <EndingStat label="Рівень" value={hero.level} />
+          <EndingStat
+            label="Сила"
+            value={inventory?.totalDamage ?? hero.baseStats.damage}
+          />
+          <EndingStat label="Етап" value="I завершено" />
+        </dl>
+        <div className="mt-8 border-l-2 border-moss bg-moss/5 px-4 py-4">
+          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
+            Вертикальний зріз завершено
+          </p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Наступний пакет відкриє міський вузол і довготривалий розвиток
+            героя.
+          </p>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function EndingStat({
+  label,
+  value,
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div className="bg-background/70 p-4">
+      <dt className="font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-2 font-mono text-base">{value}</dd>
+    </div>
   )
 }
 
