@@ -1,11 +1,17 @@
 'use client'
 
+import { Eye, EyeOff, WandSparkles } from 'lucide-react'
 import { FormEvent, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  generateStrongPassword,
+  passwordStrength,
+  type PasswordStrength,
+} from '@/components/auth/password'
 
 type Mode = 'login' | 'register'
 
@@ -20,6 +26,14 @@ export function AuthPanel() {
   const [mode, setMode] = useState<Mode>('login')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [passwords, setPasswords] = useState<Record<Mode, string>>({
+    login: '',
+    register: '',
+  })
+  const [visible, setVisible] = useState<Record<Mode, boolean>>({
+    login: false,
+    register: false,
+  })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -46,7 +60,7 @@ export function AuthPanel() {
       const payload: unknown = await response.json()
       if (!response.ok || hasGraphqlErrors(payload))
         throw new Error('AUTHENTICATION_FAILED')
-      window.location.assign('/character/create')
+      window.location.assign(mode === 'login' ? '/game' : '/character/create')
     } catch {
       setError(
         mode === 'login'
@@ -88,23 +102,54 @@ export function AuthPanel() {
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${tab}-password`}>Пароль</Label>
-              <Input
-                id={`${tab}-password`}
-                name="password"
-                type="password"
-                autoComplete={
-                  tab === 'login' ? 'current-password' : 'new-password'
-                }
-                required
-                minLength={tab === 'register' ? 12 : 1}
-                maxLength={128}
-                className="h-12 rounded-sm bg-background/60"
-              />
+              <div className="relative">
+                <Input
+                  id={`${tab}-password`}
+                  name="password"
+                  type={visible[tab] ? 'text' : 'password'}
+                  value={passwords[tab]}
+                  onChange={(event) =>
+                    setPasswords((current) => ({
+                      ...current,
+                      [tab]: event.target.value,
+                    }))
+                  }
+                  autoComplete={
+                    tab === 'login' ? 'current-password' : 'new-password'
+                  }
+                  required
+                  minLength={tab === 'register' ? 12 : 1}
+                  maxLength={128}
+                  className="h-12 rounded-sm bg-background/60 pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisible((current) => ({
+                      ...current,
+                      [tab]: !current[tab],
+                    }))
+                  }
+                  className="absolute inset-y-0 right-0 grid w-12 place-items-center text-muted-foreground transition hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                  aria-label={
+                    visible[tab] ? 'Приховати пароль' : 'Показати пароль'
+                  }
+                  aria-pressed={visible[tab]}
+                >
+                  {visible[tab] ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
               {tab === 'register' && (
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Щонайменше 12 символів. Пароль ніколи не зберігається у
-                  відкритому вигляді.
-                </p>
+                <RegistrationPasswordTools
+                  password={passwords.register}
+                  onGenerate={() => {
+                    setPasswords((current) => ({
+                      ...current,
+                      register: generateStrongPassword(),
+                    }))
+                    setVisible((current) => ({ ...current, register: true }))
+                  }}
+                />
               )}
             </div>
             {error && (
@@ -130,6 +175,57 @@ export function AuthPanel() {
         </TabsContent>
       ))}
     </Tabs>
+  )
+}
+
+const strengthPresentation: Record<
+  PasswordStrength,
+  { label: string; width: string; color: string }
+> = {
+  weak: { label: 'Ненадійний пароль', width: 'w-1/3', color: 'bg-destructive' },
+  medium: {
+    label: 'Середня надійність',
+    width: 'w-2/3',
+    color: 'bg-amber-400',
+  },
+  strong: { label: 'Надійний пароль', width: 'w-full', color: 'bg-moss' },
+}
+
+function RegistrationPasswordTools({
+  password,
+  onGenerate,
+}: {
+  password: string
+  onGenerate: () => void
+}) {
+  const strength = passwordStrength(password)
+  const presentation = strengthPresentation[strength]
+  return (
+    <div className="space-y-3">
+      <div aria-live="polite">
+        <div className="h-1 overflow-hidden bg-muted">
+          <div
+            className={`h-full transition-[width,background-color] ${presentation.width} ${presentation.color}`}
+          />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {presentation.label} · щонайменше 12 символів
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onGenerate}
+        className="h-9 rounded-sm"
+      >
+        <WandSparkles aria-hidden="true" />
+        Згенерувати надійний пароль
+      </Button>
+      <p className="text-xs leading-5 text-muted-foreground">
+        Використовуйте великі й малі літери, цифри та спеціальні символи. Пароль
+        не зберігається у відкритому вигляді.
+      </p>
+    </div>
   )
 }
 

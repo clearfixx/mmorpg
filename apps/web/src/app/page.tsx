@@ -1,5 +1,7 @@
 import { Button } from '@/components/ui/button'
+import { cookies } from 'next/headers'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 const milestones = [
   ['01', 'Особистий шлях', 'Герой, тактичний бій, здобич і видиме посилення.'],
@@ -15,7 +17,9 @@ const milestones = [
   ],
 ]
 
-export default function Home() {
+export default async function Home() {
+  if (await hasAuthenticatedViewer()) redirect('/game')
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <div
@@ -109,4 +113,29 @@ export default function Home() {
       </div>
     </main>
   )
+}
+
+async function hasAuthenticatedViewer(): Promise<boolean> {
+  const cookieHeader = (await cookies()).toString()
+  if (!cookieHeader) return false
+  try {
+    const response = await fetch(
+      process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql',
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          cookie: cookieHeader,
+        },
+        body: JSON.stringify({ query: '{ viewer { id } }' }),
+      },
+    )
+    const payload = (await response.json()) as {
+      data?: { viewer?: { id: string } | null }
+    }
+    return response.ok && Boolean(payload.data?.viewer?.id)
+  } catch {
+    return false
+  }
 }
