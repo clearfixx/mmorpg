@@ -186,45 +186,16 @@ export function GameJourney() {
       </main>
     )
 
-  if (world.currentLocation === 'HOLLOW_ROAD')
-    return <HollowRoad hero={hero} preparation={world.preparationChoice} />
-
-  if (world.currentLocation === 'CINDERHAVEN_GATE')
-    return (
-      <CinderhavenGate
-        hero={hero}
-        inventory={inventory}
-        talents={talents}
-        pending={pending}
-        error={error}
-        onReturn={() => travel('BROKEN_WATCHPOST')}
-        onUpgrade={async (type) => {
-          if (!talents || pending) return
-          setPending(true)
-          setError(null)
-          try {
-            await executeTalentMutation(type, talents.characterVersion)
-            const refreshed = await loadJourney()
-            setHero(refreshed.hero)
-            setWorld(refreshed.world)
-            setInventory(refreshed.inventory)
-            setTalents(refreshed.talents)
-          } catch {
-            setError(
-              'Не вдалося розвинути талант. Оновіть стан і спробуйте ще раз.',
-            )
-          } finally {
-            setPending(false)
-          }
-        }}
-      />
-    )
-
   if (view === 'EQUIPMENT' && inventory)
     return (
       <EquipmentScreen
         hero={hero}
         inventory={inventory}
+        locationName={
+          world.currentLocation === 'CINDERHAVEN_GATE'
+            ? 'Попелястий Прихисток'
+            : 'Зламана застава'
+        }
         pending={pending}
         error={error}
         onBack={() => setView('LOBBY')}
@@ -237,13 +208,76 @@ export function GameJourney() {
               inventory.characterVersion,
             )
             setInventory(next)
+            setTalents((current) =>
+              current
+                ? { ...current, characterVersion: next.characterVersion }
+                : current,
+            )
             setHero({
               ...hero,
               baseStats: { ...hero.baseStats, damage: next.totalDamage },
             })
           } catch {
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) {
+              setHero(refreshed.hero)
+              setWorld(refreshed.world)
+              setInventory(refreshed.inventory)
+              setTalents(refreshed.talents)
+            }
+            setError('Не вдалося екіпірувати предмет. Стан героя вже оновлено.')
+          } finally {
+            setPending(false)
+          }
+        }}
+      />
+    )
+
+  if (world.currentLocation === 'HOLLOW_ROAD')
+    return <HollowRoad hero={hero} preparation={world.preparationChoice} />
+
+  if (world.currentLocation === 'CINDERHAVEN_GATE')
+    return (
+      <CinderhavenGate
+        hero={hero}
+        inventory={inventory}
+        talents={talents}
+        pending={pending}
+        error={error}
+        onReturn={() => travel('BROKEN_WATCHPOST')}
+        onOpenEquipment={() => setView('EQUIPMENT')}
+        onUpgrade={async (type) => {
+          if (!talents || pending) return
+          setPending(true)
+          setError(null)
+          try {
+            const next = await executeTalentMutation(
+              type,
+              talents.characterVersion,
+            )
+            setTalents(next)
+            setInventory((current) =>
+              current
+                ? { ...current, characterVersion: next.characterVersion }
+                : current,
+            )
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) {
+              setHero(refreshed.hero)
+              setWorld(refreshed.world)
+              setInventory(refreshed.inventory)
+              setTalents(refreshed.talents)
+            }
+          } catch {
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) {
+              setHero(refreshed.hero)
+              setWorld(refreshed.world)
+              setInventory(refreshed.inventory)
+              setTalents(refreshed.talents)
+            }
             setError(
-              'Не вдалося екіпірувати предмет. Оновіть стан і повторіть дію.',
+              'Стан героя змінився. Дані оновлено — перевірте талант перед повторною дією.',
             )
           } finally {
             setPending(false)
@@ -456,6 +490,7 @@ function CinderhavenGate({
   pending,
   error,
   onReturn,
+  onOpenEquipment,
   onUpgrade,
 }: {
   hero: Hero
@@ -464,16 +499,19 @@ function CinderhavenGate({
   pending: boolean
   error: string | null
   onReturn: () => void
+  onOpenEquipment: () => void
   onUpgrade: (type: TalentType) => void
 }) {
+  const [district, setDistrict] = useState<'HUB' | 'TRAINING'>('HUB')
+
   return (
     <main className="grid min-h-screen place-items-center bg-background px-5 py-10 text-foreground">
       <section className="w-full max-w-4xl border border-border/70 bg-panel/60 p-6 sm:p-10">
         <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-ember">
-          Попелястий край · шлях завершено
+          Попелястий край · міський вузол
         </p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Ворота Попелястого Прихистку
+          Попелястий Прихисток
         </h1>
         <p className="mt-6 max-w-3xl text-base leading-8 text-muted-foreground">
           Варта впізнає клинок із Порожньої дороги. Важкі стулки розходяться, і{' '}
@@ -492,17 +530,53 @@ function CinderhavenGate({
             value={`${hero.experienceIntoLevel}/${hero.experienceForNextLevel} XP`}
           />
         </dl>
-        <div className="mt-8 border-l-2 border-moss bg-moss/5 px-4 py-4">
-          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
-            Вертикальний зріз завершено
-          </p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Наступний пакет відкриє міський вузол і довготривалий розвиток
-            героя.
-          </p>
-        </div>
-        {talents ? (
+        {district === 'HUB' ? (
           <section className="mt-8 border-t border-border/70 pt-7">
+            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
+              Міські квартали
+            </p>
+            <h2 className="mt-2 text-xl font-medium">Куди вирушити?</h2>
+            <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
+              <CityDistrict
+                icon={Shield}
+                title="Зала гарту"
+                description="Розподілити очки розвитку та посилити базові таланти героя."
+                action="Увійти до зали"
+                onClick={() => setDistrict('TRAINING')}
+              />
+              <CityDistrict
+                icon={Package}
+                title="Зброярня"
+                description="Переглянути постійний сундук і змінити спорядження героя."
+                action="Відкрити зброярню"
+                onClick={onOpenEquipment}
+              />
+              <CityDistrict
+                icon={Sword}
+                title="Клановий двір"
+                description="Місце формування кланів, спільних походів і боротьби з лігвами."
+                action="Ще зачинено"
+                locked
+              />
+              <CityDistrict
+                icon={Compass}
+                title="Торгові ряди"
+                description="Безпечні угоди, вітрини гравців і майбутня ресурсна економіка."
+                action="Ще зачинено"
+                locked
+              />
+            </div>
+          </section>
+        ) : talents ? (
+          <section className="mt-8 border-t border-border/70 pt-7">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDistrict('HUB')}
+              className="mb-5 h-8 rounded-sm px-2"
+            >
+              <ArrowLeft aria-hidden="true" /> До міських кварталів
+            </Button>
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ember">
@@ -598,6 +672,41 @@ function EndingStat({
   )
 }
 
+function CityDistrict({
+  icon: Icon,
+  title,
+  description,
+  action,
+  locked = false,
+  onClick,
+}: {
+  icon: typeof Shield
+  title: string
+  description: string
+  action: string
+  locked?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <article className="bg-background/70 p-5">
+      <Icon className={locked ? 'text-muted-foreground' : 'text-ember'} />
+      <h3 className="mt-4 font-medium">{title}</h3>
+      <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">
+        {description}
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={locked}
+        onClick={onClick}
+        className="mt-4 h-8 w-full rounded-sm"
+      >
+        {action}
+      </Button>
+    </article>
+  )
+}
+
 function HollowRoad({
   hero,
   preparation,
@@ -616,6 +725,7 @@ function HollowRoad({
 function EquipmentScreen({
   hero,
   inventory,
+  locationName,
   pending,
   error,
   onBack,
@@ -623,6 +733,7 @@ function EquipmentScreen({
 }: {
   hero: Hero
   inventory: Inventory
+  locationName: string
   pending: boolean
   error: string | null
   onBack: () => void
@@ -637,7 +748,7 @@ function EquipmentScreen({
         <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
           <div>
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
-              Зламана застава · спорядження
+              {locationName} · спорядження
             </p>
             <h1 className="mt-1 text-xl font-semibold">{hero.name}</h1>
           </div>
