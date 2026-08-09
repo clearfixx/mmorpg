@@ -53,6 +53,8 @@ export interface BattleState {
   encounterTier: number
   personalBest?: boolean
   rareEncounter?: boolean
+  summonedBoss?: boolean
+  returnLocation?: 'BROKEN_WATCHPOST' | 'CINDERHAVEN_GATE'
   enemyLabel: string
   enemyDamageBonus: number
   hero: {

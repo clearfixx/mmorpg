@@ -11,6 +11,7 @@ import {
   Package,
   ScrollText,
   Shield,
+  Sparkles,
   Sword,
   Swords,
   Target,
@@ -666,6 +667,22 @@ export function GameJourney() {
             }
             setError('Не вдалося отримати нагороду. Стан лігва оновлено.')
           } finally {
+            setPending(false)
+          }
+        }}
+        onInvokeCursedKnight={async () => {
+          if (pending) return
+          setPending(true)
+          setError(null)
+          try {
+            await executeBossInvocation()
+            window.location.reload()
+          } catch {
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) setTalents(refreshed.talents)
+            setError(
+              'Ритуал не розпочався. Потрібні 30 рівень, печатка виклику та вільне поле бою.',
+            )
             setPending(false)
           }
         }}
@@ -1326,6 +1343,7 @@ function CinderhavenGate({
   onSummonClanBoss,
   onAttackClanBoss,
   onClaimClanBossReward,
+  onInvokeCursedKnight,
   onUpgrade,
 }: {
   hero: Hero
@@ -1349,11 +1367,16 @@ function CinderhavenGate({
   onSummonClanBoss: () => Promise<void>
   onAttackClanBoss: () => Promise<void>
   onClaimClanBossReward: () => Promise<void>
+  onInvokeCursedKnight: () => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<CityDistrictKey>(initialDistrict)
   const [clanName, setClanName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
+  const invocationSeals =
+    talents?.resources.find(
+      (resource) => resource.type === 'BOSS_INVOCATION_SEAL',
+    )?.amount ?? 0
   const activeSection: GameSection = {
     HUB: 'LOBBY',
     TRAINING: 'CHARACTER',
@@ -1464,6 +1487,24 @@ function CinderhavenGate({
                   description="Безпечні угоди, вітрини гравців і майбутня ресурсна економіка."
                   action="Ще зачинено"
                   locked
+                />
+                <CityDistrict
+                  icon={Sparkles}
+                  title="Ритуальне коло"
+                  description={
+                    hero.level < 30
+                      ? 'Закриті знання. Ритуал відкривається героям 30 рівня.'
+                      : invocationSeals > 0
+                        ? `Печаток у сховищі: ${invocationSeals}. Викликати Проклятого лицаря Морґрейва.`
+                        : 'Для виклику потрібна печатка, здобута у рідкісного носія на Порожній дорозі.'
+                  }
+                  action={
+                    invocationSeals > 0 && hero.level >= 30
+                      ? 'Розпочати ритуал'
+                      : 'Ритуал недоступний'
+                  }
+                  locked={hero.level < 30 || invocationSeals < 1}
+                  onClick={onInvokeCursedKnight}
                 />
               </div>
             </section>
@@ -2945,6 +2986,25 @@ async function executeClanBossRewardMutation(
   if (!response.ok || payload.errors || !payload.data)
     throw new Error('CLAN_BOSS_REWARD_FAILED')
   return payload.data.claimClanBossReward
+}
+
+async function executeBossInvocation(): Promise<void> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query:
+        'mutation Invoke($input: InvokeBossInput!) { invokeCursedKnight(input: $input) { id } }',
+      variables: { input: { idempotencyKey: crypto.randomUUID() } },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { invokeCursedKnight: { id: string } }
+    errors?: unknown
+  }
+  if (!response.ok || payload.errors || !payload.data)
+    throw new Error('BOSS_INVOCATION_FAILED')
 }
 
 async function executeTalentMutation(

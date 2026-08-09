@@ -6,6 +6,7 @@ import { StartEncounterInput } from './dto/start-encounter.input';
 import { SubmitCombatCommandInput } from './dto/submit-combat-command.input';
 import { ContinueAdventureInput } from './dto/continue-adventure.input';
 import { HireExpeditionGuideInput } from './dto/hire-expedition-guide.input';
+import { InvokeBossInput } from './dto/invoke-boss.input';
 import { BattleModel } from './models/battle.model';
 import { ExpeditionProgressModel } from './models/expedition-progress.model';
 import { CombatService } from './combat.service';
@@ -42,6 +43,15 @@ export class CombatResolver {
   ) {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.combat.start(viewer.id);
+  }
+
+  @Mutation(() => BattleModel)
+  async invokeCursedKnight(
+    @Args('input') input: InvokeBossInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.invokeCursedKnight(viewer.id, input);
   }
 
   @Mutation(() => BattleModel)

@@ -86,9 +86,14 @@ export class RewardsService {
     const rareEncounter =
       (battle.state as unknown as { rareEncounter?: boolean }).rareEncounter ===
       true;
-    const resource = rareEncounter
-      ? { type: ResourceType.BOSS_INVOCATION_SEAL, amount: 1 }
-      : this.resourceReward(tier);
+    const summonedBoss =
+      (battle.state as unknown as { summonedBoss?: boolean }).summonedBoss ===
+      true;
+    const resource = summonedBoss
+      ? { type: ResourceType.CURSED_HEART, amount: 1 }
+      : rareEncounter
+        ? { type: ResourceType.BOSS_INVOCATION_SEAL, amount: 1 }
+        : this.resourceReward(tier);
 
     try {
       const claim = await this.prisma.client.$transaction(async (tx) => {

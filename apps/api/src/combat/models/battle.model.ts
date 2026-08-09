@@ -40,6 +40,7 @@ export class BattleModel {
   @Field(() => Int) encounterTier!: number;
   @Field(() => Boolean) personalBest!: boolean;
   @Field(() => Boolean) rareEncounter!: boolean;
+  @Field(() => Boolean) summonedBoss!: boolean;
   @Field() enemyName!: string;
   @Field(() => Int) version!: number;
   @Field(() => Int) turn!: number;

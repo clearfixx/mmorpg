@@ -3,6 +3,7 @@ import {
   ItemLineageType,
   ItemLocation,
   Prisma,
+  ResourceType,
   TalentType,
 } from '@veilfall/database';
 import {
@@ -28,6 +29,7 @@ import { WorldService } from '../world/world.service';
 import { SubmitCombatCommandInput } from './dto/submit-combat-command.input';
 import { ContinueAdventureInput } from './dto/continue-adventure.input';
 import { HireExpeditionGuideInput } from './dto/hire-expedition-guide.input';
+import { InvokeBossInput } from './dto/invoke-boss.input';
 import { BattleModel } from './models/battle.model';
 import { ExpeditionProgressModel } from './models/expedition-progress.model';
 
@@ -268,6 +270,129 @@ export class CombatService {
     return this.toModel(battle.id, state);
   }
 
+  async invokeCursedKnight(
+    userId: string,
+    input: InvokeBossInput,
+  ): Promise<BattleModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const payloadHash = createHash('sha256')
+      .update('INVOKE:CURSED_KNIGHT')
+      .digest('hex');
+    const existing = await this.prisma.client.bossInvocationCommand.findUnique({
+      where: {
+        characterId_idempotencyKey: {
+          characterId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
+      include: { battle: true },
+    });
+    if (existing) {
+      if (existing.payloadHash !== payloadHash)
+        throw new ConflictException('Invocation key was already used');
+      return this.toModel(
+        existing.battle.id,
+        existing.battle.state as unknown as BattleState,
+      );
+    }
+    const active = await this.prisma.client.battle.count({
+      where: { characterId, status: BattleStatus.ACTIVE },
+    });
+    if (active > 0) throw new ConflictException('Finish the active battle');
+    const character = await this.prisma.client.character.findUniqueOrThrow({
+      where: { id: characterId },
+      select: {
+        archetype: true,
+        level: true,
+        worldState: { select: { currentLocation: true } },
+        talents: { select: { type: true, rank: true } },
+        equipment: {
+          select: {
+            item: { select: { damage: true, armor: true, health: true } },
+          },
+        },
+      },
+    });
+    if (character.level < 30)
+      throw new BadRequestException('Level 30 is required for the ritual');
+    if (character.worldState?.currentLocation !== 'CINDERHAVEN_GATE')
+      throw new BadRequestException('The ritual circle is in Cinderhaven');
+    const equipment = sumEquipmentStats(
+      character.equipment.map((assignment) => assignment.item),
+    );
+    const bonuses = this.combatTalentBonuses(character.talents, equipment);
+    const state = createBattle(
+      character.archetype,
+      'REST_BRAZIER',
+      equipment.damage,
+      12,
+      character.level,
+      bonuses,
+    );
+    state.summonedBoss = true;
+    state.returnLocation = 'CINDERHAVEN_GATE';
+    state.enemyLabel = 'Проклятий лицар Морґрейв';
+    state.enemy.maxHealth = Math.max(2_400, character.level * 70);
+    state.enemy.health = state.enemy.maxHealth;
+    state.enemyDamageBonus += 42 + character.level;
+    state.log = [
+      {
+        turn: 0,
+        kind: 'SYSTEM',
+        message:
+          'Печатка розколюється. Проклятий лицар Морґрейв постає у ритуальному колі.',
+      },
+    ];
+    const battle = await this.prisma.client.$transaction(async (tx) => {
+      const consumed = await tx.characterResource.updateMany({
+        where: {
+          characterId,
+          type: ResourceType.BOSS_INVOCATION_SEAL,
+          balance: { gte: 1 },
+        },
+        data: { balance: { decrement: 1 } },
+      });
+      if (consumed.count !== 1)
+        throw new BadRequestException('A boss invocation seal is required');
+      const created = await tx.battle.create({
+        data: {
+          characterId,
+          activeCharacterId: characterId,
+          encounterId: 'invoked-cursed-knight',
+          seed: 9_001,
+          state: state as unknown as Prisma.InputJsonValue,
+        },
+      });
+      const command = await tx.bossInvocationCommand.create({
+        data: {
+          characterId,
+          battleId: created.id,
+          idempotencyKey: input.idempotencyKey,
+          payloadHash,
+        },
+      });
+      await tx.resourceLedgerEntry.create({
+        data: {
+          characterId,
+          type: ResourceType.BOSS_INVOCATION_SEAL,
+          amount: -1,
+          reason: 'BOSS_INVOCATION',
+          referenceId: command.id,
+        },
+      });
+      await tx.characterWorldState.update({
+        where: { characterId },
+        data: {
+          currentLocation: 'HOLLOW_ROAD',
+          preparationChoice: 'REST_BRAZIER',
+          version: { increment: 1 },
+        },
+      });
+      return created;
+    });
+    return this.toModel(battle.id, state);
+  }
+
   async submit(
     userId: string,
     input: SubmitCombatCommandInput,
@@ -379,13 +504,13 @@ export class CombatService {
         await tx.characterWorldState.update({
           where: { characterId },
           data: {
-            currentLocation: 'BROKEN_WATCHPOST',
+            currentLocation: next.returnLocation ?? 'BROKEN_WATCHPOST',
             preparationChoice: null,
             version: { increment: 1 },
           },
         });
       }
-      if (status === BattleStatus.WON) {
+      if (status === BattleStatus.WON && !next.summonedBoss) {
         const clearedTier = next.encounterTier ?? 1;
         const record = await tx.characterWorldState.updateMany({
           where: { characterId, highestClearedTier: { lt: clearedTier } },
@@ -418,6 +543,11 @@ export class CombatService {
     });
     if (!previous)
       throw new BadRequestException('Claimed victory is required to continue');
+    const previousState = previous.state as unknown as BattleState;
+    if (previousState.summonedBoss)
+      throw new BadRequestException(
+        'Summoned bosses do not extend expeditions',
+      );
     const existing = await this.prisma.client.battleCommand.findUnique({
       where: {
         battleId_idempotencyKey: {
@@ -451,7 +581,6 @@ export class CombatService {
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
-    const previousState = previous.state as unknown as BattleState;
     const tier = (previousState.encounterTier ?? 1) + 1;
     const rareEncounter = await this.reserveRareEncounter(
       characterId,
@@ -536,7 +665,7 @@ export class CombatService {
       await tx.characterWorldState.update({
         where: { characterId },
         data: {
-          currentLocation: 'BROKEN_WATCHPOST',
+          currentLocation: state.returnLocation ?? 'BROKEN_WATCHPOST',
           preparationChoice: null,
           version: { increment: 1 },
         },
@@ -558,7 +687,11 @@ export class CombatService {
         resultAcknowledgedAt: null,
       },
       orderBy: { createdAt: 'desc' },
-      select: { status: true, rewardClaim: { select: { id: true } } },
+      select: {
+        status: true,
+        state: true,
+        rewardClaim: { select: { id: true } },
+      },
     });
     if (
       latestResult?.status === BattleStatus.WON &&
@@ -578,7 +711,9 @@ export class CombatService {
       await tx.characterWorldState.update({
         where: { characterId },
         data: {
-          currentLocation: 'BROKEN_WATCHPOST',
+          currentLocation:
+            (latestResult?.state as unknown as BattleState | undefined)
+              ?.returnLocation ?? 'BROKEN_WATCHPOST',
           preparationChoice: null,
           version: { increment: 1 },
         },
@@ -621,13 +756,17 @@ export class CombatService {
         await tx.characterWorldState.update({
           where: { characterId },
           data: {
-            currentLocation: 'BROKEN_WATCHPOST',
+            currentLocation: next.returnLocation ?? 'BROKEN_WATCHPOST',
             preparationChoice: null,
             version: { increment: 1 },
           },
         });
       }
-      if (result.count === 1 && status === BattleStatus.WON) {
+      if (
+        result.count === 1 &&
+        status === BattleStatus.WON &&
+        !next.summonedBoss
+      ) {
         const clearedTier = next.encounterTier ?? 1;
         const record = await tx.characterWorldState.updateMany({
           where: { characterId, highestClearedTier: { lt: clearedTier } },
@@ -727,6 +866,7 @@ export class CombatService {
       encounterTier: state.encounterTier ?? 1,
       personalBest: state.personalBest ?? false,
       rareEncounter: state.rareEncounter ?? false,
+      summonedBoss: state.summonedBoss ?? false,
       enemyName:
         state.enemyLabel ??
         ((state.encounterTier ?? 1) > 1

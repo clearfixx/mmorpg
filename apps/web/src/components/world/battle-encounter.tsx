@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase encounterTier personalBest rareEncounter enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier personalBest rareEncounter summonedBoss enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
@@ -17,6 +17,7 @@ interface Battle {
   encounterTier: number
   personalBest: boolean
   rareEncounter: boolean
+  summonedBoss: boolean
   enemyName: string
   version: number
   turn: number
@@ -49,7 +50,7 @@ interface BattleReward {
   experience: number
   gold: number
   resources: Array<{
-    type: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL'
+    type: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL' | 'CURSED_HEART'
     amount: number
   }>
   item: {
@@ -235,7 +236,7 @@ export function BattleEncounter({
       )
       window.location.reload()
     } catch {
-      setError('Не вдалося повернутися на заставу.')
+      setError('Не вдалося залишити поле бою.')
       setPending(false)
     }
   }
@@ -374,15 +375,17 @@ export function BattleEncounter({
             стан {battle.version}
           </span>
         </header>
-        {battle.rareEncounter ? (
+        {battle.rareEncounter || battle.summonedBoss ? (
           <section className="border-b border-ember/50 bg-ember/5 px-5 py-4">
             <p className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-ember">
-              Рідкісна зустріч · доступна з 30 рівня
+              {battle.summonedBoss
+                ? 'Ритуальний бос · витрачено печатку виклику'
+                : 'Рідкісна зустріч · доступна з 30 рівня'}
             </p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Носій печаті значно сильніший за звичайних ворогів. Перемога
-              гарантовано принесе переносне закляття для виклику Проклятого
-              лицаря.
+              {battle.summonedBoss
+                ? 'Морґрейв не зникне, доки ритуал не завершиться перемогою або поразкою. Його серце існує лише як трофей цього виклику.'
+                : 'Носій печаті значно сильніший за звичайних ворогів. Перемога гарантовано принесе переносне закляття для виклику Проклятого лицаря.'}
             </p>
           </section>
         ) : null}
@@ -396,14 +399,22 @@ export function BattleEncounter({
           />
           <HealthPanel
             portrait={
-              battle.rareEncounter ? 'З' : battle.encounterTier > 1 ? 'Р' : 'М'
+              battle.summonedBoss
+                ? 'П'
+                : battle.rareEncounter
+                  ? 'З'
+                  : battle.encounterTier > 1
+                    ? 'Р'
+                    : 'М'
             }
             title={
-              battle.rareEncounter
-                ? 'Носій печаті'
-                : battle.encounterTier > 1
-                  ? 'Розоритель'
-                  : 'Мародер'
+              battle.summonedBoss
+                ? 'Проклятий лицар'
+                : battle.rareEncounter
+                  ? 'Носій печаті'
+                  : battle.encounterTier > 1
+                    ? 'Розоритель'
+                    : 'Мародер'
             }
             value={battle.enemy.health}
             max={battle.enemy.maxHealth}
@@ -418,6 +429,7 @@ export function BattleEncounter({
                 encounterTier={battle.encounterTier}
                 personalBest={battle.personalBest}
                 rareEncounter={battle.rareEncounter}
+                summonedBoss={battle.summonedBoss}
                 turns={battle.turn}
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
@@ -546,6 +558,7 @@ function BattleResult({
   encounterTier,
   personalBest,
   rareEncounter,
+  summonedBoss,
   turns,
   health,
   maxHealth,
@@ -561,6 +574,7 @@ function BattleResult({
   encounterTier: number
   personalBest: boolean
   rareEncounter: boolean
+  summonedBoss: boolean
   turns: number
   health: number
   maxHealth: number
@@ -594,7 +608,13 @@ function BattleResult({
           гарантованих трофеїв.
         </p>
       ) : null}
-      {won && personalBest ? (
+      {won && summonedBoss ? (
+        <p className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3 text-sm leading-6 text-ember">
+          Ритуал завершено. Серце Проклятого лицаря буде серед гарантованих
+          трофеїв і відкриє наступну ланку викликів.
+        </p>
+      ) : null}
+      {won && personalBest && !summonedBoss ? (
         <GuideCheckpointOffer
           encounterTier={encounterTier}
           expedition={expedition}
@@ -608,7 +628,9 @@ function BattleResult({
             Здобич не отримана
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Заберіть трофей мародера перед поверненням на заставу.
+            {summonedBoss
+              ? 'Заберіть серце Морґрейва перед поверненням до Прихистку.'
+              : 'Заберіть трофей ворога перед поверненням на заставу.'}
           </p>
           <Button
             type="button"
@@ -621,7 +643,7 @@ function BattleResult({
         </div>
       ) : null}
       {reward ? <RewardReveal reward={reward} /> : null}
-      {won && reward ? (
+      {won && reward && !summonedBoss ? (
         <div className="mt-4 space-y-2 text-xs leading-5 text-muted-foreground">
           <p>
             Етап {encounterTier + 1}: ворог матиме на 40 більше здоров’я та
@@ -645,9 +667,11 @@ function BattleResult({
             variant="outline"
             className="h-9 rounded-sm"
           >
-            Повернутися на заставу
+            {summonedBoss
+              ? 'Повернутися до Прихистку'
+              : 'Повернутися на заставу'}
           </Button>
-          {won && reward ? (
+          {won && reward && !summonedBoss ? (
             <Button
               type="button"
               onClick={onContinue}
@@ -785,13 +809,14 @@ function RewardStat({ label, value }: { label: string; value: string }) {
 }
 
 function resourceName(
-  type?: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL',
+  type?: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL' | 'CURSED_HEART',
 ): string {
   return {
     IRON: 'Залізо',
     COPPER: 'Мідь',
     BRONZE: 'Бронза',
     BOSS_INVOCATION_SEAL: 'Печатка виклику',
+    CURSED_HEART: 'Серце лицаря',
   }[type ?? 'IRON']
 }
 

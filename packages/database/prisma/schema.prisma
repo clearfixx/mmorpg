@@ -222,6 +222,7 @@ model Character {
   craftCommands           CraftCommand[]
   recipeKnowledge         CharacterRecipeKnowledge[]
   factionCommands         FactionCommand[]
+  bossInvocationCommands  BossInvocationCommand[]
 
   @@map("characters")
 }
@@ -486,24 +487,25 @@ model ResourceLedgerEntry {
 }
 
 model Battle {
-  id                   String          @id @default(uuid()) @db.Uuid
-  characterId          String          @map("character_id") @db.Uuid
-  activeCharacterId    String?         @unique @map("active_character_id") @db.Uuid
-  encounterId          String          @map("encounter_id") @db.VarChar(64)
-  status               BattleStatus    @default(ACTIVE)
-  version              Int             @default(1)
+  id                   String                 @id @default(uuid()) @db.Uuid
+  characterId          String                 @map("character_id") @db.Uuid
+  activeCharacterId    String?                @unique @map("active_character_id") @db.Uuid
+  encounterId          String                 @map("encounter_id") @db.VarChar(64)
+  status               BattleStatus           @default(ACTIVE)
+  version              Int                    @default(1)
   seed                 Int
   state                Json
-  pendingState         Json?           @map("pending_state")
-  enemyReadyAt         DateTime?       @map("enemy_ready_at")
-  createdAt            DateTime        @default(now()) @map("created_at")
-  updatedAt            DateTime        @updatedAt @map("updated_at")
-  completedAt          DateTime?       @map("completed_at")
-  resultAcknowledgedAt DateTime?       @map("result_acknowledged_at")
-  character            Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  pendingState         Json?                  @map("pending_state")
+  enemyReadyAt         DateTime?              @map("enemy_ready_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  completedAt          DateTime?              @map("completed_at")
+  resultAcknowledgedAt DateTime?              @map("result_acknowledged_at")
+  character            Character              @relation(fields: [characterId], references: [id], onDelete: Cascade)
   commands             BattleCommand[]
   rewardClaim          RewardClaim?
   rewardItem           ItemInstance?
+  invocationCommand    BossInvocationCommand?
 
   @@index([characterId, status])
   @@map("battles")
@@ -521,6 +523,20 @@ model BattleCommand {
 
   @@unique([battleId, idempotencyKey])
   @@map("battle_commands")
+}
+
+model BossInvocationCommand {
+  id             String    @id @default(uuid()) @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  battleId       String    @unique @map("battle_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  battle         Battle    @relation(fields: [battleId], references: [id], onDelete: Restrict)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("boss_invocation_commands")
 }
 
 model CharacterWorldState {

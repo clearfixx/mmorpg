@@ -31,6 +31,7 @@ type BattleModel {
   phase: String!
   rareEncounter: Boolean!
   status: String!
+  summonedBoss: Boolean!
   turn: Int!
   version: Int!
   visibleIntents: [EnemyIntentModel!]!
@@ -394,6 +395,10 @@ type InventoryModel {
   totalHealth: Int!
 }
 
+input InvokeBossInput {
+  idempotencyKey: String!
+}
+
 enum ItemBinding {
   BOUND
   BOUND_ON_EQUIP
@@ -440,6 +445,7 @@ type Mutation {
   createClan(input: CreateClanInput!): ClanModel!
   equipItem(input: EquipItemInput!): InventoryModel!
   hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
+  invokeCursedKnight(input: InvokeBossInput!): BattleModel!
   joinClan(input: JoinClanInput!): ClanModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!
