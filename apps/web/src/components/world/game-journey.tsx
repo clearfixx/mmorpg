@@ -9,12 +9,14 @@ import {
   Package,
   Shield,
   Sword,
+  Swords,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CraftingWorkshop } from '@/components/crafting/crafting-workshop'
+import { FactionFront } from '@/components/factions/faction-front'
 import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
@@ -807,7 +809,7 @@ function CinderhavenGate({
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<
-    'HUB' | 'TRAINING' | 'CRAFTING' | 'CLAN'
+    'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN'
   >('HUB')
   const [clanName, setClanName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
@@ -867,6 +869,13 @@ function CinderhavenGate({
                 onClick={() => setDistrict('CRAFTING')}
               />
               <CityDistrict
+                icon={Swords}
+                title="Воєнна рада"
+                description="Обрати сторону та побачити скриптовий стан фронту свого рівня."
+                action="Відкрити карту фронту"
+                onClick={() => setDistrict('FRONT')}
+              />
+              <CityDistrict
                 icon={Sword}
                 title="Клановий двір"
                 description="Місце формування кланів, спільних походів і боротьби з лігвами."
@@ -884,6 +893,8 @@ function CinderhavenGate({
           </section>
         ) : district === 'CRAFTING' ? (
           <CraftingWorkshop onBack={() => setDistrict('HUB')} />
+        ) : district === 'FRONT' ? (
+          <FactionFront onBack={() => setDistrict('HUB')} />
         ) : district === 'TRAINING' && talents ? (
           <section className="mt-8 border-t border-border/70 pt-7">
             <Button

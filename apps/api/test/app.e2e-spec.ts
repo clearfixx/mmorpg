@@ -1383,6 +1383,85 @@ describe('Health (e2e)', () => {
       '"currentLocation":"BROKEN_WATCHPOST"',
     );
 
+    const factionState = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myFaction { faction characterVersion canChangeFaction dawnStrength ashenStrength frontLevelMin frontLevelMax } }',
+      })
+      .expect(200);
+    const factionPayload = JSON.parse(factionState.text) as {
+      data: {
+        myFaction: {
+          faction: string | null;
+          characterVersion: number;
+          canChangeFaction: boolean;
+          dawnStrength: number;
+          ashenStrength: number;
+          frontLevelMin: number;
+          frontLevelMax: number;
+        };
+      };
+    };
+    expect(factionPayload.data.myFaction).toMatchObject({
+      faction: null,
+      canChangeFaction: true,
+      frontLevelMin: 21,
+      frontLevelMax: 30,
+    });
+    expect(
+      factionPayload.data.myFaction.dawnStrength +
+        factionPayload.data.myFaction.ashenStrength,
+    ).toBe(200);
+
+    const chooseFaction = async (
+      faction: 'DAWN_COVENANT' | 'ASHEN_HOST',
+      expectedCharacterVersion: number,
+    ) =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Choose($input: ChooseFactionInput!) { chooseFaction(input: $input) { faction characterVersion canChangeFaction } }',
+          variables: {
+            input: {
+              faction,
+              expectedCharacterVersion,
+              idempotencyKey: `faction-${faction}-${Date.now()}`,
+            },
+          },
+        })
+        .expect(200);
+    const firstFaction = await chooseFaction(
+      'DAWN_COVENANT',
+      factionPayload.data.myFaction.characterVersion,
+    );
+    const firstFactionPayload = JSON.parse(firstFaction.text) as {
+      data: {
+        chooseFaction: { characterVersion: number; canChangeFaction: boolean };
+      };
+    };
+    expect(firstFaction.text).toContain('"faction":"DAWN_COVENANT"');
+    expect(firstFactionPayload.data.chooseFaction.canChangeFaction).toBe(true);
+    const changedFaction = await chooseFaction(
+      'ASHEN_HOST',
+      firstFactionPayload.data.chooseFaction.characterVersion,
+    );
+    expect(changedFaction.text).toContain(
+      '"faction":"ASHEN_HOST","characterVersion":',
+    );
+    expect(changedFaction.text).toContain('"canChangeFaction":false');
+    const changedFactionPayload = JSON.parse(changedFaction.text) as {
+      data: { chooseFaction: { characterVersion: number } };
+    };
+    const forbiddenReturn = await chooseFaction(
+      'DAWN_COVENANT',
+      changedFactionPayload.data.chooseFaction.characterVersion,
+    );
+    expect(forbiddenReturn.text).toContain('errors');
+
     const duplicate = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

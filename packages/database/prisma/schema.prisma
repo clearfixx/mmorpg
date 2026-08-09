@@ -150,6 +150,11 @@ enum CraftJobStatus {
   CLAIMED
 }
 
+enum WorldFaction {
+  DAWN_COVENANT
+  ASHEN_HOST
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -177,6 +182,8 @@ model Character {
   experience             Int                        @default(0)
   gold                   Int                        @default(0)
   version                Int                        @default(1)
+  faction                WorldFaction?
+  factionChanges         Int                        @default(0) @map("faction_changes")
   createdAt              DateTime                   @default(now()) @map("created_at")
   updatedAt              DateTime                   @updatedAt @map("updated_at")
   user                   User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -199,6 +206,7 @@ model Character {
   craftJobs              CraftJob[]
   craftCommands          CraftCommand[]
   recipeKnowledge        CharacterRecipeKnowledge[]
+  factionCommands        FactionCommand[]
 
   @@map("characters")
 }
@@ -420,6 +428,19 @@ model CharacterRecipeKnowledge {
   @@unique([characterId, recipeId])
   @@index([characterId, discoveredAt])
   @@map("character_recipe_knowledge")
+}
+
+model FactionCommand {
+  id             String       @id @default(uuid()) @db.Uuid
+  characterId    String       @map("character_id") @db.Uuid
+  idempotencyKey String       @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String       @map("payload_hash") @db.Char(64)
+  faction        WorldFaction
+  createdAt      DateTime     @default(now()) @map("created_at")
+  character      Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("faction_commands")
 }
 
 model CharacterResource {

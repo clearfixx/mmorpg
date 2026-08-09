@@ -10,6 +10,7 @@ import { ClansModule } from './clans/clans.module';
 import { CombatModule } from './combat/combat.module';
 import { CraftingModule } from './crafting/crafting.module';
 import { DatabaseModule } from './database/database.module';
+import { FactionsModule } from './factions/factions.module';
 import { HealthController } from './health/health.controller';
 import { IdentityModule } from './identity/identity.module';
 import type { GraphqlContext } from './identity/identity.types';
@@ -38,6 +39,7 @@ import { WorldModule } from './world/world.module';
     ClansModule,
     CombatModule,
     CraftingModule,
+    FactionsModule,
     RewardsModule,
     ResourcesModule,
     TalentsModule,

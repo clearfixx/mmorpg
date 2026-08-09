@@ -24,4 +24,5 @@ export {
   UserRole,
   UserStatus,
   WorldLocation,
+  WorldFaction,
 } from './generated/prisma/enums.js'

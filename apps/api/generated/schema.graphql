@@ -80,6 +80,12 @@ type CharacterStats {
   speed: Int!
 }
 
+input ChooseFactionInput {
+  expectedCharacterVersion: Int!
+  faction: WorldFaction!
+  idempotencyKey: String!
+}
+
 input ClaimBattleRewardInput {
   battleId: ID!
   idempotencyKey: String!
@@ -314,6 +320,19 @@ type EquippedItemModel {
   slot: EquipmentSlot!
 }
 
+type FactionStateModel {
+  ashenStrength: Int!
+  canChangeFaction: Boolean!
+  characterVersion: Int!
+  contestedLocation: String!
+  controllingFaction: WorldFaction!
+  dawnStrength: Int!
+  faction: WorldFaction
+  frontLevelMax: Int!
+  frontLevelMin: Int!
+  nextScriptedShiftAt: DateTime!
+}
+
 type InventoryItemModel {
   binding: String!
   damage: Int!
@@ -375,6 +394,7 @@ input LoginInput {
 
 type Mutation {
   attackClanBoss(input: AttackClanBossInput!): ClanBossModel!
+  chooseFaction(input: ChooseFactionInput!): FactionStateModel!
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
   claimClanBossReward(input: ClaimClanBossRewardInput!): ClanBossModel!
   claimCraft(input: ClaimCraftInput!): CraftingStateModel!
@@ -419,6 +439,7 @@ type Query {
   myCharacter: CharacterModel
   myClan: ClanModel
   myCrafting: CraftingStateModel!
+  myFaction: FactionStateModel!
   myInventory: InventoryModel!
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
@@ -590,6 +611,11 @@ type Viewer {
   email: String!
   id: ID!
   role: UserRole!
+}
+
+enum WorldFaction {
+  ASHEN_HOST
+  DAWN_COVENANT
 }
 
 enum WorldLocation {
