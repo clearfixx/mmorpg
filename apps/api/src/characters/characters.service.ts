@@ -7,6 +7,7 @@ import {
 import {
   levelBonuses,
   progressionForExperience,
+  sumEquipmentStats,
   talentBonuses,
 } from '@veilfall/game-engine';
 import {
@@ -138,10 +139,14 @@ export class CharactersService {
     gold: number;
     version: number;
     createdAt: Date;
-    equipment?: Array<{ item: { damage: number } }>;
+    equipment?: Array<{
+      item: { damage: number; armor: number; health: number };
+    }>;
     talents?: Array<{ type: TalentType; rank: number }>;
   }): CharacterModel {
-    const weaponDamage = character.equipment?.[0]?.item.damage ?? 0;
+    const equipmentStats = sumEquipmentStats(
+      character.equipment?.map((assignment) => assignment.item) ?? [],
+    );
     const progression = progressionForExperience(character.experience);
     const bonuses = levelBonuses(progression.level);
     const talentRanks = Object.fromEntries(
@@ -167,18 +172,20 @@ export class CharactersService {
           BASE_STATS[character.archetype].health +
           bonuses.health +
           trained.health +
-          awakened.health,
+          awakened.health +
+          equipmentStats.health,
         damage:
           BASE_STATS[character.archetype].damage +
           bonuses.damage +
           trained.damage +
           awakened.damage +
-          weaponDamage,
+          equipmentStats.damage,
         armor:
           BASE_STATS[character.archetype].armor +
           bonuses.armor +
           trained.armor +
-          awakened.armor,
+          awakened.armor +
+          equipmentStats.armor,
         speed: BASE_STATS[character.archetype].speed,
         reaction: BASE_STATS[character.archetype].reaction,
       },

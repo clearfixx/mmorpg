@@ -55,6 +55,8 @@ interface InventoryItem {
   rarity: string
   rollQuality: number
   damage: number
+  armor: number
+  health: number
   damageMin: number
   damageMax: number
   compatibleSlots: EquipmentSlotKey[]
@@ -83,6 +85,10 @@ interface Inventory {
   characterVersion: number
   baseDamage: number
   totalDamage: number
+  baseArmor: number
+  totalArmor: number
+  baseHealth: number
+  totalHealth: number
   chest: InventoryItem[]
   backpack: InventoryItem[]
   equipped: Array<{ slot: EquipmentSlotKey; item: InventoryItem }>
@@ -275,9 +281,9 @@ function JourneyShell({
         archetype: hero.archetype,
         experienceIntoLevel: hero.experienceIntoLevel,
         experienceForNextLevel: hero.experienceForNextLevel,
-        health: hero.baseStats.health,
+        health: inventory?.totalHealth ?? hero.baseStats.health,
         damage: inventory?.totalDamage ?? hero.baseStats.damage,
-        armor: hero.baseStats.armor,
+        armor: inventory?.totalArmor ?? hero.baseStats.armor,
         gold: hero.gold,
       }}
       clanName={clan?.name ?? null}
@@ -426,7 +432,11 @@ export function GameJourney() {
               )
               setHero({
                 ...hero,
-                baseStats: { ...hero.baseStats, damage: next.totalDamage },
+                baseStats: {
+                  health: next.totalHealth,
+                  damage: next.totalDamage,
+                  armor: next.totalArmor,
+                },
               })
             } catch {
               const refreshed = await loadJourney()
@@ -761,9 +771,9 @@ export function GameJourney() {
           </div>
           <dl className="mt-7 grid grid-cols-3 gap-px bg-border/60">
             {[
-              ['HP', hero.baseStats.health],
-              ['DMG', hero.baseStats.damage],
-              ['ARM', hero.baseStats.armor],
+              ['HP', inventory?.totalHealth ?? hero.baseStats.health],
+              ['DMG', inventory?.totalDamage ?? hero.baseStats.damage],
+              ['ARM', inventory?.totalArmor ?? hero.baseStats.armor],
             ].map(([label, value]) => (
               <div key={label} className="bg-panel px-2 py-3 text-center">
                 <dt className="font-mono text-[0.6rem] text-muted-foreground">
@@ -2157,12 +2167,12 @@ function ProfileSummary({
         Статистика героя
       </p>
       <dl className="mt-4 divide-y divide-border/60 border-y border-border/70 bg-background/35 px-3">
-        <ProfileStat label="Здоров’я" value={hero.baseStats.health} />
-        <ProfileStat label="Захист" value={hero.baseStats.armor} />
+        <ProfileStat label="Здоров’я" value={inventory.totalHealth} />
+        <ProfileStat label="Захист" value={inventory.totalArmor} />
         <ProfileStat label="Базова атака" value={inventory.baseDamage} />
         <ProfileStat
-          label="Бонус зброї"
-          value={weapon ? `+${weapon.damage}` : '—'}
+          label="Бонус екіпіровки"
+          value={`+${inventory.totalDamage - inventory.baseDamage} DMG`}
           accent
         />
         <ProfileStat
@@ -2289,7 +2299,7 @@ async function executeInventoryMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } } } }',
+        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } }',
       variables: {
         input: {
           itemId,
@@ -2325,7 +2335,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       }),
     })
     const payload = (await response.json()) as {

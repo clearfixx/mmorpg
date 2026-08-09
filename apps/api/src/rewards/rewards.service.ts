@@ -249,6 +249,8 @@ export class RewardsService {
       rarity: ItemRarity;
       rollQuality: number;
       damage: number;
+      armor: number;
+      health: number;
       binding: ItemBinding;
       location: ItemLocation;
       setId: string;

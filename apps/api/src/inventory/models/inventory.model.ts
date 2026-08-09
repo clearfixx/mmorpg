@@ -12,6 +12,8 @@ export class InventoryItemModel {
   @Field() rarity!: string;
   @Field(() => Int) rollQuality!: number;
   @Field(() => Int) damage!: number;
+  @Field(() => Int) armor!: number;
+  @Field(() => Int) health!: number;
   @Field(() => Int) damageMin!: number;
   @Field(() => Int) damageMax!: number;
   @Field(() => [EquipmentSlot]) compatibleSlots!: EquipmentSlot[];
@@ -31,6 +33,10 @@ export class InventoryModel {
   @Field(() => Int) characterVersion!: number;
   @Field(() => Int) baseDamage!: number;
   @Field(() => Int) totalDamage!: number;
+  @Field(() => Int) baseArmor!: number;
+  @Field(() => Int) totalArmor!: number;
+  @Field(() => Int) baseHealth!: number;
+  @Field(() => Int) totalHealth!: number;
   @Field(() => [InventoryItemModel]) chest!: InventoryItemModel[];
   @Field(() => [InventoryItemModel]) backpack!: InventoryItemModel[];
   @Field(() => [EquippedItemModel]) equipped!: EquippedItemModel[];

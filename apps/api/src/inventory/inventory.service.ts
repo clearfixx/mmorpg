@@ -9,6 +9,7 @@ import {
 import {
   itemDamageRange,
   levelBonuses,
+  sumEquipmentStats,
   talentBonuses,
   type ItemRarity as EngineItemRarity,
 } from '@veilfall/game-engine';
@@ -28,6 +29,18 @@ const BASE_DAMAGE = {
   [CharacterArchetype.VANGUARD]: 16,
   [CharacterArchetype.RANGER]: 19,
   [CharacterArchetype.ARCANIST]: 21,
+};
+
+const BASE_HEALTH = {
+  [CharacterArchetype.VANGUARD]: 140,
+  [CharacterArchetype.RANGER]: 100,
+  [CharacterArchetype.ARCANIST]: 90,
+};
+
+const BASE_ARMOR = {
+  [CharacterArchetype.VANGUARD]: 14,
+  [CharacterArchetype.RANGER]: 7,
+  [CharacterArchetype.ARCANIST]: 6,
 };
 
 const ITEM_DEFINITIONS: Record<
@@ -195,22 +208,46 @@ export class InventoryService {
     const mainHand = character.equipment.find(
       (entry) => entry.slot === EquipmentSlot.MAIN_HAND,
     )?.item;
-    const powerRank =
-      character.talents.find((talent) => talent.type === TalentType.POWER)
-        ?.rank ?? 0;
-    const awakenedPowerRank =
-      character.talents.find(
-        (talent) => talent.type === TalentType.AWAKENED_POWER,
-      )?.rank ?? 0;
+    const ranks = Object.fromEntries(
+      character.talents.map((talent) => [talent.type, talent.rank]),
+    );
+    const trained = talentBonuses({
+      vitality: ranks[TalentType.VITALITY] ?? 0,
+      power: ranks[TalentType.POWER] ?? 0,
+      resilience: ranks[TalentType.RESILIENCE] ?? 0,
+    });
+    const awakened = {
+      health: (ranks[TalentType.AWAKENED_VITALITY] ?? 0) * 30,
+      damage: (ranks[TalentType.AWAKENED_POWER] ?? 0) * 8,
+      armor: (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
+    };
+    const level = levelBonuses(character.level);
+    const equipmentStats = sumEquipmentStats(
+      character.equipment.map((assignment) => assignment.item),
+    );
     const baseDamage =
       BASE_DAMAGE[character.archetype] +
-      levelBonuses(character.level).damage +
-      talentBonuses({ vitality: 0, power: powerRank, resilience: 0 }).damage +
-      awakenedPowerRank * 8;
+      level.damage +
+      trained.damage +
+      awakened.damage;
+    const baseArmor =
+      BASE_ARMOR[character.archetype] +
+      level.armor +
+      trained.armor +
+      awakened.armor;
+    const baseHealth =
+      BASE_HEALTH[character.archetype] +
+      level.health +
+      trained.health +
+      awakened.health;
     return {
       characterVersion: character.version,
       baseDamage,
-      totalDamage: baseDamage + (mainHand?.damage ?? 0),
+      totalDamage: baseDamage + equipmentStats.damage,
+      baseArmor,
+      totalArmor: baseArmor + equipmentStats.armor,
+      baseHealth,
+      totalHealth: baseHealth + equipmentStats.health,
       chest: character.items
         .filter((item) => item.location === ItemLocation.CHEST)
         .map((item) => this.itemModel(item)),
@@ -229,6 +266,8 @@ export class InventoryService {
     rarity: string;
     rollQuality: number;
     damage: number;
+    armor: number;
+    health: number;
     binding: string;
     setId: string;
     visualAssetId: string;

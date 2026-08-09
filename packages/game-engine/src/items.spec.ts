@@ -7,6 +7,7 @@ import {
   maxRarityForEncounterTier,
   rarityForRoll,
   rollItemPower,
+  sumEquipmentStats,
 } from './items'
 
 describe('item power', () => {
@@ -53,5 +54,15 @@ describe('item power', () => {
     expect(itemLevelForReward(1, 1)).toBe(1)
     expect(itemLevelForReward(1, 2)).toBe(2)
     expect(itemLevelForReward(98, 5)).toBe(99)
+  })
+
+  it('sums every equipped item stat and accepts legacy partial items', () => {
+    expect(
+      sumEquipmentStats([
+        { damage: 12 },
+        { armor: 8, health: 25 },
+        { damage: 3, armor: 2 },
+      ]),
+    ).toEqual({ damage: 15, armor: 10, health: 25 })
   })
 })

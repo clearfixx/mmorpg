@@ -61,6 +61,8 @@ interface BattleReward {
       | 'DIVINE'
     rollQuality: number
     damage: number
+    armor: number
+    health: number
     damageMin: number
     damageMax: number
     binding: string
@@ -230,7 +232,7 @@ export function BattleEncounter({
         `mutation Claim($input: ClaimBattleRewardInput!) {
           claimBattleReward(input: $input) {
             claimId experience gold resources { type amount }
-            item { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName location }
+            item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax binding setName location }
           }
         }`,
         {

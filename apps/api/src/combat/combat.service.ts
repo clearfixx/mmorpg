@@ -10,6 +10,7 @@ import {
   createBattle,
   INTENTS,
   resolveTurn,
+  sumEquipmentStats,
   talentBonuses,
   type ActionId,
   type BattleState,
@@ -184,18 +185,23 @@ export class CombatService {
         level: true,
         talents: { select: { type: true, rank: true } },
         equipment: {
-          where: { slot: 'MAIN_HAND' },
-          select: { item: { select: { damage: true } } },
+          select: {
+            item: { select: { damage: true, armor: true, health: true } },
+          },
         },
       },
     });
+    const equipment = sumEquipmentStats(
+      character.equipment.map((assignment) => assignment.item),
+    );
+    const bonuses = this.combatTalentBonuses(character.talents, equipment);
     const state = createBattle(
       character.archetype,
       context.preparation,
-      character.equipment[0]?.item.damage ?? 0,
+      equipment.damage,
       context.checkpointTier,
       character.level,
-      this.combatTalentBonuses(character.talents),
+      bonuses,
     );
     const battle = await this.prisma.client.battle.create({
       data: {
@@ -377,20 +383,25 @@ export class CombatService {
         level: true,
         talents: { select: { type: true, rank: true } },
         equipment: {
-          where: { slot: 'MAIN_HAND' },
-          select: { item: { select: { damage: true } } },
+          select: {
+            item: { select: { damage: true, armor: true, health: true } },
+          },
         },
       },
     });
+    const equipment = sumEquipmentStats(
+      character.equipment.map((assignment) => assignment.item),
+    );
+    const bonuses = this.combatTalentBonuses(character.talents, equipment);
     const previousState = previous.state as unknown as BattleState;
     const tier = (previousState.encounterTier ?? 1) + 1;
     const next = createBattle(
       character.archetype,
       previousState.preparation,
-      character.equipment[0]?.item.damage ?? 0,
+      equipment.damage,
       tier,
       character.level,
-      this.combatTalentBonuses(character.talents),
+      bonuses,
     );
     const battle = await this.prisma.client.$transaction(async (tx) => {
       const acknowledged = await tx.battle.updateMany({
@@ -669,6 +680,7 @@ export class CombatService {
 
   private combatTalentBonuses(
     talents: Array<{ type: TalentType; rank: number }>,
+    equipment: { health: number; armor: number } = { health: 0, armor: 0 },
   ) {
     const ranks = Object.fromEntries(
       talents.map((talent) => [talent.type, talent.rank]),
@@ -679,9 +691,15 @@ export class CombatService {
       resilience: ranks[TalentType.RESILIENCE] ?? 0,
     });
     return {
-      health: basic.health + (ranks[TalentType.AWAKENED_VITALITY] ?? 0) * 30,
+      health:
+        basic.health +
+        (ranks[TalentType.AWAKENED_VITALITY] ?? 0) * 30 +
+        equipment.health,
       damage: basic.damage + (ranks[TalentType.AWAKENED_POWER] ?? 0) * 8,
-      armor: basic.armor + (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
+      armor:
+        basic.armor +
+        (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6 +
+        equipment.armor,
     };
   }
 }

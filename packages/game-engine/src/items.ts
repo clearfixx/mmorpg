@@ -49,6 +49,25 @@ export interface ItemPowerRoll extends ItemStatRange {
   value: number
 }
 
+export interface EquipmentStats {
+  damage: number
+  armor: number
+  health: number
+}
+
+export function sumEquipmentStats(
+  items: ReadonlyArray<Partial<EquipmentStats>>,
+): EquipmentStats {
+  return items.reduce<EquipmentStats>(
+    (total, item) => ({
+      damage: total.damage + (item.damage ?? 0),
+      armor: total.armor + (item.armor ?? 0),
+      health: total.health + (item.health ?? 0),
+    }),
+    { damage: 0, armor: 0, health: 0 },
+  )
+}
+
 export function clampItemLevel(level: number): number {
   return Math.min(MAX_ITEM_LEVEL, Math.max(MIN_ITEM_LEVEL, Math.floor(level)))
 }

@@ -361,12 +361,14 @@ input HireExpeditionGuideInput {
 }
 
 type InventoryItemModel {
+  armor: Int!
   binding: String!
   compatibleSlots: [EquipmentSlot!]!
   damage: Int!
   damageMax: Int!
   damageMin: Int!
   definitionId: String!
+  health: Int!
   id: ID!
   itemLevel: Int!
   name: String!
@@ -378,12 +380,16 @@ type InventoryItemModel {
 
 type InventoryModel {
   backpack: [InventoryItemModel!]!
+  baseArmor: Int!
   baseDamage: Int!
+  baseHealth: Int!
   characterVersion: Int!
   chest: [InventoryItemModel!]!
   equipped: [EquippedItemModel!]!
   mainHandVisualAssetId: String
+  totalArmor: Int!
   totalDamage: Int!
+  totalHealth: Int!
 }
 
 enum ItemBinding {
@@ -474,9 +480,7 @@ type Query {
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
 
-  """
-  API readiness probe for the foundation milestone.
-  """
+  """API readiness probe for the foundation milestone."""
   status: String!
   viewer: Viewer
 }
@@ -543,12 +547,14 @@ input RetreatInput {
 }
 
 type RewardItemModel {
+  armor: Int!
   binding: ItemBinding!
   compatibleSlots: [EquipmentSlot!]!
   damage: Int!
   damageMax: Int!
   damageMin: Int!
   definitionId: String!
+  health: Int!
   id: ID!
   itemLevel: Int!
   location: ItemLocation!

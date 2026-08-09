@@ -21,6 +21,8 @@ export class RewardItemModel {
   @Field(() => ItemRarity) rarity!: ItemRarity;
   @Field(() => Int) rollQuality!: number;
   @Field(() => Int) damage!: number;
+  @Field(() => Int) armor!: number;
+  @Field(() => Int) health!: number;
   @Field(() => Int) damageMin!: number;
   @Field(() => Int) damageMax!: number;
   @Field(() => [EquipmentSlot]) compatibleSlots!: EquipmentSlot[];
