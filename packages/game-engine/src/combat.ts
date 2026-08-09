@@ -181,6 +181,28 @@ export function actionsFor(archetype: CombatArchetype): CombatAction[] {
   return ACTIONS[archetype]
 }
 
+const ARMOR_EFFECTIVENESS = 100
+
+export function mitigateEnemyDamage(
+  rawDamage: number,
+  armor: number,
+  guardedReduction = 0,
+): { received: number; blocked: number } {
+  const raw = Math.max(0, Math.floor(rawDamage))
+  if (raw === 0) return { received: 0, blocked: 0 }
+  if (guardedReduction >= 1) return { received: 0, blocked: raw }
+
+  const effectiveArmor = Math.max(0, Math.floor(armor))
+  const afterArmor = Math.ceil(
+    raw * (ARMOR_EFFECTIVENESS / (ARMOR_EFFECTIVENESS + effectiveArmor)),
+  )
+  const received = Math.max(
+    1,
+    Math.floor(afterArmor * (1 - Math.max(0, guardedReduction))),
+  )
+  return { received, blocked: raw - received }
+}
+
 export function createBattle(
   archetype: CombatArchetype,
   preparation: Preparation,
@@ -354,16 +376,16 @@ export function resolveTurn(
     })
     next.stunned = false
   } else if (intent.damage > 0) {
-    const armorReduction =
+    const armor =
       (state.preparation === 'SEARCH_ARMORY' ? 4 : 0) +
       (state.levelArmorBonus ?? 0) +
       (state.talentArmorBonus ?? 0)
-    const raw = Math.max(
-      0,
-      intent.damage + (state.enemyDamageBonus ?? 0) - armorReduction,
+    const raw = intent.damage + (state.enemyDamageBonus ?? 0)
+    const { received, blocked } = mitigateEnemyDamage(
+      raw,
+      armor,
+      next.guardedReduction,
     )
-    const received = Math.floor(raw * (1 - next.guardedReduction))
-    const blocked = intent.damage - received
     next.hero.health = Math.max(0, next.hero.health - received)
     next.log.push({
       turn: state.turn,
