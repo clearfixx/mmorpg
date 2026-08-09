@@ -11,7 +11,7 @@ import {
   Sword,
   Swords,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -209,6 +209,73 @@ const preparations = [
   },
 ]
 
+const journeySections: readonly GameSection[] = [
+  'LOBBY',
+  'CHARACTER',
+  'INVENTORY',
+]
+const equipmentSections: readonly GameSection[] = ['LOBBY', 'INVENTORY']
+
+function locationName(location: Location) {
+  if (location === 'CINDERHAVEN_GATE') return 'Попелястий Прихисток'
+  if (location === 'HOLLOW_ROAD') return 'Порожня дорога'
+  return 'Зламана застава'
+}
+
+function JourneyShell({
+  hero,
+  inventory,
+  talents,
+  clan,
+  activeSection,
+  location,
+  availableSections,
+  onNavigate,
+  children,
+}: {
+  hero: Hero
+  inventory: Inventory | null
+  talents: TalentTree | null
+  clan: Clan | null
+  activeSection: GameSection
+  location: Location
+  availableSections?: readonly GameSection[]
+  onNavigate: (section: GameSection) => void
+  children: ReactNode
+}) {
+  return (
+    <GameShell
+      hero={{
+        name: hero.name,
+        level: hero.level,
+        archetype: hero.archetype,
+        experienceIntoLevel: hero.experienceIntoLevel,
+        experienceForNextLevel: hero.experienceForNextLevel,
+        health: hero.baseStats.health,
+        damage: inventory?.totalDamage ?? hero.baseStats.damage,
+        armor: hero.baseStats.armor,
+        gold: hero.gold,
+      }}
+      clanName={clan?.name ?? null}
+      activeSection={activeSection}
+      locationName={locationName(location)}
+      availableSections={
+        availableSections ??
+        (location === 'CINDERHAVEN_GATE' ? undefined : journeySections)
+      }
+      resourceTotal={
+        talents?.resources.reduce(
+          (total, resource) => total + resource.amount,
+          0,
+        ) ?? 0
+      }
+      onNavigate={onNavigate}
+    >
+      {children}
+    </GameShell>
+  )
+}
+
 export function GameJourney() {
   const [hero, setHero] = useState<Hero | null>(null)
   const [world, setWorld] = useState<WorldState | null>(null)
@@ -289,54 +356,80 @@ export function GameJourney() {
 
   if (view === 'EQUIPMENT' && inventory)
     return (
-      <EquipmentScreen
+      <JourneyShell
         hero={hero}
         inventory={inventory}
-        locationName={
-          world.currentLocation === 'CINDERHAVEN_GATE'
-            ? 'Попелястий Прихисток'
-            : 'Зламана застава'
-        }
-        pending={pending}
-        error={error}
-        onBack={() => setView('LOBBY')}
-        onEquip={async (itemId) => {
-          setPending(true)
-          setError(null)
-          try {
-            const next = await executeInventoryMutation(
-              itemId,
-              inventory.characterVersion,
-            )
-            setInventory(next)
-            setTalents((current) =>
-              current
-                ? { ...current, characterVersion: next.characterVersion }
-                : current,
-            )
-            setHero({
-              ...hero,
-              baseStats: { ...hero.baseStats, damage: next.totalDamage },
-            })
-          } catch {
-            const refreshed = await loadJourney()
-            if (!refreshed.redirect) {
-              setHero(refreshed.hero)
-              setWorld(refreshed.world)
-              setInventory(refreshed.inventory)
-              setTalents(refreshed.talents)
-              setClan(refreshed.clan)
-            }
-            setError('Не вдалося екіпірувати предмет. Стан героя вже оновлено.')
-          } finally {
-            setPending(false)
-          }
+        talents={talents}
+        clan={clan}
+        activeSection="INVENTORY"
+        location={world.currentLocation}
+        availableSections={equipmentSections}
+        onNavigate={(section) => {
+          if (section === 'LOBBY') setView('LOBBY')
         }}
-      />
+      >
+        <EquipmentScreen
+          hero={hero}
+          inventory={inventory}
+          locationName={locationName(world.currentLocation)}
+          pending={pending}
+          error={error}
+          onBack={() => setView('LOBBY')}
+          onEquip={async (itemId) => {
+            setPending(true)
+            setError(null)
+            try {
+              const next = await executeInventoryMutation(
+                itemId,
+                inventory.characterVersion,
+              )
+              setInventory(next)
+              setTalents((current) =>
+                current
+                  ? { ...current, characterVersion: next.characterVersion }
+                  : current,
+              )
+              setHero({
+                ...hero,
+                baseStats: { ...hero.baseStats, damage: next.totalDamage },
+              })
+            } catch {
+              const refreshed = await loadJourney()
+              if (!refreshed.redirect) {
+                setHero(refreshed.hero)
+                setWorld(refreshed.world)
+                setInventory(refreshed.inventory)
+                setTalents(refreshed.talents)
+                setClan(refreshed.clan)
+              }
+              setError(
+                'Не вдалося екіпірувати предмет. Стан героя вже оновлено.',
+              )
+            } finally {
+              setPending(false)
+            }
+          }}
+        />
+      </JourneyShell>
     )
 
   if (world.currentLocation === 'HOLLOW_ROAD')
-    return <HollowRoad hero={hero} preparation={world.preparationChoice} />
+    return (
+      <JourneyShell
+        hero={hero}
+        inventory={inventory}
+        talents={talents}
+        clan={clan}
+        activeSection="LOBBY"
+        location={world.currentLocation}
+        onNavigate={(section) => {
+          if (section === 'INVENTORY' || section === 'CHARACTER')
+            setView('EQUIPMENT')
+        }}
+      >
+        <HollowRoad hero={hero} preparation={world.preparationChoice} />
+      </JourneyShell>
+    )
 
   if (world.currentLocation === 'CINDERHAVEN_GATE')
     return (
@@ -580,8 +673,19 @@ export function GameJourney() {
   )
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto grid min-h-screen max-w-6xl lg:grid-cols-[15rem_1fr]">
+    <JourneyShell
+      hero={hero}
+      inventory={inventory}
+      talents={talents}
+      clan={clan}
+      activeSection="LOBBY"
+      location={world.currentLocation}
+      onNavigate={(section) => {
+        if (section === 'INVENTORY' || section === 'CHARACTER')
+          setView('EQUIPMENT')
+      }}
+    >
+      <div className="mx-auto grid w-full max-w-6xl border border-border/70 bg-background/75 lg:grid-cols-[15rem_1fr]">
         <aside className="border-b border-border/70 bg-panel/55 p-6 lg:border-r lg:border-b-0 lg:p-8">
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-moss">
             Особова справа
@@ -765,7 +869,7 @@ export function GameJourney() {
           </div>
         </section>
       </div>
-    </main>
+    </JourneyShell>
   )
 }
 
@@ -832,26 +936,13 @@ function CinderhavenGate({
   }
 
   return (
-    <GameShell
-      hero={{
-        name: hero.name,
-        level: hero.level,
-        archetype: hero.archetype,
-        experienceIntoLevel: hero.experienceIntoLevel,
-        experienceForNextLevel: hero.experienceForNextLevel,
-        health: hero.baseStats.health,
-        damage: inventory?.totalDamage ?? hero.baseStats.damage,
-        armor: hero.baseStats.armor,
-        gold: hero.gold,
-      }}
-      clanName={clan?.name ?? null}
+    <JourneyShell
+      hero={hero}
+      inventory={inventory}
+      talents={talents}
+      clan={clan}
       activeSection={activeSection}
-      resourceTotal={
-        talents?.resources.reduce(
-          (total, resource) => total + resource.amount,
-          0,
-        ) ?? 0
-      }
+      location="CINDERHAVEN_GATE"
       onNavigate={navigate}
     >
       <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/80 p-5 shadow-2xl shadow-black/25 sm:p-7">
@@ -1185,7 +1276,7 @@ function CinderhavenGate({
           Повернутися на заставу
         </Button>
       </section>
-    </GameShell>
+    </JourneyShell>
   )
 }
 
@@ -1656,128 +1747,126 @@ function EquipmentScreen({
     (entry) => entry.slot === 'MAIN_HAND',
   )?.item
   return (
-    <main className="min-h-screen bg-background px-4 py-5 text-foreground sm:px-6">
-      <div className="mx-auto max-w-6xl border border-border/70 bg-panel/60">
-        <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
-          <div>
-            <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
-              {locationName} · спорядження
+    <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
+      <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
+        <div>
+          <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
+            {locationName} · спорядження
+          </p>
+          <h1 className="mt-1 text-xl font-semibold">{hero.name}</h1>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onBack}
+          className="h-9 rounded-sm"
+        >
+          <ArrowLeft aria-hidden="true" /> До застави
+        </Button>
+      </header>
+      <div className="grid lg:grid-cols-[18rem_1fr_20rem]">
+        <aside className="border-b border-border/70 p-5 lg:border-r lg:border-b-0">
+          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+            Показники
+          </p>
+          <dl className="mt-4 space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt>Базовий DMG</dt>
+              <dd className="font-mono">{inventory.baseDamage}</dd>
+            </div>
+            <div className="flex justify-between text-ember">
+              <dt>Зброя</dt>
+              <dd className="font-mono">+{weapon?.damage ?? 0}</dd>
+            </div>
+            <div className="flex justify-between border-t border-border pt-3 font-medium">
+              <dt>Загальний DMG</dt>
+              <dd className="font-mono">{inventory.totalDamage}</dd>
+            </div>
+          </dl>
+          <div className="mt-8">
+            <p className="font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
+              Основна рука
             </p>
-            <h1 className="mt-1 text-xl font-semibold">{hero.name}</h1>
+            <div className="mt-2 border border-ember/50 bg-ember/5 p-3 text-sm">
+              {weapon ? weapon.name : 'Слот порожній'}
+            </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onBack}
-            className="h-9 rounded-sm"
-          >
-            <ArrowLeft aria-hidden="true" /> До застави
-          </Button>
-        </header>
-        <div className="grid lg:grid-cols-[18rem_1fr_20rem]">
-          <aside className="border-b border-border/70 p-5 lg:border-r lg:border-b-0">
-            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
-              Показники
-            </p>
-            <dl className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between">
-                <dt>Базовий DMG</dt>
-                <dd className="font-mono">{inventory.baseDamage}</dd>
-              </div>
-              <div className="flex justify-between text-ember">
-                <dt>Зброя</dt>
-                <dd className="font-mono">+{weapon?.damage ?? 0}</dd>
-              </div>
-              <div className="flex justify-between border-t border-border pt-3 font-medium">
-                <dt>Загальний DMG</dt>
-                <dd className="font-mono">{inventory.totalDamage}</dd>
-              </div>
-            </dl>
-            <div className="mt-8">
-              <p className="font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
-                Основна рука
-              </p>
-              <div className="mt-2 border border-ember/50 bg-ember/5 p-3 text-sm">
-                {weapon ? weapon.name : 'Слот порожній'}
-              </div>
-            </div>
-          </aside>
-          <section className="relative min-h-[34rem] border-b border-border/70 p-6 lg:border-r lg:border-b-0">
-            <p className="text-center font-mono text-[0.65rem] uppercase tracking-[0.22em] text-moss">
-              Динамічний вигляд
-            </p>
-            <div className="relative mx-auto mt-8 h-96 w-52">
-              <div className="absolute top-0 left-1/2 h-16 w-14 -translate-x-1/2 border border-border bg-muted" />
-              <div className="absolute top-16 left-1/2 h-44 w-28 -translate-x-1/2 border border-border bg-panel" />
-              <div className="absolute top-60 left-1/2 h-32 w-24 -translate-x-1/2 border-x border-border bg-panel" />
-              <div className="absolute top-20 right-0 flex h-56 w-10 items-center justify-center border border-ember/60 bg-ember/5 text-ember">
-                {weapon ? (
-                  <Sword className="h-7 w-7" aria-label={weapon.name} />
-                ) : (
-                  <span className="font-mono text-xs">—</span>
-                )}
-              </div>
-            </div>
-            <p className="mt-3 text-center text-xs text-muted-foreground">
-              {inventory.mainHandVisualAssetId ?? 'Базовий вигляд без зброї'}
-            </p>
-          </section>
-          <aside className="p-5">
-            <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
-              Сундук · зброя
-            </p>
-            <div className="mt-4 space-y-3">
-              {inventory.chest.length === 0 ? (
-                <p className="border border-border/70 p-4 text-sm text-muted-foreground">
-                  У сундуку немає доступної зброї.
-                </p>
+        </aside>
+        <section className="relative min-h-[34rem] border-b border-border/70 p-6 lg:border-r lg:border-b-0">
+          <p className="text-center font-mono text-[0.65rem] uppercase tracking-[0.22em] text-moss">
+            Динамічний вигляд
+          </p>
+          <div className="relative mx-auto mt-8 h-96 w-52">
+            <div className="absolute top-0 left-1/2 h-16 w-14 -translate-x-1/2 border border-border bg-muted" />
+            <div className="absolute top-16 left-1/2 h-44 w-28 -translate-x-1/2 border border-border bg-panel" />
+            <div className="absolute top-60 left-1/2 h-32 w-24 -translate-x-1/2 border-x border-border bg-panel" />
+            <div className="absolute top-20 right-0 flex h-56 w-10 items-center justify-center border border-ember/60 bg-ember/5 text-ember">
+              {weapon ? (
+                <Sword className="h-7 w-7" aria-label={weapon.name} />
               ) : (
-                inventory.chest.map((item) => (
-                  <div
-                    key={item.id}
-                    className="border border-border/70 bg-background/45 p-4"
-                  >
-                    <p className="font-medium">{item.name}</p>
-                    <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-ember">
-                      {itemRarityName(item.rarity)} · {item.itemLevel} рівень ·{' '}
-                      {item.setName}
-                    </p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Сила предмета: {item.damage}/{item.damageMax} · якість{' '}
-                      {Math.round((item.rollQuality / 9_999) * 100)}%
-                    </p>
-                    <div className="mt-3 flex justify-between text-sm">
-                      <span className="text-muted-foreground">Зміна DMG</span>
-                      <span
-                        className={`font-mono ${deltaColor(item.damage - (weapon?.damage ?? 0))}`}
-                      >
-                        {formatDelta(item.damage - (weapon?.damage ?? 0))}
-                      </span>
-                    </div>
-                    <Button
-                      type="button"
-                      disabled={pending || item.itemLevel > hero.level}
-                      onClick={() => onEquip(item.id)}
-                      className="mt-4 h-8 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
-                    >
-                      {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
-                    </Button>
-                  </div>
-                ))
+                <span className="font-mono text-xs">—</span>
               )}
             </div>
-            {error ? (
-              <p
-                role="alert"
-                className="mt-4 border-l-2 border-destructive px-3 py-2 text-sm text-destructive"
-              >
-                {error}
+          </div>
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            {inventory.mainHandVisualAssetId ?? 'Базовий вигляд без зброї'}
+          </p>
+        </section>
+        <aside className="p-5">
+          <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+            Сундук · зброя
+          </p>
+          <div className="mt-4 space-y-3">
+            {inventory.chest.length === 0 ? (
+              <p className="border border-border/70 p-4 text-sm text-muted-foreground">
+                У сундуку немає доступної зброї.
               </p>
-            ) : null}
-          </aside>
-        </div>
+            ) : (
+              inventory.chest.map((item) => (
+                <div
+                  key={item.id}
+                  className="border border-border/70 bg-background/45 p-4"
+                >
+                  <p className="font-medium">{item.name}</p>
+                  <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-ember">
+                    {itemRarityName(item.rarity)} · {item.itemLevel} рівень ·{' '}
+                    {item.setName}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Сила предмета: {item.damage}/{item.damageMax} · якість{' '}
+                    {Math.round((item.rollQuality / 9_999) * 100)}%
+                  </p>
+                  <div className="mt-3 flex justify-between text-sm">
+                    <span className="text-muted-foreground">Зміна DMG</span>
+                    <span
+                      className={`font-mono ${deltaColor(item.damage - (weapon?.damage ?? 0))}`}
+                    >
+                      {formatDelta(item.damage - (weapon?.damage ?? 0))}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={pending || item.itemLevel > hero.level}
+                    onClick={() => onEquip(item.id)}
+                    className="mt-4 h-8 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
+                  >
+                    {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+          {error ? (
+            <p
+              role="alert"
+              className="mt-4 border-l-2 border-destructive px-3 py-2 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+        </aside>
       </div>
-    </main>
+    </section>
   )
 }
 

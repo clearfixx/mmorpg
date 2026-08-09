@@ -45,6 +45,8 @@ interface GameShellProps {
   }
   clanName: string | null
   activeSection: GameSection
+  locationName: string
+  availableSections?: readonly GameSection[]
   resourceTotal: number
   onNavigate: (section: GameSection) => void
   children: ReactNode
@@ -66,6 +68,8 @@ export function GameShell({
   hero,
   clanName,
   activeSection,
+  locationName,
+  availableSections,
   resourceTotal,
   onNavigate,
   children,
@@ -76,7 +80,7 @@ export function GameShell({
   )
 
   return (
-    <main className="min-h-screen bg-background pb-4 text-foreground lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)_18rem]">
+    <div className="min-h-screen bg-background pb-4 text-foreground lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)_18rem]">
       <aside className="border-b border-border/80 bg-ink/95 lg:sticky lg:top-0 lg:h-[calc(100vh-2rem)] lg:border-r lg:border-b-0">
         <div className="border-b border-border/80 px-5 py-4">
           <p className="font-serif text-2xl tracking-[0.14em] text-foreground">
@@ -93,12 +97,15 @@ export function GameShell({
           {navigation.map((item) => {
             const Icon = item.icon
             const active = activeSection === item.section
+            const unavailable = availableSections
+              ? !availableSections.includes(item.section)
+              : false
             return (
               <Button
                 key={item.section}
                 type="button"
                 variant="ghost"
-                disabled={'locked' in item && item.locked}
+                disabled={unavailable || ('locked' in item && item.locked)}
                 onClick={() => onNavigate(item.section)}
                 className={`h-10 shrink-0 justify-start rounded-none border-l-2 px-3 text-xs lg:w-full ${
                   active
@@ -193,7 +200,7 @@ export function GameShell({
           <dl className="mt-3 space-y-2 text-xs">
             <div className="flex justify-between">
               <dt className="text-muted-foreground">Локація</dt>
-              <dd>Попелястий Прихисток</dd>
+              <dd>{locationName}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-muted-foreground">Активні події</dt>
@@ -206,7 +213,7 @@ export function GameShell({
           </dl>
         </div>
       </aside>
-    </main>
+    </div>
   )
 }
 
