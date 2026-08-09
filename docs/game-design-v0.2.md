@@ -1,5 +1,12 @@
 # Veilfall — Game Design Baseline
 
+> Historical design baseline. For current implementation use
+> [`../implementation-status.md`](../implementation-status.md); for consolidated
+> approved direction and later decisions use
+> [`product-roadmap.md`](product-roadmap.md). When they differ, the newer roadmap
+> decision takes precedence over this document, while code and migrations define
+> what is actually implemented.
+
 **Status:** approved pre-production baseline  
 **Version:** 0.2  
 **Working title:** Veilfall / «Падіння Завіси»  
