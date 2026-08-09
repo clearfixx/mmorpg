@@ -29,6 +29,7 @@ type BattleModel {
   log: [CombatLogEntryModel!]!
   personalBest: Boolean!
   phase: String!
+  rareEncounter: Boolean!
   status: String!
   turn: Int!
   version: Int!
@@ -526,6 +527,7 @@ enum ResourceRarity {
 }
 
 enum ResourceType {
+  BOSS_INVOCATION_SEAL
   BRONZE
   COAL
   COPPER

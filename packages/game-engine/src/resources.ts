@@ -33,6 +33,7 @@ export const RESOURCE_TYPES = [
   'CURSED_HEART',
   'FALLEN_ELF_EYE',
   'DARK_PRIEST_ASH',
+  'BOSS_INVOCATION_SEAL',
 ] as const
 
 export type ResourceType = (typeof RESOURCE_TYPES)[number]
@@ -124,6 +125,12 @@ export const RESOURCE_DEFINITIONS: Readonly<
     'Попіл Темного жерця',
     'Міфічний залишок ритуального супротивника.',
     'MYTHIC',
+  ),
+  BOSS_INVOCATION_SEAL: bossExclusive(
+    'BOSS_INVOCATION_SEAL',
+    'Печатка виклику Проклятого лицаря',
+    'Переносне закляття, здобуте у рідкісного носія. Відкриває першу ланку ритуального полювання.',
+    'LEGENDARY',
   ),
 }
 

@@ -52,6 +52,7 @@ export interface BattleState {
   talentArmorBonus: number
   encounterTier: number
   personalBest?: boolean
+  rareEncounter?: boolean
   enemyLabel: string
   enemyDamageBonus: number
   hero: {
@@ -184,15 +185,20 @@ export function createBattle(
   encounterTier = 1,
   heroLevel = 1,
   talents = { health: 0, damage: 0, armor: 0 },
+  rareEncounter = false,
 ): BattleState {
   const levelRanks = Math.max(0, Math.floor(heroLevel) - 1)
   const maxHealth =
     { VANGUARD: 140, RANGER: 100, ARCANIST: 90 }[archetype] +
     levelRanks * 8 +
     talents.health
-  const enemyMaxHealth = 125 + (encounterTier - 1) * 40
-  const enemyLabel =
-    encounterTier > 1
+  const ordinaryEnemyHealth = 125 + (encounterTier - 1) * 40
+  const enemyMaxHealth = rareEncounter
+    ? Math.max(Math.ceil(ordinaryEnemyHealth * 2.2), 600 + heroLevel * 15)
+    : ordinaryEnemyHealth
+  const enemyLabel = rareEncounter
+    ? 'Вартовий Забутого Закляття'
+    : encounterTier > 1
       ? 'Загартований Завісою розоритель'
       : 'Спотворений Завісою мародер'
   return {
@@ -207,8 +213,10 @@ export function createBattle(
     talentDamageBonus: talents.damage,
     talentArmorBonus: talents.armor,
     encounterTier,
+    rareEncounter,
     enemyLabel,
-    enemyDamageBonus: (encounterTier - 1) * 6,
+    enemyDamageBonus:
+      (encounterTier - 1) * 6 + (rareEncounter ? 18 + heroLevel : 0),
     hero: { health: maxHealth, maxHealth, resource: 3, maxResource: 5 },
     enemy: { health: enemyMaxHealth, maxHealth: enemyMaxHealth },
     intentIndex: 0,
@@ -221,7 +229,9 @@ export function createBattle(
       {
         turn: 0,
         kind: 'SYSTEM',
-        message: `${enemyLabel} виходить на дорогу.`,
+        message: rareEncounter
+          ? `${enemyLabel} перегороджує шлях. На його обладунках палає печатка виклику.`
+          : `${enemyLabel} виходить на дорогу.`,
       },
     ],
   }

@@ -23,6 +23,11 @@ describe('resource catalog', () => {
       rarity: 'MYTHIC',
       clanContributable: false,
     })
+    expect(resourceDefinition('BOSS_INVOCATION_SEAL')).toMatchObject({
+      origin: 'BOSS_EXCLUSIVE',
+      rarity: 'LEGENDARY',
+      tradeable: true,
+    })
   })
 
   it('allows the current clan progression resources explicitly', () => {

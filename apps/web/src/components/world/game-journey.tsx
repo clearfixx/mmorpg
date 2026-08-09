@@ -139,6 +139,7 @@ type ResourceType =
   | 'CURSED_HEART'
   | 'FALLEN_ELF_EYE'
   | 'DARK_PRIEST_ASH'
+  | 'BOSS_INVOCATION_SEAL'
 
 interface TalentTree {
   characterVersion: number
@@ -3012,6 +3013,7 @@ function resourceName(value: ResourceType): string {
     CURSED_HEART: 'серце Проклятого лицаря',
     FALLEN_ELF_EYE: 'око Павшого ельфа',
     DARK_PRIEST_ASH: 'попіл Темного жерця',
+    BOSS_INVOCATION_SEAL: 'печатка виклику Проклятого лицаря',
   }[value]
 }
 

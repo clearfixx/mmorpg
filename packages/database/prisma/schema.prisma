@@ -129,6 +129,7 @@ enum ResourceType {
   CURSED_HEART
   FALLEN_ELF_EYE
   DARK_PRIEST_ASH
+  BOSS_INVOCATION_SEAL
 }
 
 enum ClanRole {
@@ -530,6 +531,9 @@ model CharacterWorldState {
   cinderhavenUnlocked Boolean            @default(false) @map("cinderhaven_unlocked")
   highestClearedTier  Int                @default(0) @map("highest_cleared_tier")
   guideCheckpointTier Int                @default(1) @map("guide_checkpoint_tier")
+  rareEncounterWeek   String?            @map("rare_encounter_week") @db.VarChar(10)
+  rareEncounterChecks Int                @default(0) @map("rare_encounter_checks")
+  rareEncounterCount  Int                @default(0) @map("rare_encounter_count")
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   character           Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)

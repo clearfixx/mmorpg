@@ -39,6 +39,7 @@ export class BattleModel {
   @Field() phase!: string;
   @Field(() => Int) encounterTier!: number;
   @Field(() => Boolean) personalBest!: boolean;
+  @Field(() => Boolean) rareEncounter!: boolean;
   @Field() enemyName!: string;
   @Field(() => Int) version!: number;
   @Field(() => Int) turn!: number;

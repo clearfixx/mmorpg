@@ -36,6 +36,24 @@ export function expeditionCheckpointCost(tier: number): number {
   return safeTier * safeTier * 25;
 }
 
+export function rareEncounterWeek(now: Date): string {
+  const day = now.getUTCDay() || 7;
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() - day + 1);
+  return monday.toISOString().slice(0, 10);
+}
+
+export function shouldSpawnRareEncounter(input: {
+  level: number;
+  encounters: number;
+  roll: number;
+}): boolean {
+  if (input.level < 30 || input.encounters >= 5) return false;
+  if (input.encounters === 0) return true;
+  const chances = [10_000, 2_500, 1_200, 600, 300];
+  return input.roll % 10_000 < (chances[input.encounters] ?? 0);
+}
+
 @Injectable()
 export class CombatService {
   constructor(
@@ -222,6 +240,11 @@ export class CombatService {
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
+    const rareEncounter = await this.reserveRareEncounter(
+      context.characterId,
+      character.level,
+      context.checkpointTier,
+    );
     const state = createBattle(
       character.archetype,
       context.preparation,
@@ -229,12 +252,15 @@ export class CombatService {
       context.checkpointTier,
       character.level,
       bonuses,
+      rareEncounter,
     );
     const battle = await this.prisma.client.battle.create({
       data: {
         characterId: context.characterId,
         activeCharacterId: context.characterId,
-        encounterId: `hollow-road-tier-${context.checkpointTier}`,
+        encounterId: rareEncounter
+          ? 'rare-seal-warden'
+          : `hollow-road-tier-${context.checkpointTier}`,
         seed: 1701 + context.checkpointTier,
         state: state as unknown as Prisma.InputJsonValue,
       },
@@ -427,6 +453,11 @@ export class CombatService {
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
     const previousState = previous.state as unknown as BattleState;
     const tier = (previousState.encounterTier ?? 1) + 1;
+    const rareEncounter = await this.reserveRareEncounter(
+      characterId,
+      character.level,
+      tier,
+    );
     const next = createBattle(
       character.archetype,
       previousState.preparation,
@@ -434,6 +465,7 @@ export class CombatService {
       tier,
       character.level,
       bonuses,
+      rareEncounter,
     );
     const battle = await this.prisma.client.$transaction(async (tx) => {
       const acknowledged = await tx.battle.updateMany({
@@ -455,7 +487,9 @@ export class CombatService {
         data: {
           characterId,
           activeCharacterId: characterId,
-          encounterId: `hollow-road-tier-${tier}`,
+          encounterId: rareEncounter
+            ? 'rare-seal-warden'
+            : `hollow-road-tier-${tier}`,
           seed: 1701 + tier,
           state: next as unknown as Prisma.InputJsonValue,
         },
@@ -692,6 +726,7 @@ export class CombatService {
       phase,
       encounterTier: state.encounterTier ?? 1,
       personalBest: state.personalBest ?? false,
+      rareEncounter: state.rareEncounter ?? false,
       enemyName:
         state.enemyLabel ??
         ((state.encounterTier ?? 1) > 1
@@ -739,5 +774,43 @@ export class CombatService {
         (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6 +
         equipment.armor,
     };
+  }
+
+  private async reserveRareEncounter(
+    characterId: string,
+    level: number,
+    tier: number,
+  ): Promise<boolean> {
+    if (level < 30) return false;
+    const week = rareEncounterWeek(new Date());
+    return this.prisma.client.$transaction(async (tx) => {
+      const current = await tx.characterWorldState.findUniqueOrThrow({
+        where: { characterId },
+      });
+      const checks =
+        current.rareEncounterWeek === week ? current.rareEncounterChecks : 0;
+      const encounters =
+        current.rareEncounterWeek === week ? current.rareEncounterCount : 0;
+      const digest = createHash('sha256')
+        .update(`${characterId}:${week}:${checks}:${tier}`)
+        .digest();
+      const rare = shouldSpawnRareEncounter({
+        level,
+        encounters,
+        roll: digest.readUInt16BE(0),
+      });
+      const updated = await tx.characterWorldState.updateMany({
+        where: { characterId, version: current.version },
+        data: {
+          rareEncounterWeek: week,
+          rareEncounterChecks: checks + 1,
+          rareEncounterCount: encounters + (rare ? 1 : 0),
+          version: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1)
+        throw new ConflictException('Rare encounter state changed; retry');
+      return rare;
+    });
   }
 }

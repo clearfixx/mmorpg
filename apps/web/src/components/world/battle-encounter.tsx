@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase encounterTier personalBest enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier personalBest rareEncounter enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
@@ -16,6 +16,7 @@ interface Battle {
   phase: string
   encounterTier: number
   personalBest: boolean
+  rareEncounter: boolean
   enemyName: string
   version: number
   turn: number
@@ -47,7 +48,10 @@ interface BattleReward {
   claimId: string
   experience: number
   gold: number
-  resources: Array<{ type: 'IRON' | 'COPPER' | 'BRONZE'; amount: number }>
+  resources: Array<{
+    type: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL'
+    amount: number
+  }>
   item: {
     id: string
     name: string
@@ -370,6 +374,18 @@ export function BattleEncounter({
             стан {battle.version}
           </span>
         </header>
+        {battle.rareEncounter ? (
+          <section className="border-b border-ember/50 bg-ember/5 px-5 py-4">
+            <p className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-ember">
+              Рідкісна зустріч · доступна з 30 рівня
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Носій печаті значно сильніший за звичайних ворогів. Перемога
+              гарантовано принесе переносне закляття для виклику Проклятого
+              лицаря.
+            </p>
+          </section>
+        ) : null}
         <section className="grid gap-px bg-border/60 md:grid-cols-2">
           <HealthPanel
             portrait="В"
@@ -379,8 +395,16 @@ export function BattleEncounter({
             secondary={`${battle.hero.resource}/${battle.hero.maxResource} ресурсу`}
           />
           <HealthPanel
-            portrait={battle.encounterTier > 1 ? 'Р' : 'М'}
-            title={battle.encounterTier > 1 ? 'Розоритель' : 'Мародер'}
+            portrait={
+              battle.rareEncounter ? 'З' : battle.encounterTier > 1 ? 'Р' : 'М'
+            }
+            title={
+              battle.rareEncounter
+                ? 'Носій печаті'
+                : battle.encounterTier > 1
+                  ? 'Розоритель'
+                  : 'Мародер'
+            }
             value={battle.enemy.health}
             max={battle.enemy.maxHealth}
             secondary="важкий тесак"
@@ -393,6 +417,7 @@ export function BattleEncounter({
                 status={battle.status}
                 encounterTier={battle.encounterTier}
                 personalBest={battle.personalBest}
+                rareEncounter={battle.rareEncounter}
                 turns={battle.turn}
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
@@ -520,6 +545,7 @@ function BattleResult({
   status,
   encounterTier,
   personalBest,
+  rareEncounter,
   turns,
   health,
   maxHealth,
@@ -534,6 +560,7 @@ function BattleResult({
   status: string
   encounterTier: number
   personalBest: boolean
+  rareEncounter: boolean
   turns: number
   health: number
   maxHealth: number
@@ -561,6 +588,12 @@ function BattleResult({
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Ходів: {turns}. Здоров’я героя: {health}/{maxHealth}.
       </p>
+      {won && rareEncounter ? (
+        <p className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3 text-sm leading-6 text-ember">
+          Вартовий переможений. Печатка виклику Проклятого лицаря буде серед
+          гарантованих трофеїв.
+        </p>
+      ) : null}
       {won && personalBest ? (
         <GuideCheckpointOffer
           encounterTier={encounterTier}
@@ -751,8 +784,15 @@ function RewardStat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function resourceName(type?: 'IRON' | 'COPPER' | 'BRONZE'): string {
-  return { IRON: 'Залізо', COPPER: 'Мідь', BRONZE: 'Бронза' }[type ?? 'IRON']
+function resourceName(
+  type?: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL',
+): string {
+  return {
+    IRON: 'Залізо',
+    COPPER: 'Мідь',
+    BRONZE: 'Бронза',
+    BOSS_INVOCATION_SEAL: 'Печатка виклику',
+  }[type ?? 'IRON']
 }
 
 function HealthPanel({

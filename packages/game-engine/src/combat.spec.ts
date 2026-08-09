@@ -34,4 +34,21 @@ describe('deterministic first battle', () => {
     expect(state.levelArmorBonus).toBe(2)
     expect(resolveTurn(state, 'STRIKE').enemy.health).toBe(103)
   })
+
+  it('creates a distinctly stronger rare seal bearer', () => {
+    const ordinary = createBattle('VANGUARD', 'INSPECT_TRACKS', 0, 3, 30)
+    const rare = createBattle(
+      'VANGUARD',
+      'INSPECT_TRACKS',
+      0,
+      3,
+      30,
+      undefined,
+      true,
+    )
+    expect(rare.rareEncounter).toBe(true)
+    expect(rare.enemyLabel).toBe('Вартовий Забутого Закляття')
+    expect(rare.enemy.maxHealth).toBeGreaterThan(ordinary.enemy.maxHealth * 2)
+    expect(rare.enemyDamageBonus).toBeGreaterThan(ordinary.enemyDamageBonus)
+  })
 })
