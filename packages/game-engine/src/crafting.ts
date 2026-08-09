@@ -56,12 +56,31 @@ export const CRAFTING_RECIPES = {
     output: { resourceType: 'VEIL_STEEL', amount: 1 },
     public: true,
   },
+  'tempered-veil-steel-v1': {
+    id: 'tempered-veil-steel-v1',
+    name: 'Гартована сталь Завіси',
+    description:
+      'Прихована формула, що замінює грубу бронзу стабілізованим каталізатором.',
+    station: 'FORGE',
+    durationSeconds: 20 * 60,
+    ingredients: [
+      { resourceType: 'IRON', amount: 6 },
+      { resourceType: 'COAL', amount: 2 },
+      { resourceType: 'STABILIZED_CATALYST', amount: 1 },
+    ],
+    output: { resourceType: 'VEIL_STEEL', amount: 1 },
+    public: false,
+  },
 } as const satisfies Record<string, CraftingRecipe>
 
 export type CraftingRecipeId = keyof typeof CRAFTING_RECIPES
 
 export function craftingRecipe(id: string): CraftingRecipe | null {
   return CRAFTING_RECIPES[id as CraftingRecipeId] ?? null
+}
+
+export function publicCraftingRecipes(): CraftingRecipe[] {
+  return Object.values(CRAFTING_RECIPES).filter((recipe) => recipe.public)
 }
 
 export function scaledIngredients(

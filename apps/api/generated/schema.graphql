@@ -249,6 +249,7 @@ enum CraftJobStatus {
 type CraftingRecipeModel {
   affordable: Boolean!
   description: String!
+  discovered: Boolean!
   durationSeconds: Int!
   id: String!
   ingredients: [RecipeIngredientModel!]!

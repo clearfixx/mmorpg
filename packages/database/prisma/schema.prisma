@@ -165,21 +165,21 @@ model User {
 }
 
 model Character {
-  id                     String                @id @default(uuid()) @db.Uuid
-  userId                 String                @unique @map("user_id") @db.Uuid
-  name                   String                @db.VarChar(24)
-  nameKey                String                @unique @map("name_key") @db.VarChar(64)
+  id                     String                     @id @default(uuid()) @db.Uuid
+  userId                 String                     @unique @map("user_id") @db.Uuid
+  name                   String                     @db.VarChar(24)
+  nameKey                String                     @unique @map("name_key") @db.VarChar(64)
   archetype              CharacterArchetype
-  origin                 CharacterOrigin       @default(ROAD_SURVIVOR)
-  avatarMode             AvatarMode            @default(STATIC) @map("avatar_mode")
-  staticAvatarId         String?               @map("static_avatar_id") @db.VarChar(64)
-  level                  Int                   @default(1)
-  experience             Int                   @default(0)
-  gold                   Int                   @default(0)
-  version                Int                   @default(1)
-  createdAt              DateTime              @default(now()) @map("created_at")
-  updatedAt              DateTime              @updatedAt @map("updated_at")
-  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  origin                 CharacterOrigin            @default(ROAD_SURVIVOR)
+  avatarMode             AvatarMode                 @default(STATIC) @map("avatar_mode")
+  staticAvatarId         String?                    @map("static_avatar_id") @db.VarChar(64)
+  level                  Int                        @default(1)
+  experience             Int                        @default(0)
+  gold                   Int                        @default(0)
+  version                Int                        @default(1)
+  createdAt              DateTime                   @default(now()) @map("created_at")
+  updatedAt              DateTime                   @updatedAt @map("updated_at")
+  user                   User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   worldState             CharacterWorldState?
   worldCommands          WorldCommand[]
   battles                Battle[]
@@ -198,6 +198,7 @@ model Character {
   clanBossRewardClaims   ClanBossRewardClaim[]
   craftJobs              CraftJob[]
   craftCommands          CraftCommand[]
+  recipeKnowledge        CharacterRecipeKnowledge[]
 
   @@map("characters")
 }
@@ -375,19 +376,19 @@ model TalentCommand {
 }
 
 model CraftJob {
-  id             String           @id @default(uuid()) @db.Uuid
-  characterId    String           @map("character_id") @db.Uuid
-  recipeId       String           @map("recipe_id") @db.VarChar(64)
-  station        CraftingStation
-  activeStation  CraftingStation? @map("active_station")
-  status         CraftJobStatus   @default(ACTIVE)
-  quantity       Int              @default(1)
-  outputType     ResourceType     @map("output_type")
-  outputAmount   Int              @map("output_amount")
-  startedAt      DateTime         @default(now()) @map("started_at")
-  completesAt    DateTime         @map("completes_at")
-  claimedAt      DateTime?        @map("claimed_at")
-  character      Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  id            String           @id @default(uuid()) @db.Uuid
+  characterId   String           @map("character_id") @db.Uuid
+  recipeId      String           @map("recipe_id") @db.VarChar(64)
+  station       CraftingStation
+  activeStation CraftingStation? @map("active_station")
+  status        CraftJobStatus   @default(ACTIVE)
+  quantity      Int              @default(1)
+  outputType    ResourceType     @map("output_type")
+  outputAmount  Int              @map("output_amount")
+  startedAt     DateTime         @default(now()) @map("started_at")
+  completesAt   DateTime         @map("completes_at")
+  claimedAt     DateTime?        @map("claimed_at")
+  character     Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@unique([characterId, activeStation])
   @@index([characterId, status, completesAt])
@@ -406,6 +407,19 @@ model CraftCommand {
 
   @@unique([characterId, idempotencyKey])
   @@map("craft_commands")
+}
+
+model CharacterRecipeKnowledge {
+  id           String    @id @default(uuid()) @db.Uuid
+  characterId  String    @map("character_id") @db.Uuid
+  recipeId     String    @map("recipe_id") @db.VarChar(64)
+  source       String    @db.VarChar(64)
+  discoveredAt DateTime  @default(now()) @map("discovered_at")
+  character    Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, recipeId])
+  @@index([characterId, discoveredAt])
+  @@map("character_recipe_knowledge")
 }
 
 model CharacterResource {

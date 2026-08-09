@@ -680,6 +680,27 @@ describe('Health (e2e)', () => {
     expect(craftState.text).toContain('"id":"veil-steel-v1"');
     expect(craftState.text).toContain('"station":"FORGE"');
     expect(craftState.text).toContain('"affordable":true');
+    expect(craftState.text).not.toContain('tempered-veil-steel-v1');
+
+    const unknownRecipe = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Start($input: StartCraftInput!) { startCraft(input: $input) { jobs { id } } }',
+        variables: {
+          input: {
+            recipeId: 'tempered-veil-steel-v1',
+            quantity: 1,
+            idempotencyKey: `unknown-recipe-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const unknownRecipePayload = JSON.parse(unknownRecipe.text) as {
+      errors?: unknown[];
+    };
+    expect(unknownRecipePayload.errors).toBeDefined();
 
     const forgeKey = `craft-forge-${Date.now()}`;
     const startForge = () =>
@@ -775,6 +796,46 @@ describe('Health (e2e)', () => {
         },
       }),
     ).toBe(7);
+
+    const alchemyJob = await prisma.client.craftJob.findFirstOrThrow({
+      where: {
+        characterId: combatUser.character!.id,
+        recipeId: 'stabilized-catalyst-v1',
+      },
+    });
+    const claimAlchemy = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Claim($input: ClaimCraftInput!) { claimCraft(input: $input) { recipes { id discovered } } }',
+        variables: {
+          input: {
+            craftJobId: alchemyJob.id,
+            idempotencyKey: `claim-alchemy-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const claimAlchemyPayload = JSON.parse(claimAlchemy.text) as {
+      data: {
+        claimCraft: { recipes: Array<{ id: string; discovered: boolean }> };
+      };
+    };
+    expect(claimAlchemyPayload.data.claimCraft.recipes).toContainEqual({
+      id: 'tempered-veil-steel-v1',
+      discovered: true,
+    });
+    expect(
+      await prisma.client.characterRecipeKnowledge.findUnique({
+        where: {
+          characterId_recipeId: {
+            characterId: combatUser.character!.id,
+            recipeId: 'tempered-veil-steel-v1',
+          },
+        },
+      }),
+    ).toMatchObject({ source: 'CATALYST_MASTERY' });
     const talentKey = `talent-${Date.now()}`;
     const upgradeTalent = () =>
       request(server)
@@ -803,7 +864,7 @@ describe('Health (e2e)', () => {
       await prisma.client.resourceLedgerEntry.count({
         where: { characterId: rewardedCharacter.id },
       }),
-    ).toBe(10);
+    ).toBe(11);
 
     const talentResult = JSON.parse(firstTalent.text) as {
       data: { upgradeTalent: { characterVersion: number } };

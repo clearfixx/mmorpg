@@ -4,6 +4,7 @@ import {
   CRAFTING_RECIPES,
   craftingDurationSeconds,
   craftingRecipe,
+  publicCraftingRecipes,
   scaledIngredients,
 } from './crafting'
 
@@ -26,5 +27,15 @@ describe('crafting recipes', () => {
   it('does not disclose unknown recipe identifiers', () => {
     expect(craftingRecipe('veil-steel-v1')).not.toBeNull()
     expect(craftingRecipe('hidden-ascension')).toBeNull()
+    expect(publicCraftingRecipes().map((recipe) => recipe.id)).not.toContain(
+      'tempered-veil-steel-v1',
+    )
+  })
+
+  it('keeps hidden formulas available to the authoritative engine', () => {
+    expect(craftingRecipe('tempered-veil-steel-v1')).toMatchObject({
+      public: false,
+      station: 'FORGE',
+    })
   })
 })

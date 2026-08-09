@@ -36,7 +36,16 @@ export class CraftingService {
   ): Promise<CraftingStateModel> {
     const characterId = await this.characters.requireIdForUser(userId);
     const recipe = craftingRecipe(input.recipeId);
-    if (!recipe?.public) throw new BadRequestException('Recipe is unknown');
+    if (!recipe) throw new BadRequestException('Recipe is unknown');
+    if (!recipe.public) {
+      const knowledge =
+        await this.prisma.client.characterRecipeKnowledge.findUnique({
+          where: {
+            characterId_recipeId: { characterId, recipeId: recipe.id },
+          },
+        });
+      if (!knowledge) throw new BadRequestException('Recipe is unknown');
+    }
     const payloadHash = this.hash(`START:${recipe.id}:${input.quantity}`);
     const existing = await this.findCommand(characterId, input.idempotencyKey);
     if (existing)
@@ -171,6 +180,22 @@ export class CraftingService {
           claimedAt: new Date(),
         },
       });
+      if (job.outputType === 'STABILIZED_CATALYST') {
+        await tx.characterRecipeKnowledge.upsert({
+          where: {
+            characterId_recipeId: {
+              characterId,
+              recipeId: 'tempered-veil-steel-v1',
+            },
+          },
+          create: {
+            characterId,
+            recipeId: 'tempered-veil-steel-v1',
+            source: 'CATALYST_MASTERY',
+          },
+          update: {},
+        });
+      }
       await tx.craftCommand.create({
         data: {
           characterId,
@@ -185,12 +210,15 @@ export class CraftingService {
   }
 
   private async read(characterId: string): Promise<CraftingStateModel> {
-    const [balances, jobs] = await Promise.all([
+    const [balances, jobs, knowledge] = await Promise.all([
       this.prisma.client.characterResource.findMany({ where: { characterId } }),
       this.prisma.client.craftJob.findMany({
         where: { characterId },
         orderBy: { startedAt: 'desc' },
         take: 20,
+      }),
+      this.prisma.client.characterRecipeKnowledge.findMany({
+        where: { characterId },
       }),
     ]);
     const balanceMap = new Map(
@@ -201,30 +229,34 @@ export class CraftingService {
         .filter((job) => job.activeStation !== null)
         .map((job) => job.activeStation),
     );
+    const knownRecipeIds = new Set(knowledge.map((entry) => entry.recipeId));
     return {
-      recipes: Object.values(CRAFTING_RECIPES).map((recipe) => {
-        const ingredients = recipe.ingredients.map((ingredient) => ({
-          resourceType: ingredient.resourceType,
-          name: resourceDefinition(ingredient.resourceType).name,
-          amount: ingredient.amount,
-          available: balanceMap.get(ingredient.resourceType) ?? 0,
-        }));
-        return {
-          id: recipe.id,
-          name: recipe.name,
-          description: recipe.description,
-          station: recipe.station,
-          durationSeconds: recipe.durationSeconds,
-          ingredients,
-          outputType: recipe.output.resourceType,
-          outputName: resourceDefinition(recipe.output.resourceType).name,
-          outputAmount: recipe.output.amount,
-          affordable: ingredients.every(
-            (ingredient) => ingredient.available >= ingredient.amount,
-          ),
-          stationAvailable: !occupied.has(recipe.station),
-        };
-      }),
+      recipes: Object.values(CRAFTING_RECIPES)
+        .filter((recipe) => recipe.public || knownRecipeIds.has(recipe.id))
+        .map((recipe) => {
+          const ingredients = recipe.ingredients.map((ingredient) => ({
+            resourceType: ingredient.resourceType,
+            name: resourceDefinition(ingredient.resourceType).name,
+            amount: ingredient.amount,
+            available: balanceMap.get(ingredient.resourceType) ?? 0,
+          }));
+          return {
+            id: recipe.id,
+            name: recipe.name,
+            description: recipe.description,
+            station: recipe.station,
+            durationSeconds: recipe.durationSeconds,
+            ingredients,
+            outputType: recipe.output.resourceType,
+            outputName: resourceDefinition(recipe.output.resourceType).name,
+            outputAmount: recipe.output.amount,
+            affordable: ingredients.every(
+              (ingredient) => ingredient.available >= ingredient.amount,
+            ),
+            stationAvailable: !occupied.has(recipe.station),
+            discovered: !recipe.public,
+          };
+        }),
       jobs: jobs.map((job) => {
         const recipe = craftingRecipe(job.recipeId);
         const remainingSeconds = Math.max(

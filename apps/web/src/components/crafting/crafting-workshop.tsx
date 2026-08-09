@@ -1,6 +1,12 @@
 'use client'
 
-import { ArrowLeft, FlaskConical, Hammer, PackageCheck } from 'lucide-react'
+import {
+  ArrowLeft,
+  FlaskConical,
+  Hammer,
+  PackageCheck,
+  Sparkles,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -28,6 +34,7 @@ interface CraftingRecipe {
   outputAmount: number
   affordable: boolean
   stationAvailable: boolean
+  discovered: boolean
 }
 
 interface CraftJob {
@@ -55,7 +62,7 @@ const craftingFields = `
   recipes {
     id name description station durationSeconds
     ingredients { resourceType name amount available }
-    outputType outputName outputAmount affordable stationAvailable
+    outputType outputName outputAmount affordable stationAvailable discovered
   }
   jobs {
     id recipeId recipeName station status quantity
@@ -261,6 +268,12 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                   <Hammer className="shrink-0 text-ember" aria-hidden="true" />
                 )}
               </div>
+              {recipe.discovered ? (
+                <p className="mt-3 flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-wider text-moss">
+                  <Sparkles className="size-3.5" aria-hidden="true" />
+                  Особисте відкриття
+                </p>
+              ) : null}
               <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">
                 {recipe.description}
               </p>

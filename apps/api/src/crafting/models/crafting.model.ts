@@ -29,6 +29,7 @@ export class CraftingRecipeModel {
   @Field(() => Int) outputAmount!: number;
   @Field() affordable!: boolean;
   @Field() stationAvailable!: boolean;
+  @Field() discovered!: boolean;
 }
 
 @ObjectType()
