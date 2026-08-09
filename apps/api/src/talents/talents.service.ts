@@ -32,7 +32,7 @@ const DEFINITIONS = {
     maxRank: 10,
     advanced: false,
   },
-  [TalentType.ASCENDED_VITALITY]: {
+  [TalentType.AWAKENED_VITALITY]: {
     name: 'Непохитна кров',
     description: '+30 до максимального здоров’я за ранг.',
     requiredLevel: 30,
@@ -40,7 +40,7 @@ const DEFINITIONS = {
     maxRank: 5,
     advanced: true,
   },
-  [TalentType.ASCENDED_POWER]: {
+  [TalentType.AWAKENED_POWER]: {
     name: 'Воля руйнівника',
     description: '+8 до шкоди за ранг.',
     requiredLevel: 30,
@@ -48,7 +48,7 @@ const DEFINITIONS = {
     maxRank: 5,
     advanced: true,
   },
-  [TalentType.ASCENDED_RESILIENCE]: {
+  [TalentType.AWAKENED_RESILIENCE]: {
     name: 'Шкіра Завіси',
     description: '+6 до броні за ранг.',
     requiredLevel: 30,

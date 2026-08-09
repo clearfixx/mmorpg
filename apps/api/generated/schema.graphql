@@ -264,11 +264,14 @@ type EquippedItemModel {
 type InventoryItemModel {
   binding: String!
   damage: Int!
+  damageMax: Int!
+  damageMin: Int!
   definitionId: String!
   id: ID!
   itemLevel: Int!
   name: String!
   rarity: String!
+  rollQuality: Int!
   setName: String!
   visualAssetId: String!
 }
@@ -298,6 +301,11 @@ enum ItemLocation {
 
 enum ItemRarity {
   COMMON
+  DIVINE
+  EPIC
+  LEGENDARY
+  MYTHIC
+  RARE
   UNCOMMON
 }
 
@@ -389,12 +397,15 @@ input RetreatInput {
 type RewardItemModel {
   binding: ItemBinding!
   damage: Int!
+  damageMax: Int!
+  damageMin: Int!
   definitionId: String!
   id: ID!
   itemLevel: Int!
   location: ItemLocation!
   name: String!
   rarity: ItemRarity!
+  rollQuality: Int!
   setName: String!
   visualAssetId: String!
 }
@@ -437,9 +448,9 @@ type TalentTreeModel {
 }
 
 enum TalentType {
-  ASCENDED_POWER
-  ASCENDED_RESILIENCE
-  ASCENDED_VITALITY
+  AWAKENED_POWER
+  AWAKENED_RESILIENCE
+  AWAKENED_VITALITY
   POWER
   RESILIENCE
   VITALITY

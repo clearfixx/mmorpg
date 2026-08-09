@@ -59,7 +59,7 @@ Text carries the world, choices, tactics, and consequences. Visual systems make 
 3. **Clan contributor:** joins a clan and begins contributing to shared goals.
 4. **Clan veteran:** participates in bosses and gains advanced resources.
 5. **Endgame specialist:** develops advanced talents, skills, runes, and optimized sets.
-6. **Ascended hero:** creates mythic and divine equipment capable of dominating ordinary PvP.
+6. **Awakened specialist:** develops advanced knowledge and creates Ascended mythic or divine equipment capable of dominating ordinary PvP.
 
 ### 3.2 Catch-up principle
 
@@ -115,7 +115,12 @@ Talents are permanent passive development.
 
 The introductory talent tree uses accessible solo materials such as iron, copper, bronze, leather, timber, basic crystals, and gold.
 
-At an indicative threshold around level 30, an advanced tree opens. Its upgrades require resources obtained primarily or exclusively from clan bosses and clan activities. This marks the beginning of the real endgame.
+At an indicative threshold around level 30, an advanced knowledge system called
+**Awakening** begins to open. Its branches add combat techniques, research,
+recipe discovery, exploration, gathering, and specialization. Awakening expands
+how a hero uses equipment; equipment remains the primary source of raw combat
+power. Advanced upgrades require resources obtained primarily or exclusively
+from bosses and clan activities. This marks the beginning of the real endgame.
 
 New levels unlock access to additional talent nodes and tiers. A new character cannot immediately purchase endgame power even if resources are transferred to it.
 
@@ -286,13 +291,15 @@ Baseline scale:
 
 1. Common
 2. Uncommon
-3. Special
-4. Rare
-5. Heroic
-6. Legendary
-7. Epic
-8. Mythic
-9. Divine
+3. Rare
+4. Epic
+5. Legendary
+6. Mythic
+7. Divine
+
+At the same item level, the minimum primary roll of a higher rarity must exceed
+the maximum primary roll of the preceding rarity. Item level ranges from 1 to 99. A level-1 item of one rarity is not required to exceed a level-99 item of
+the preceding rarity, because that would make item level meaningless.
 
 `Collectible` is an independent property, not a power tier.
 
@@ -318,9 +325,10 @@ Runes are acquired primarily through periodic clan competition. A rune event may
 
 Higher difficulty introduces mechanics, not only larger health and damage values.
 
-### 9.3 Ascended enchantments
+### 9.3 Equipment Ascension
 
-Ascension is the highest personal-power system. It is separate from rarity, runes, and ordinary upgrades.
+Ascension is reserved for equipment and is the highest personal-power system. It
+is separate from hero Awakening, rarity, runes, and ordinary upgrades.
 
 Ascended enchantments may exist at multiple qualities up to mythic and divine. The highest tiers require catastrophically expensive combinations of long-term, seasonal, boss, clan, and economic resources.
 
@@ -328,7 +336,11 @@ There is no fixed limit on the number of ascended items a hero may equip. A comp
 
 Ascension works at full strength in standard PvP and against weaker players. Mythic and divine effects may alter mechanics rather than only add raw percentages.
 
-Major ascensions should appear in the world chronicle and player profile.
+Major Ascensions should be transformative rather than incremental. Months of
+discovery and material collection must produce a very large primary-stat
+increase, changed or unique mechanics, a persistent artifact-development path,
+and a long useful life. Major Ascensions should appear in the world chronicle
+and player profile.
 
 ## 10. Inventory, risk, and storage
 
@@ -585,7 +597,7 @@ The following remain configurable rather than frozen:
 - profession count and specialization limits;
 - rune event cadence;
 - trade commission resources and amounts;
-- ascension formulas;
+- equipment Ascension formulas;
 - PvP league level bands;
 - binding rules for ordinary high-rarity items;
 - multi-account policy;

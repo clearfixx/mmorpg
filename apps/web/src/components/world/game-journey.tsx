@@ -49,7 +49,10 @@ interface InventoryItem {
   name: string
   itemLevel: number
   rarity: string
+  rollQuality: number
   damage: number
+  damageMin: number
+  damageMax: number
   binding: string
   setName: string
   visualAssetId: string
@@ -69,9 +72,9 @@ type TalentType =
   | 'VITALITY'
   | 'POWER'
   | 'RESILIENCE'
-  | 'ASCENDED_VITALITY'
-  | 'ASCENDED_POWER'
-  | 'ASCENDED_RESILIENCE'
+  | 'AWAKENED_VITALITY'
+  | 'AWAKENED_POWER'
+  | 'AWAKENED_RESILIENCE'
 type ResourceType = 'IRON' | 'COPPER' | 'BRONZE' | 'VEIL_ECHO'
 
 interface TalentTree {
@@ -922,7 +925,7 @@ function CinderhavenGate({
             </div>
             <div className="mt-8 border-l-2 border-ember bg-ember/5 px-4 py-4">
               <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ember">
-                Вознесені таланти
+                Древо Пробудження
               </p>
               <h3 className="mt-2 text-lg font-medium">Сила за межею</h3>
               <p className="mt-2 max-w-2xl text-xs leading-5 text-muted-foreground">
@@ -959,7 +962,7 @@ function CinderhavenGate({
                         {talent.unlocked
                           ? talent.rank >= talent.maxRank
                             ? 'Максимум'
-                            : `Вознести · ${talent.costAmount} ${resourceName(talent.costResource)}`
+                            : `Пробудити · ${talent.costAmount} ${resourceName(talent.costResource)}`
                           : `Відкриється на ${talent.requiredLevel} рівні`}
                       </Button>
                     </div>
@@ -1600,7 +1603,12 @@ function EquipmentScreen({
                   >
                     <p className="font-medium">{item.name}</p>
                     <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-ember">
-                      {item.rarity} · {item.setName}
+                      {itemRarityName(item.rarity)} · {item.itemLevel} рівень ·{' '}
+                      {item.setName}
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Сила предмета: {item.damage}/{item.damageMax} · якість{' '}
+                      {Math.round((item.rollQuality / 9_999) * 100)}%
                     </p>
                     <div className="mt-3 flex justify-between text-sm">
                       <span className="text-muted-foreground">Зміна DMG</span>
@@ -1647,7 +1655,7 @@ async function executeInventoryMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } }',
+        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } } } }',
       variables: {
         input: {
           itemId,
@@ -1683,7 +1691,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity damage binding setName visualAssetId } backpack { id name itemLevel rarity damage binding setName visualAssetId } equipped { slot item { id name itemLevel rarity damage binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       }),
     })
     const payload = (await response.json()) as {
@@ -1943,6 +1951,20 @@ function resourceName(value: ResourceType): string {
     BRONZE: 'бронза',
     VEIL_ECHO: 'відгомін Завіси',
   }[value]
+}
+
+function itemRarityName(value: string): string {
+  return (
+    {
+      COMMON: 'Звичайний',
+      UNCOMMON: 'Незвичайний',
+      RARE: 'Рідкісний',
+      EPIC: 'Епічний',
+      LEGENDARY: 'Легендарний',
+      MYTHIC: 'Міфічний',
+      DIVINE: 'Божественний',
+    }[value] ?? value
+  )
 }
 
 function archetypeName(value: Hero['archetype']): string {

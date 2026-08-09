@@ -7,7 +7,14 @@ import {
   ItemRarity,
   ResourceType,
 } from '@veilfall/database';
-import { progressionForExperience } from '@veilfall/game-engine';
+import {
+  itemDamageRange,
+  itemLevelForReward,
+  maxRarityForEncounterTier,
+  progressionForExperience,
+  rarityForRoll,
+  rollItemPower,
+} from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -66,7 +73,7 @@ export class RewardsService {
         characterId,
         status: BattleStatus.WON,
       },
-      include: { character: { select: { archetype: true } } },
+      include: { character: { select: { archetype: true, level: true } } },
     });
     if (!battle) throw new BadRequestException('Won battle is required');
 
@@ -74,7 +81,7 @@ export class RewardsService {
     const tier =
       (battle.state as unknown as { encounterTier?: number }).encounterTier ??
       1;
-    const roll = this.rollForBattle(battle.id, tier);
+    const roll = this.rollForBattle(battle.id, battle.character.level, tier);
     const experience = 40 + (tier - 1) * 20;
     const gold = 18 + (tier - 1) * 12;
     const resource = this.resourceReward(tier);
@@ -98,8 +105,9 @@ export class RewardsService {
             ownerId: characterId,
             sourceBattleId: battle.id,
             rewardClaimId: createdClaim.id,
-            itemLevel: 1,
+            itemLevel: roll.itemLevel,
             rarity: roll.rarity,
+            rollQuality: roll.rollQuality,
             damage: roll.damage,
             binding: ItemBinding.BOUND_ON_EQUIP,
             location: tier === 1 ? ItemLocation.CHEST : ItemLocation.BACKPACK,
@@ -114,6 +122,10 @@ export class RewardsService {
             payload: {
               battleId: battle.id,
               encounterId: battle.encounterId,
+              itemLevel: roll.itemLevel,
+              rarity: roll.rarity,
+              rollQuality: roll.rollQuality,
+              damageRange: { min: roll.damageMin, max: roll.damageMax },
             },
           },
         });
@@ -179,22 +191,37 @@ export class RewardsService {
 
   private rollForBattle(
     battleId: string,
+    characterLevel: number,
     tier: number,
   ): {
+    itemLevel: number;
     rarity: ItemRarity;
+    rollQuality: number;
     damage: number;
+    damageMin: number;
+    damageMax: number;
   } {
     const digest = createHash('sha256')
       .update(`first-reward:${battleId}`)
       .digest();
-    const rarity =
-      digest[0] % 4 === 0 ? ItemRarity.UNCOMMON : ItemRarity.COMMON;
-    const damage =
-      4 +
-      (digest[1] % 4) +
-      (rarity === ItemRarity.UNCOMMON ? 1 : 0) +
-      (tier - 1) * 2;
-    return { rarity, damage };
+    const itemLevel = itemLevelForReward(characterLevel, tier);
+    const rarity = rarityForRoll(
+      digest.readUInt16BE(0),
+      maxRarityForEncounterTier(tier),
+    );
+    const power = rollItemPower(
+      itemLevel,
+      rarity,
+      digest.readUInt16BE(2) % 10_000,
+    );
+    return {
+      itemLevel,
+      rarity,
+      rollQuality: power.rollQuality,
+      damage: power.value,
+      damageMin: power.min,
+      damageMax: power.max,
+    };
   }
 
   private resourceReward(tier: number): {
@@ -218,6 +245,7 @@ export class RewardsService {
       definitionId: string;
       itemLevel: number;
       rarity: ItemRarity;
+      rollQuality: number;
       damage: number;
       binding: ItemBinding;
       location: ItemLocation;
@@ -231,6 +259,10 @@ export class RewardsService {
     );
     if (!definition)
       throw new ConflictException('Reward definition is missing');
+    const damageRange = itemDamageRange(
+      claim.item.itemLevel,
+      claim.item.rarity,
+    );
     return {
       claimId: claim.id,
       battleId: claim.battleId,
@@ -239,6 +271,8 @@ export class RewardsService {
       resources: [{ type: claim.resourceType, amount: claim.resourceAmount }],
       item: {
         ...claim.item,
+        damageMin: damageRange.min,
+        damageMax: damageRange.max,
         name: definition.name,
         setName: 'Ветеран',
       },

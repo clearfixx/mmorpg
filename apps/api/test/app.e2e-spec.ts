@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@veilfall/database';
+import { itemDamageRange } from '@veilfall/game-engine';
 import type { Server } from 'node:http';
 import request from 'supertest';
 
@@ -318,7 +319,7 @@ describe('Health (e2e)', () => {
         .set('Cookie', cookie)
         .send({
           query:
-            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold item { id definitionId name rarity damage binding setName visualAssetId location } } }',
+            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold item { id definitionId name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId location } } }',
           variables: {
             input: { battleId, idempotencyKey: rewardKey },
           },
@@ -367,6 +368,15 @@ describe('Health (e2e)', () => {
     const rewardedItem = await prisma.client.itemInstance.findUniqueOrThrow({
       where: { sourceBattleId: battleId },
     });
+    const rewardedRange = itemDamageRange(
+      rewardedItem.itemLevel,
+      rewardedItem.rarity,
+    );
+    expect(rewardedItem.itemLevel).toBe(1);
+    expect(rewardedItem.rollQuality).toBeGreaterThanOrEqual(0);
+    expect(rewardedItem.rollQuality).toBeLessThanOrEqual(9_999);
+    expect(rewardedItem.damage).toBeGreaterThanOrEqual(rewardedRange.min);
+    expect(rewardedItem.damage).toBeLessThanOrEqual(rewardedRange.max);
     const equipKey = `equip-${Date.now()}`;
     const equip = () =>
       request(server)
@@ -874,7 +884,7 @@ describe('Health (e2e)', () => {
       where: { id: rewardedCharacter.id },
       data: { level: 30 },
     });
-    const ascendedState = await request(server)
+    const awakenedState = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
       .send({
@@ -882,7 +892,7 @@ describe('Health (e2e)', () => {
           '{ myInventory { baseDamage } myTalents { characterVersion availablePoints resources { type amount } talents { type rank maxRank advanced unlocked costResource costAmount affordable } } }',
       })
       .expect(200);
-    const ascendedPayload = JSON.parse(ascendedState.text) as {
+    const awakenedPayload = JSON.parse(awakenedState.text) as {
       data: {
         myInventory: { baseDamage: number };
         myTalents: {
@@ -900,9 +910,9 @@ describe('Health (e2e)', () => {
         };
       };
     };
-    expect(ascendedPayload.data.myTalents.talents).toContainEqual(
+    expect(awakenedPayload.data.myTalents.talents).toContainEqual(
       expect.objectContaining({
-        type: 'ASCENDED_POWER',
+        type: 'AWAKENED_POWER',
         rank: 0,
         advanced: true,
         unlocked: true,
@@ -912,8 +922,8 @@ describe('Health (e2e)', () => {
       }),
     );
     const pointsBeforeAscension =
-      ascendedPayload.data.myTalents.availablePoints;
-    const ascendedUpgrade = await request(server)
+      awakenedPayload.data.myTalents.availablePoints;
+    const awakenedUpgrade = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
       .send({
@@ -921,29 +931,29 @@ describe('Health (e2e)', () => {
           'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { availablePoints resources { type amount } talents { type rank } } }',
         variables: {
           input: {
-            type: 'ASCENDED_POWER',
+            type: 'AWAKENED_POWER',
             expectedCharacterVersion:
-              ascendedPayload.data.myTalents.characterVersion,
-            idempotencyKey: `ascended-power-${Date.now()}`,
+              awakenedPayload.data.myTalents.characterVersion,
+            idempotencyKey: `awakened-power-${Date.now()}`,
           },
         },
       })
       .expect(200);
-    expect(ascendedUpgrade.text).toContain(
+    expect(awakenedUpgrade.text).toContain(
       `"availablePoints":${pointsBeforeAscension}`,
     );
-    expect(ascendedUpgrade.text).toContain('"type":"VEIL_ECHO","amount":0');
-    expect(ascendedUpgrade.text).toContain('"type":"ASCENDED_POWER","rank":1');
-    const ascendedCharacter = await request(server)
+    expect(awakenedUpgrade.text).toContain('"type":"VEIL_ECHO","amount":0');
+    expect(awakenedUpgrade.text).toContain('"type":"AWAKENED_POWER","rank":1');
+    const awakenedCharacter = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
       .send({ query: '{ myInventory { baseDamage } }' })
       .expect(200);
-    const ascendedCharacterPayload = JSON.parse(ascendedCharacter.text) as {
+    const awakenedCharacterPayload = JSON.parse(awakenedCharacter.text) as {
       data: { myInventory: { baseDamage: number } };
     };
-    expect(ascendedCharacterPayload.data.myInventory.baseDamage).toBe(
-      ascendedPayload.data.myInventory.baseDamage + 8,
+    expect(awakenedCharacterPayload.data.myInventory.baseDamage).toBe(
+      awakenedPayload.data.myInventory.baseDamage + 8,
     );
 
     const clanVersionAfterFirstSummon =

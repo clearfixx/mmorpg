@@ -10,7 +10,10 @@ export class InventoryItemModel {
   @Field() definitionId!: string;
   @Field(() => Int) itemLevel!: number;
   @Field() rarity!: string;
+  @Field(() => Int) rollQuality!: number;
   @Field(() => Int) damage!: number;
+  @Field(() => Int) damageMin!: number;
+  @Field(() => Int) damageMax!: number;
   @Field() binding!: string;
   @Field() setName!: string;
   @Field() visualAssetId!: string;

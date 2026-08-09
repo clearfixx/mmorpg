@@ -385,15 +385,15 @@ export class ClanBossesService {
     const power =
       character.talents.find((talent) => talent.type === TalentType.POWER)
         ?.rank ?? 0;
-    const ascendedPower =
+    const awakenedPower =
       character.talents.find(
-        (talent) => talent.type === TalentType.ASCENDED_POWER,
+        (talent) => talent.type === TalentType.AWAKENED_POWER,
       )?.rank ?? 0;
     return (
       base +
       (character.level - 1) * 2 +
       power * 3 +
-      ascendedPower * 8 +
+      awakenedPower * 8 +
       (character.equipment[0]?.item.damage ?? 0)
     );
   }
@@ -422,12 +422,12 @@ export class ClanBossesService {
         bases[character.archetype].health +
         level.health +
         basic.health +
-        (ranks[TalentType.ASCENDED_VITALITY] ?? 0) * 30,
+        (ranks[TalentType.AWAKENED_VITALITY] ?? 0) * 30,
       armor:
         bases[character.archetype].armor +
         level.armor +
         basic.armor +
-        (ranks[TalentType.ASCENDED_RESILIENCE] ?? 0) * 6,
+        (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
     };
   }
 

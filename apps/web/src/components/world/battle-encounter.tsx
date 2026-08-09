@@ -51,8 +51,18 @@ interface BattleReward {
     id: string
     name: string
     itemLevel: number
-    rarity: 'COMMON' | 'UNCOMMON'
+    rarity:
+      | 'COMMON'
+      | 'UNCOMMON'
+      | 'RARE'
+      | 'EPIC'
+      | 'LEGENDARY'
+      | 'MYTHIC'
+      | 'DIVINE'
+    rollQuality: number
     damage: number
+    damageMin: number
+    damageMax: number
     binding: string
     setName: string
     location: 'CHEST' | 'BACKPACK'
@@ -183,7 +193,7 @@ export function BattleEncounter({
         `mutation Claim($input: ClaimBattleRewardInput!) {
           claimBattleReward(input: $input) {
             claimId experience gold resources { type amount }
-            item { id name itemLevel rarity damage binding setName location }
+            item { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName location }
           }
         }`,
         {
@@ -555,10 +565,15 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
         <div>
           <p className="text-lg font-semibold">{reward.item.name}</p>
           <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-wider text-ember">
-            {rarityName(reward.item.rarity)} · комплект {reward.item.setName}
+            {rarityName(reward.item.rarity)} · {reward.item.itemLevel} рівень ·
+            комплект {reward.item.setName}
           </p>
           <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-center sm:grid-cols-4">
             <RewardStat label="DMG" value={`+${reward.item.damage}`} />
+            <RewardStat
+              label="Якість"
+              value={`${Math.round((reward.item.rollQuality / 9_999) * 100)}%`}
+            />
             <RewardStat label="EXP" value={`+${reward.experience}`} />
             <RewardStat label="Золото" value={`+${reward.gold}`} />
             <RewardStat
@@ -656,7 +671,15 @@ async function loadActiveBattle(): Promise<Battle | null> {
 }
 
 function rarityName(rarity: BattleReward['item']['rarity']): string {
-  return rarity === 'UNCOMMON' ? 'Незвичайний' : 'Звичайний'
+  return {
+    COMMON: 'Звичайний',
+    UNCOMMON: 'Незвичайний',
+    RARE: 'Рідкісний',
+    EPIC: 'Епічний',
+    LEGENDARY: 'Легендарний',
+    MYTHIC: 'Міфічний',
+    DIVINE: 'Божественний',
+  }[rarity]
 }
 
 async function graphQl<T>(

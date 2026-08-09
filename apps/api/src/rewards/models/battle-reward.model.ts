@@ -14,7 +14,10 @@ export class RewardItemModel {
   @Field() name!: string;
   @Field(() => Int) itemLevel!: number;
   @Field(() => ItemRarity) rarity!: ItemRarity;
+  @Field(() => Int) rollQuality!: number;
   @Field(() => Int) damage!: number;
+  @Field(() => Int) damageMin!: number;
+  @Field(() => Int) damageMax!: number;
   @Field(() => ItemBinding) binding!: ItemBinding;
   @Field(() => ItemLocation) location!: ItemLocation;
   @Field() setName!: string;

@@ -6,7 +6,12 @@ import {
   ItemLocation,
   TalentType,
 } from '@veilfall/database';
-import { levelBonuses, talentBonuses } from '@veilfall/game-engine';
+import {
+  itemDamageRange,
+  levelBonuses,
+  talentBonuses,
+  type ItemRarity as EngineItemRarity,
+} from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -168,15 +173,15 @@ export class InventoryService {
     const powerRank =
       character.talents.find((talent) => talent.type === TalentType.POWER)
         ?.rank ?? 0;
-    const ascendedPowerRank =
+    const awakenedPowerRank =
       character.talents.find(
-        (talent) => talent.type === TalentType.ASCENDED_POWER,
+        (talent) => talent.type === TalentType.AWAKENED_POWER,
       )?.rank ?? 0;
     const baseDamage =
       BASE_DAMAGE[character.archetype] +
       levelBonuses(character.level).damage +
       talentBonuses({ vitality: 0, power: powerRank, resilience: 0 }).damage +
-      ascendedPowerRank * 8;
+      awakenedPowerRank * 8;
     return {
       characterVersion: character.version,
       baseDamage,
@@ -197,13 +202,20 @@ export class InventoryService {
     definitionId: string;
     itemLevel: number;
     rarity: string;
+    rollQuality: number;
     damage: number;
     binding: string;
     setId: string;
     visualAssetId: string;
   }): InventoryItemModel {
+    const damageRange = itemDamageRange(
+      item.itemLevel,
+      item.rarity as EngineItemRarity,
+    );
     return {
       ...item,
+      damageMin: damageRange.min,
+      damageMax: damageRange.max,
       name: ITEM_NAMES[item.definitionId] ?? 'Невідомий предмет',
       setName: item.setId === 'veteran' ? 'Ветеран' : item.setId,
     };

@@ -576,9 +576,9 @@ export class CombatService {
       resilience: ranks[TalentType.RESILIENCE] ?? 0,
     });
     return {
-      health: basic.health + (ranks[TalentType.ASCENDED_VITALITY] ?? 0) * 30,
-      damage: basic.damage + (ranks[TalentType.ASCENDED_POWER] ?? 0) * 8,
-      armor: basic.armor + (ranks[TalentType.ASCENDED_RESILIENCE] ?? 0) * 6,
+      health: basic.health + (ranks[TalentType.AWAKENED_VITALITY] ?? 0) * 30,
+      damage: basic.damage + (ranks[TalentType.AWAKENED_POWER] ?? 0) * 8,
+      armor: basic.armor + (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
     };
   }
 }

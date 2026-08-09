@@ -152,10 +152,10 @@ export class CharactersService {
       power: talentRanks[TalentType.POWER] ?? 0,
       resilience: talentRanks[TalentType.RESILIENCE] ?? 0,
     });
-    const ascended = {
-      health: (talentRanks[TalentType.ASCENDED_VITALITY] ?? 0) * 30,
-      damage: (talentRanks[TalentType.ASCENDED_POWER] ?? 0) * 8,
-      armor: (talentRanks[TalentType.ASCENDED_RESILIENCE] ?? 0) * 6,
+    const awakened = {
+      health: (talentRanks[TalentType.AWAKENED_VITALITY] ?? 0) * 30,
+      damage: (talentRanks[TalentType.AWAKENED_POWER] ?? 0) * 8,
+      armor: (talentRanks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
     };
     return {
       ...character,
@@ -167,18 +167,18 @@ export class CharactersService {
           BASE_STATS[character.archetype].health +
           bonuses.health +
           trained.health +
-          ascended.health,
+          awakened.health,
         damage:
           BASE_STATS[character.archetype].damage +
           bonuses.damage +
           trained.damage +
-          ascended.damage +
+          awakened.damage +
           weaponDamage,
         armor:
           BASE_STATS[character.archetype].armor +
           bonuses.armor +
           trained.armor +
-          ascended.armor,
+          awakened.armor,
         speed: BASE_STATS[character.archetype].speed,
         reaction: BASE_STATS[character.archetype].reaction,
       },
