@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase encounterTier personalBest rareEncounter summonedBoss enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier personalBest rareEncounter summonedBoss summonedBossId enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
@@ -18,6 +18,7 @@ interface Battle {
   personalBest: boolean
   rareEncounter: boolean
   summonedBoss: boolean
+  summonedBossId: 'CURSED_KNIGHT' | 'FALLEN_ELF' | null
   enemyName: string
   version: number
   turn: number
@@ -385,12 +386,16 @@ export function BattleEncounter({
           <section className="border-b border-ember/50 bg-ember/5 px-5 py-4">
             <p className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-ember">
               {battle.summonedBoss
-                ? 'Ритуальний бос · витрачено печатку виклику'
+                ? battle.summonedBossId === 'FALLEN_ELF'
+                  ? 'Ритуальний бос · спалено три прокляті серця'
+                  : 'Ритуальний бос · витрачено печатку виклику'
                 : 'Рідкісна зустріч · доступна з 30 рівня'}
             </p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {battle.summonedBoss
-                ? 'Морґрейв не зникне, доки ритуал не завершиться перемогою або поразкою. Його серце існує лише як трофей цього виклику.'
+                ? battle.summonedBossId === 'FALLEN_ELF'
+                  ? 'Саелір не залишить Заборонений гай, доки ритуал не завершиться. Його око існує лише як трофей цього виклику.'
+                  : 'Морґрейв не зникне, доки ритуал не завершиться. Його серце існує лише як трофей цього виклику.'
                 : 'Носій печаті значно сильніший за звичайних ворогів. Перемога гарантовано принесе переносне закляття для виклику Проклятого лицаря.'}
             </p>
           </section>
@@ -406,7 +411,9 @@ export function BattleEncounter({
           <HealthPanel
             portrait={
               battle.summonedBoss
-                ? 'П'
+                ? battle.summonedBossId === 'FALLEN_ELF'
+                  ? 'С'
+                  : 'П'
                 : battle.rareEncounter
                   ? 'З'
                   : battle.encounterTier > 1
@@ -415,7 +422,9 @@ export function BattleEncounter({
             }
             title={
               battle.summonedBoss
-                ? 'Проклятий лицар'
+                ? battle.summonedBossId === 'FALLEN_ELF'
+                  ? 'Павший ельф'
+                  : 'Проклятий лицар'
                 : battle.rareEncounter
                   ? 'Носій печаті'
                   : battle.encounterTier > 1
@@ -424,7 +433,11 @@ export function BattleEncounter({
             }
             value={battle.enemy.health}
             max={battle.enemy.maxHealth}
-            secondary="важкий тесак"
+            secondary={
+              battle.summonedBossId === 'FALLEN_ELF'
+                ? 'осквернений лук'
+                : 'важкий тесак'
+            }
           />
         </section>
         <section className="grid md:grid-cols-[1fr_18rem]">
@@ -436,6 +449,7 @@ export function BattleEncounter({
                 personalBest={battle.personalBest}
                 rareEncounter={battle.rareEncounter}
                 summonedBoss={battle.summonedBoss}
+                summonedBossId={battle.summonedBossId}
                 enemyName={battle.enemyName}
                 turns={battle.turn}
                 health={battle.hero.health}
@@ -566,6 +580,7 @@ function BattleResult({
   personalBest,
   rareEncounter,
   summonedBoss,
+  summonedBossId,
   enemyName,
   turns,
   health,
@@ -583,6 +598,7 @@ function BattleResult({
   personalBest: boolean
   rareEncounter: boolean
   summonedBoss: boolean
+  summonedBossId: Battle['summonedBossId']
   enemyName: string
   turns: number
   health: number
@@ -639,7 +655,9 @@ function BattleResult({
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
             {summonedBoss
-              ? 'Заберіть серце Морґрейва перед поверненням до Прихистку.'
+              ? summonedBossId === 'FALLEN_ELF'
+                ? 'Заберіть око Саеліра перед поверненням до Прихистку.'
+                : 'Заберіть серце Морґрейва перед поверненням до Прихистку.'
               : 'Заберіть трофей ворога перед поверненням на заставу.'}
           </p>
           <Button

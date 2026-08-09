@@ -1565,6 +1565,193 @@ describe('Health (e2e)', () => {
     );
     expect(forbiddenReturn.text).toContain('errors');
 
+    await prisma.client.$transaction([
+      prisma.client.character.update({
+        where: { id: combatUser.character!.id },
+        data: { level: 30, experience: 84_100 },
+      }),
+      prisma.client.characterWorldState.update({
+        where: { characterId: combatUser.character!.id },
+        data: { currentLocation: 'CINDERHAVEN_GATE' },
+      }),
+      prisma.client.characterResource.upsert({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'BOSS_INVOCATION_SEAL',
+          },
+        },
+        create: {
+          characterId: combatUser.character!.id,
+          type: 'BOSS_INVOCATION_SEAL',
+          balance: 2,
+        },
+        update: { balance: 2 },
+      }),
+    ]);
+
+    type InvocationResult = {
+      id: string;
+      summonedBoss: boolean;
+      summonedBossId: string;
+      enemyName: string;
+      enemy: { maxHealth: number };
+    };
+    const invokeBoss = async (
+      field: 'invokeCursedKnight' | 'invokeFallenElf',
+      idempotencyKey: string,
+    ) => {
+      const response = await request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query: `mutation Invoke($input: InvokeBossInput!) { ${field}(input: $input) { id summonedBoss summonedBossId enemyName enemy { maxHealth } } }`,
+          variables: { input: { idempotencyKey } },
+        })
+        .expect(200);
+      const payload = JSON.parse(response.text) as {
+        data: Record<typeof field, InvocationResult>;
+      };
+      return payload.data[field];
+    };
+    const forceBossVictory = async (battleId: string) => {
+      const battle = await prisma.client.battle.findUniqueOrThrow({
+        where: { id: battleId },
+      });
+      await prisma.client.battle.update({
+        where: { id: battle.id },
+        data: {
+          state: {
+            ...(battle.state as Record<string, unknown>),
+            status: 'WON',
+            version: battle.version + 1,
+            enemy: {
+              ...((battle.state as Record<string, unknown>).enemy as Record<
+                string,
+                unknown
+              >),
+              health: 0,
+            },
+          },
+          status: 'WON',
+          version: { increment: 1 },
+          activeCharacterId: null,
+          completedAt: new Date(),
+        },
+      });
+    };
+    const claimInvocationReward = async (
+      battleId: string,
+      expectedType: string,
+    ) => {
+      const response = await request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { resources { type amount } } }',
+          variables: {
+            input: {
+              battleId,
+              idempotencyKey: `boss-reward-${battleId}`,
+            },
+          },
+        })
+        .expect(200);
+      const payload = JSON.parse(response.text) as {
+        data: {
+          claimBattleReward: {
+            resources: Array<{ type: string; amount: number }>;
+          };
+        };
+      };
+      expect(payload.data.claimBattleReward.resources).toContainEqual({
+        type: expectedType,
+        amount: 1,
+      });
+    };
+    const acknowledgeBoss = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({ query: 'mutation { returnToWatchpost }' })
+        .expect(200);
+
+    const cursedKey = `invoke-cursed-${Date.now()}`;
+    const cursedInvocation = await invokeBoss('invokeCursedKnight', cursedKey);
+    expect(cursedInvocation).toMatchObject({
+      summonedBoss: true,
+      summonedBossId: 'CURSED_KNIGHT',
+      enemyName: 'Проклятий лицар Морґрейв',
+    });
+    const cursedBattleId = cursedInvocation.id;
+    const repeatedInvocation = await invokeBoss(
+      'invokeCursedKnight',
+      cursedKey,
+    );
+    expect(repeatedInvocation.id).toBe(cursedBattleId);
+    expect(
+      await prisma.client.characterResource.findUniqueOrThrow({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'BOSS_INVOCATION_SEAL',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 1 });
+    expect(
+      await prisma.client.resourceLedgerEntry.count({
+        where: {
+          characterId: combatUser.character!.id,
+          type: 'BOSS_INVOCATION_SEAL',
+          amount: -1,
+          reason: 'BOSS_INVOCATION',
+        },
+      }),
+    ).toBe(1);
+    await forceBossVictory(cursedBattleId);
+    await claimInvocationReward(cursedBattleId, 'CURSED_HEART');
+    await acknowledgeBoss();
+
+    await prisma.client.characterResource.update({
+      where: {
+        characterId_type: {
+          characterId: combatUser.character!.id,
+          type: 'CURSED_HEART',
+        },
+      },
+      data: { balance: 3 },
+    });
+    const fallenInvocation = await invokeBoss(
+      'invokeFallenElf',
+      `invoke-fallen-${Date.now()}`,
+    );
+    expect(fallenInvocation).toMatchObject({
+      summonedBoss: true,
+      summonedBossId: 'FALLEN_ELF',
+      enemyName: 'Павший ельф Саелір',
+    });
+    const fallenBattleId = fallenInvocation.id;
+    expect(
+      await prisma.client.characterResource.findUniqueOrThrow({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'CURSED_HEART',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 0 });
+    await forceBossVictory(fallenBattleId);
+    await claimInvocationReward(fallenBattleId, 'FALLEN_ELF_EYE');
+    await acknowledgeBoss();
+    expect(
+      await prisma.client.characterWorldState.findUniqueOrThrow({
+        where: { characterId: combatUser.character!.id },
+      }),
+    ).toMatchObject({ currentLocation: 'CINDERHAVEN_GATE' });
+
     const duplicate = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

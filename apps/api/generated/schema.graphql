@@ -32,6 +32,7 @@ type BattleModel {
   rareEncounter: Boolean!
   status: String!
   summonedBoss: Boolean!
+  summonedBossId: String
   turn: Int!
   version: Int!
   visibleIntents: [EnemyIntentModel!]!
@@ -444,7 +445,9 @@ type Mutation {
   createCharacter(input: CreateCharacterInput!): CharacterModel!
   createClan(input: CreateClanInput!): ClanModel!
   equipItem(input: EquipItemInput!): InventoryModel!
-  hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
+  hireExpeditionGuide(
+    input: HireExpeditionGuideInput!
+  ): ExpeditionProgressModel!
   invokeCursedKnight(input: InvokeBossInput!): BattleModel!
   invokeFallenElf(input: InvokeBossInput!): BattleModel!
   joinClan(input: JoinClanInput!): ClanModel!
@@ -489,7 +492,9 @@ type Query {
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
 
-  """API readiness probe for the foundation milestone."""
+  """
+  API readiness probe for the foundation milestone.
+  """
   status: String!
   viewer: Viewer
 }

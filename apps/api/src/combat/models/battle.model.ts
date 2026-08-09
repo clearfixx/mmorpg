@@ -41,6 +41,7 @@ export class BattleModel {
   @Field(() => Boolean) personalBest!: boolean;
   @Field(() => Boolean) rareEncounter!: boolean;
   @Field(() => Boolean) summonedBoss!: boolean;
+  @Field(() => String, { nullable: true }) summonedBossId?: string;
   @Field() enemyName!: string;
   @Field(() => Int) version!: number;
   @Field(() => Int) turn!: number;

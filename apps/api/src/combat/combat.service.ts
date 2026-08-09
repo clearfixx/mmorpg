@@ -924,6 +924,7 @@ export class CombatService {
       personalBest: state.personalBest ?? false,
       rareEncounter: state.rareEncounter ?? false,
       summonedBoss: state.summonedBoss ?? false,
+      summonedBossId: state.summonedBossId,
       enemyName:
         state.enemyLabel ??
         ((state.encounterTier ?? 1) > 1
