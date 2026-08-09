@@ -90,6 +90,11 @@ input ClaimClanBossRewardInput {
   idempotencyKey: String!
 }
 
+input ClaimCraftInput {
+  craftJobId: ID!
+  idempotencyKey: String!
+}
+
 type ClanBossModel {
   canSummon: Boolean!
   currentHealth: Int!
@@ -220,6 +225,53 @@ input ContributeClanResourceInput {
   resourceType: ResourceType!
 }
 
+type CraftJobModel {
+  completesAt: DateTime!
+  id: ID!
+  outputAmount: Int!
+  outputName: String!
+  outputType: ResourceType!
+  quantity: Int!
+  ready: Boolean!
+  recipeId: String!
+  recipeName: String!
+  remainingSeconds: Int!
+  startedAt: DateTime!
+  station: CraftingStation!
+  status: CraftJobStatus!
+}
+
+enum CraftJobStatus {
+  ACTIVE
+  CLAIMED
+}
+
+type CraftingRecipeModel {
+  affordable: Boolean!
+  description: String!
+  durationSeconds: Int!
+  id: String!
+  ingredients: [RecipeIngredientModel!]!
+  name: String!
+  outputAmount: Int!
+  outputName: String!
+  outputType: ResourceType!
+  station: CraftingStation!
+  stationAvailable: Boolean!
+}
+
+type CraftingStateModel {
+  jobs: [CraftJobModel!]!
+  recipes: [CraftingRecipeModel!]!
+}
+
+enum CraftingStation {
+  ALCHEMY_TABLE
+  FORGE
+  RITUAL_CIRCLE
+  WORKSHOP
+}
+
 input CreateCharacterInput {
   archetype: CharacterArchetype!
   avatarMode: AvatarMode!
@@ -324,6 +376,7 @@ type Mutation {
   attackClanBoss(input: AttackClanBossInput!): ClanBossModel!
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
   claimClanBossReward(input: ClaimClanBossRewardInput!): ClanBossModel!
+  claimCraft(input: ClaimCraftInput!): CraftingStateModel!
   continueAdventure(input: ContinueAdventureInput!): BattleModel!
   contributeClanResource(input: ContributeClanResourceInput!): ClanModel!
   createCharacter(input: CreateCharacterInput!): CharacterModel!
@@ -336,6 +389,7 @@ type Mutation {
   register(input: RegisterInput!): AuthPayload!
   retreatFromBattle(input: RetreatInput!): BattleModel!
   returnToWatchpost: Boolean!
+  startCraft(input: StartCraftInput!): CraftingStateModel!
   startEncounter(input: StartEncounterInput!): BattleModel!
   submitCombatCommand(input: SubmitCombatCommandInput!): BattleModel!
   summonClanBoss(input: SummonClanBossInput!): ClanBossModel!
@@ -363,13 +417,23 @@ type Query {
   latestBattle: BattleModel
   myCharacter: CharacterModel
   myClan: ClanModel
+  myCrafting: CraftingStateModel!
   myInventory: InventoryModel!
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
 
-  """API readiness probe for the foundation milestone."""
+  """
+  API readiness probe for the foundation milestone.
+  """
   status: String!
   viewer: Viewer
+}
+
+type RecipeIngredientModel {
+  amount: Int!
+  available: Int!
+  name: String!
+  resourceType: ResourceType!
 }
 
 input RegisterInput {
@@ -440,6 +504,12 @@ type RewardItemModel {
   rollQuality: Int!
   setName: String!
   visualAssetId: String!
+}
+
+input StartCraftInput {
+  idempotencyKey: String!
+  quantity: Int!
+  recipeId: String!
 }
 
 input StartEncounterInput {

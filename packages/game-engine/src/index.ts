@@ -1,4 +1,5 @@
 export * from './combat'
+export * from './crafting'
 export * from './items'
 export * from './progression'
 export * from './resources'

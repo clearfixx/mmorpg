@@ -138,6 +138,18 @@ enum ClanBossStatus {
   EXPIRED
 }
 
+enum CraftingStation {
+  WORKSHOP
+  ALCHEMY_TABLE
+  FORGE
+  RITUAL_CIRCLE
+}
+
+enum CraftJobStatus {
+  ACTIVE
+  CLAIMED
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(320)
@@ -184,6 +196,8 @@ model Character {
   clanContributions      ClanContribution[]
   clanBossParticipations ClanBossParticipant[]
   clanBossRewardClaims   ClanBossRewardClaim[]
+  craftJobs              CraftJob[]
+  craftCommands          CraftCommand[]
 
   @@map("characters")
 }
@@ -358,6 +372,40 @@ model TalentCommand {
 
   @@unique([characterId, idempotencyKey])
   @@map("talent_commands")
+}
+
+model CraftJob {
+  id             String           @id @default(uuid()) @db.Uuid
+  characterId    String           @map("character_id") @db.Uuid
+  recipeId       String           @map("recipe_id") @db.VarChar(64)
+  station        CraftingStation
+  activeStation  CraftingStation? @map("active_station")
+  status         CraftJobStatus   @default(ACTIVE)
+  quantity       Int              @default(1)
+  outputType     ResourceType     @map("output_type")
+  outputAmount   Int              @map("output_amount")
+  startedAt      DateTime         @default(now()) @map("started_at")
+  completesAt    DateTime         @map("completes_at")
+  claimedAt      DateTime?        @map("claimed_at")
+  character      Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, activeStation])
+  @@index([characterId, status, completesAt])
+  @@map("craft_jobs")
+}
+
+model CraftCommand {
+  id             String    @id @default(uuid()) @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  commandType    String    @map("command_type") @db.VarChar(32)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  craftJobId     String?   @map("craft_job_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("craft_commands")
 }
 
 model CharacterResource {

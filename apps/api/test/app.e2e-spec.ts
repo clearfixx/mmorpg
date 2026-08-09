@@ -652,6 +652,129 @@ describe('Health (e2e)', () => {
         clanContributable: false,
       }),
     );
+    for (const [type, balance] of [
+      ['COAL', 10],
+      ['COPPER', 20],
+      ['BRONZE', 10],
+      ['HERBS', 10],
+    ] as const) {
+      await prisma.client.characterResource.upsert({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type,
+          },
+        },
+        create: { characterId: combatUser.character!.id, type, balance },
+        update: { balance },
+      });
+    }
+    const craftState = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myCrafting { recipes { id station affordable stationAvailable ingredients { resourceType amount available } outputType outputAmount durationSeconds } jobs { id } } }',
+      })
+      .expect(200);
+    expect(craftState.text).toContain('"id":"veil-steel-v1"');
+    expect(craftState.text).toContain('"station":"FORGE"');
+    expect(craftState.text).toContain('"affordable":true');
+
+    const forgeKey = `craft-forge-${Date.now()}`;
+    const startForge = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Start($input: StartCraftInput!) { startCraft(input: $input) { jobs { id recipeId station status outputType outputAmount ready } } }',
+          variables: {
+            input: {
+              recipeId: 'veil-steel-v1',
+              quantity: 1,
+              idempotencyKey: forgeKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstForge = await startForge();
+    const retriedForge = await startForge();
+    expect(firstForge.body).toEqual(retriedForge.body);
+    expect(firstForge.text).toContain('"station":"FORGE"');
+    expect(firstForge.text).toContain('"outputType":"VEIL_STEEL"');
+
+    const startAlchemy = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Start($input: StartCraftInput!) { startCraft(input: $input) { jobs { id recipeId station status outputType outputAmount } } }',
+        variables: {
+          input: {
+            recipeId: 'stabilized-catalyst-v1',
+            quantity: 1,
+            idempotencyKey: `craft-alchemy-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(startAlchemy.text).toContain('"station":"ALCHEMY_TABLE"');
+    expect(
+      await prisma.client.craftJob.count({
+        where: {
+          characterId: combatUser.character!.id,
+          status: 'ACTIVE',
+        },
+      }),
+    ).toBe(2);
+    await prisma.client.craftJob.updateMany({
+      where: { characterId: combatUser.character!.id, status: 'ACTIVE' },
+      data: { completesAt: new Date(Date.now() - 1_000) },
+    });
+    const forgeJob = await prisma.client.craftJob.findFirstOrThrow({
+      where: {
+        characterId: combatUser.character!.id,
+        recipeId: 'veil-steel-v1',
+      },
+    });
+    const claimKey = `claim-craft-${Date.now()}`;
+    const claimForge = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Claim($input: ClaimCraftInput!) { claimCraft(input: $input) { jobs { id status ready } } }',
+          variables: {
+            input: {
+              craftJobId: forgeJob.id,
+              idempotencyKey: claimKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstClaim = await claimForge();
+    const retriedClaim = await claimForge();
+    expect(firstClaim.body).toEqual(retriedClaim.body);
+    expect(
+      await prisma.client.characterResource.findUnique({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'VEIL_STEEL',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 1 });
+    expect(
+      await prisma.client.resourceLedgerEntry.count({
+        where: {
+          characterId: combatUser.character!.id,
+          reason: { in: ['CRAFT_START', 'CRAFT_OUTPUT'] },
+        },
+      }),
+    ).toBe(7);
     const talentKey = `talent-${Date.now()}`;
     const upgradeTalent = () =>
       request(server)
@@ -675,12 +798,12 @@ describe('Health (e2e)', () => {
     expect(firstTalent.body).toEqual(retriedTalent.body);
     expect(firstTalent.text).toContain('"availablePoints":0');
     expect(firstTalent.text).toContain('"type":"POWER","rank":1');
-    expect(firstTalent.text).toContain('"type":"IRON","amount":38');
+    expect(firstTalent.text).toContain('"type":"IRON","amount":28');
     expect(
       await prisma.client.resourceLedgerEntry.count({
         where: { characterId: rewardedCharacter.id },
       }),
-    ).toBe(3);
+    ).toBe(10);
 
     const talentResult = JSON.parse(firstTalent.text) as {
       data: { upgradeTalent: { characterVersion: number } };
@@ -762,7 +885,7 @@ describe('Health (e2e)', () => {
         },
         select: { balance: true },
       }),
-    ).toEqual({ balance: 18 });
+    ).toEqual({ balance: 8 });
 
     const contributionResult = JSON.parse(firstContribution.text) as {
       data: { contributeClanResource: { version: number } };
