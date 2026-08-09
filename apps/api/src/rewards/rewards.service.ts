@@ -1,6 +1,5 @@
 import {
   BattleStatus,
-  CharacterArchetype,
   ItemBinding,
   ItemLineageType,
   ItemLocation,
@@ -25,27 +24,15 @@ import { createHash } from 'node:crypto';
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { equipmentSlotsForDefinition } from '../inventory/inventory.service';
+import {
+  itemDefinition,
+  itemStatsForPower,
+  rewardDefinitionFor,
+  type ItemDefinition,
+} from '../inventory/item-catalog';
 import { resourceBalance } from '../resources/resource-catalog';
 import { ClaimBattleRewardInput } from './dto/claim-battle-reward.input';
 import { BattleRewardModel } from './models/battle-reward.model';
-
-const REWARDS = {
-  [CharacterArchetype.VANGUARD]: {
-    definitionId: 'veteran-notched-blade-v1',
-    name: 'Зазубрений клинок Ветерана',
-    visualAssetId: 'weapon-veteran-blade-01',
-  },
-  [CharacterArchetype.RANGER]: {
-    definitionId: 'veteran-ashwood-bow-v1',
-    name: 'Ясеневий лук Ветерана',
-    visualAssetId: 'weapon-veteran-bow-01',
-  },
-  [CharacterArchetype.ARCANIST]: {
-    definitionId: 'veteran-cracked-focus-v1',
-    name: 'Тріснутий фокус Ветерана',
-    visualAssetId: 'weapon-veteran-focus-01',
-  },
-} as const;
 
 @Injectable()
 export class RewardsService {
@@ -79,11 +66,16 @@ export class RewardsService {
     });
     if (!battle) throw new BadRequestException('Won battle is required');
 
-    const definition = REWARDS[battle.character.archetype];
     const tier =
       (battle.state as unknown as { encounterTier?: number }).encounterTier ??
       1;
-    const roll = this.rollForBattle(battle.id, battle.character.level, tier);
+    const definition = rewardDefinitionFor(battle.character.archetype, tier);
+    const roll = this.rollForBattle(
+      battle.id,
+      battle.character.level,
+      tier,
+      definition,
+    );
     const experience = 40 + (tier - 1) * 20;
     const gold = 18 + (tier - 1) * 12;
     const resource = this.resourceReward(tier);
@@ -111,9 +103,11 @@ export class RewardsService {
             rarity: roll.rarity,
             rollQuality: roll.rollQuality,
             damage: roll.damage,
+            armor: roll.armor,
+            health: roll.health,
             binding: ItemBinding.BOUND_ON_EQUIP,
             location: tier === 1 ? ItemLocation.CHEST : ItemLocation.BACKPACK,
-            setId: 'veteran',
+            setId: definition.setId,
             visualAssetId: definition.visualAssetId,
           },
         });
@@ -128,6 +122,11 @@ export class RewardsService {
               rarity: roll.rarity,
               rollQuality: roll.rollQuality,
               damageRange: { min: roll.damageMin, max: roll.damageMax },
+              stats: {
+                damage: roll.damage,
+                armor: roll.armor,
+                health: roll.health,
+              },
             },
           },
         });
@@ -195,11 +194,14 @@ export class RewardsService {
     battleId: string,
     characterLevel: number,
     tier: number,
+    definition: ItemDefinition,
   ): {
     itemLevel: number;
     rarity: ItemRarity;
     rollQuality: number;
     damage: number;
+    armor: number;
+    health: number;
     damageMin: number;
     damageMax: number;
   } {
@@ -216,11 +218,12 @@ export class RewardsService {
       rarity,
       digest.readUInt16BE(2) % 10_000,
     );
+    const stats = itemStatsForPower(power.value, definition.statWeights);
     return {
       itemLevel,
       rarity,
       rollQuality: power.rollQuality,
-      damage: power.value,
+      ...stats,
       damageMin: power.min,
       damageMax: power.max,
     };
@@ -258,9 +261,7 @@ export class RewardsService {
     } | null;
   }): BattleRewardModel {
     if (!claim.item) throw new ConflictException('Reward item is incomplete');
-    const definition = Object.values(REWARDS).find(
-      (candidate) => candidate.definitionId === claim.item?.definitionId,
-    );
+    const definition = itemDefinition(claim.item.definitionId);
     if (!definition)
       throw new ConflictException('Reward definition is missing');
     const damageRange = itemDamageRange(
@@ -279,7 +280,7 @@ export class RewardsService {
         damageMax: damageRange.max,
         compatibleSlots: equipmentSlotsForDefinition(claim.item.definitionId),
         name: definition.name,
-        setName: 'Ветеран',
+        setName: definition.setName,
       },
     };
   }

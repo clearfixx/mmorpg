@@ -641,6 +641,8 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
           </p>
           <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-center sm:grid-cols-4">
             <RewardStat label="DMG" value={`+${reward.item.damage}`} />
+            <RewardStat label="ARM" value={`+${reward.item.armor}`} />
+            <RewardStat label="HP" value={`+${reward.item.health}`} />
             <RewardStat
               label="Якість"
               value={`${Math.round((reward.item.rollQuality / 9_999) * 100)}%`}

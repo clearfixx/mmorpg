@@ -81,6 +81,23 @@ type EquipmentSlotKey =
   | 'RING_LEFT'
   | 'RING_RIGHT'
 
+const EQUIPMENT_SLOT_NAMES: Record<EquipmentSlotKey, string> = {
+  HEAD: 'шолом',
+  SHOULDERS: 'наплічники',
+  CHEST: 'нагрудник',
+  BRACERS: 'наручі',
+  HANDS: 'рукавиці',
+  WAIST: 'пояс',
+  LEGS: 'штани',
+  FEET: 'черевики',
+  MAIN_HAND: 'основна рука',
+  OFF_HAND: 'друга рука',
+  AMULET: 'амулет',
+  BRACELET: 'браслет',
+  RING_LEFT: 'каблучка I',
+  RING_RIGHT: 'каблучка II',
+}
+
 interface Inventory {
   characterVersion: number
   baseDamage: number
@@ -1818,7 +1835,6 @@ function EquipmentScreen({
         hero={hero}
         inventory={inventory}
         locationName={locationName}
-        weapon={weapon}
         pending={pending}
         error={error}
         onBack={onBack}
@@ -1963,7 +1979,6 @@ function InventoryVault({
   hero,
   inventory,
   locationName,
-  weapon,
   pending,
   error,
   onBack,
@@ -1972,12 +1987,15 @@ function InventoryVault({
   hero: Hero
   inventory: Inventory
   locationName: string
-  weapon: InventoryItem | undefined
   pending: boolean
   error: string | null
   onBack: () => void
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
+  const equippedBySlot = new Map(
+    inventory.equipped.map((entry) => [entry.slot, entry.item]),
+  )
+
   return (
     <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 px-5 py-4">
@@ -2058,7 +2076,7 @@ function InventoryVault({
                 key={item.id}
                 hero={hero}
                 item={item}
-                weapon={weapon}
+                equippedBySlot={equippedBySlot}
                 pending={pending}
                 onEquip={onEquip}
               />
@@ -2081,23 +2099,35 @@ function InventoryVault({
 function InventoryItemCard({
   hero,
   item,
-  weapon,
+  equippedBySlot,
   pending,
   onEquip,
 }: {
   hero: Hero
   item: InventoryItem
-  weapon: InventoryItem | undefined
+  equippedBySlot: ReadonlyMap<EquipmentSlotKey, InventoryItem>
   pending: boolean
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
-  const damageDelta = item.damage - (weapon?.damage ?? 0)
+  const targetSlot =
+    item.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
+    item.compatibleSlots[0]
+  const current = targetSlot ? equippedBySlot.get(targetSlot) : undefined
+  const statDeltas = [
+    ['DMG', item.damage - (current?.damage ?? 0)],
+    ['ARM', item.armor - (current?.armor ?? 0)],
+    ['HP', item.health - (current?.health ?? 0)],
+  ] as const
 
   return (
     <article className="flex min-h-56 flex-col border border-border/70 bg-background/45 p-4">
       <div className="flex items-start gap-3">
         <div className="grid size-12 shrink-0 place-items-center border border-ember/45 bg-ember/5">
-          <Sword className="size-5 text-ember" aria-hidden="true" />
+          {item.armor > item.damage ? (
+            <Shield className="size-5 text-ember" aria-hidden="true" />
+          ) : (
+            <Sword className="size-5 text-ember" aria-hidden="true" />
+          )}
         </div>
         <div className="min-w-0">
           <h2 className="font-medium leading-5">{item.name}</h2>
@@ -2109,13 +2139,17 @@ function InventoryItemCard({
           </p>
         </div>
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-px bg-border/60 text-xs">
-        <div className="bg-panel/80 p-2">
-          <dt className="text-muted-foreground">Сила</dt>
-          <dd className="mt-1 font-mono">
-            {item.damage}/{item.damageMax}
-          </dd>
-        </div>
+      <dl className="mt-4 grid grid-cols-4 gap-px bg-border/60 text-xs">
+        {[
+          ['DMG', item.damage],
+          ['ARM', item.armor],
+          ['HP', item.health],
+        ].map(([label, value]) => (
+          <div key={label} className="bg-panel/80 p-2">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="mt-1 font-mono">+{value}</dd>
+          </div>
+        ))}
         <div className="bg-panel/80 p-2">
           <dt className="text-muted-foreground">Якість</dt>
           <dd className="mt-1 font-mono">
@@ -2123,11 +2157,15 @@ function InventoryItemCard({
           </dd>
         </div>
       </dl>
-      <div className="mt-3 flex justify-between text-sm">
-        <span className="text-muted-foreground">Зміна DMG</span>
-        <span className={`font-mono ${deltaColor(damageDelta)}`}>
-          {formatDelta(damageDelta)}
-        </span>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        {statDeltas.map(([label, delta]) => (
+          <div key={label} className="flex justify-between gap-1">
+            <span className="text-muted-foreground">{label}</span>
+            <span className={`font-mono ${deltaColor(delta)}`}>
+              {formatDelta(delta)}
+            </span>
+          </div>
+        ))}
       </div>
       <Button
         type="button"
@@ -2137,12 +2175,15 @@ function InventoryItemCard({
           item.compatibleSlots.length === 0
         }
         onClick={() => {
-          const slot = item.compatibleSlots[0]
-          if (slot) onEquip(item.id, slot)
+          if (targetSlot) onEquip(item.id, targetSlot)
         }}
         className="mt-auto h-9 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
       >
-        {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
+        {pending
+          ? 'Екіпіруємо…'
+          : targetSlot
+            ? `Екіпірувати: ${EQUIPMENT_SLOT_NAMES[targetSlot]}`
+            : 'Несумісний предмет'}
       </Button>
     </article>
   )

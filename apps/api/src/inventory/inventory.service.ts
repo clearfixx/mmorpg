@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto';
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { EquipItemInput } from './dto/equip-item.input';
+import { itemDefinition } from './item-catalog';
 import { InventoryItemModel, InventoryModel } from './models/inventory.model';
 
 const BASE_DAMAGE = {
@@ -43,35 +44,17 @@ const BASE_ARMOR = {
   [CharacterArchetype.ARCANIST]: 6,
 };
 
-const ITEM_DEFINITIONS: Record<
-  string,
-  { name: string; equipmentSlots: readonly EquipmentSlot[] }
-> = {
-  'veteran-notched-blade-v1': {
-    name: 'Зазубрений клинок Ветерана',
-    equipmentSlots: [EquipmentSlot.MAIN_HAND],
-  },
-  'veteran-ashwood-bow-v1': {
-    name: 'Ясеневий лук Ветерана',
-    equipmentSlots: [EquipmentSlot.MAIN_HAND],
-  },
-  'veteran-cracked-focus-v1': {
-    name: 'Тріснутий фокус Ветерана',
-    equipmentSlots: [EquipmentSlot.MAIN_HAND],
-  },
-};
-
 export function isEquipmentSlotCompatible(
   definitionId: string,
   slot: EquipmentSlot,
 ): boolean {
-  return ITEM_DEFINITIONS[definitionId]?.equipmentSlots.includes(slot) ?? false;
+  return itemDefinition(definitionId)?.equipmentSlots.includes(slot) ?? false;
 }
 
 export function equipmentSlotsForDefinition(
   definitionId: string,
 ): EquipmentSlot[] {
-  return [...(ITEM_DEFINITIONS[definitionId]?.equipmentSlots ?? [])];
+  return [...(itemDefinition(definitionId)?.equipmentSlots ?? [])];
 }
 
 @Injectable()
@@ -281,8 +264,8 @@ export class InventoryService {
       damageMin: damageRange.min,
       damageMax: damageRange.max,
       compatibleSlots: equipmentSlotsForDefinition(item.definitionId),
-      name: ITEM_DEFINITIONS[item.definitionId]?.name ?? 'Невідомий предмет',
-      setName: item.setId === 'veteran' ? 'Ветеран' : item.setId,
+      name: itemDefinition(item.definitionId)?.name ?? 'Невідомий предмет',
+      setName: itemDefinition(item.definitionId)?.setName ?? item.setId,
     };
   }
 }
