@@ -1387,15 +1387,20 @@ function CinderhavenGate({
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,oklch(0.48_0.09_45/18%),transparent_38%)]" />
               <div className="relative">
                 <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-ember">
-                  Попелястий край · міський вузол
+                  Попелястий край · нейтральний міський хаб
                 </p>
                 <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Вітаємо у VeilFall
+                  Попелястий Прихисток
                 </h1>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-                  Світ розколотий. Завіса тоншає. Попелястий Прихисток тримає
-                  останню дорогу до фронту, ремісничих кварталів і майбутніх
-                  кланових володінь. Твій меч. Твій вибір. Твоя спадщина.
+                  Перше велике місто за Зламаною заставою тримається серед
+                  попелу й війни. Тут герої гартують таланти, змінюють
+                  спорядження, опановують ремесла, стежать за фронтом і шукають
+                  союзників для майбутніх походів.
+                </p>
+                <p className="mt-3 max-w-2xl text-xs leading-6 text-muted-foreground/80">
+                  Оберіть міський квартал нижче. Частина служб відкриватиметься
+                  разом із розвитком героя та світу.
                 </p>
               </div>
             </section>
