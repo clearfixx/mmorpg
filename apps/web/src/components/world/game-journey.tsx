@@ -1764,16 +1764,29 @@ function EquipmentScreen({
   const weapon = inventory.equipped.find(
     (entry) => entry.slot === 'MAIN_HAND',
   )?.item
+
+  if (mode === 'INVENTORY')
+    return (
+      <InventoryVault
+        hero={hero}
+        inventory={inventory}
+        locationName={locationName}
+        weapon={weapon}
+        pending={pending}
+        error={error}
+        onBack={onBack}
+        onEquip={onEquip}
+      />
+    )
+
   return (
     <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
       <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
         <div>
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
-            {locationName} · {mode === 'PROFILE' ? 'персонаж' : 'інвентар'}
+            {locationName} · персонаж
           </p>
-          <h1 className="mt-1 text-xl font-semibold">
-            {mode === 'PROFILE' ? `Профіль ${hero.name}` : 'Сховище героя'}
-          </h1>
+          <h1 className="mt-1 text-xl font-semibold">Профіль {hero.name}</h1>
         </div>
         <Button
           type="button"
@@ -1819,18 +1832,6 @@ function EquipmentScreen({
               {weapon ? weapon.name : 'Слот порожній'}
             </div>
           </div>
-          {mode === 'INVENTORY' ? (
-            <dl className="mt-6 grid grid-cols-2 gap-px bg-border/70 text-center">
-              <InventoryCount
-                label="У сундуку"
-                value={inventory.chest.length}
-              />
-              <InventoryCount
-                label="У рюкзаку"
-                value={inventory.backpack.length}
-              />
-            </dl>
-          ) : null}
         </aside>
         <section className="relative min-h-[34rem] overflow-hidden border-b border-border/70 p-6 lg:border-r lg:border-b-0">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,oklch(0.52_0.1_55/20%),transparent_40%)]" />
@@ -1876,69 +1877,13 @@ function EquipmentScreen({
           </p>
         </section>
         <aside className="p-5">
-          {mode === 'PROFILE' ? (
-            <ProfileSummary
-              hero={hero}
-              inventory={inventory}
-              talents={talents}
-              clan={clan}
-              weapon={weapon}
-            />
-          ) : (
-            <>
-              <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
-                Сундук · зброя
-              </p>
-              <div className="mt-4 space-y-3">
-                {inventory.chest.length === 0 ? (
-                  <p className="border border-border/70 p-4 text-sm text-muted-foreground">
-                    У сундуку немає доступної зброї.
-                  </p>
-                ) : (
-                  inventory.chest.map((item) => (
-                    <div
-                      key={item.id}
-                      className="border border-border/70 bg-background/45 p-4"
-                    >
-                      <p className="font-medium">{item.name}</p>
-                      <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-ember">
-                        {itemRarityName(item.rarity)} · {item.itemLevel} рівень
-                        · {item.setName}
-                      </p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Сила предмета: {item.damage}/{item.damageMax} · якість{' '}
-                        {Math.round((item.rollQuality / 9_999) * 100)}%
-                      </p>
-                      <div className="mt-3 flex justify-between text-sm">
-                        <span className="text-muted-foreground">Зміна DMG</span>
-                        <span
-                          className={`font-mono ${deltaColor(item.damage - (weapon?.damage ?? 0))}`}
-                        >
-                          {formatDelta(item.damage - (weapon?.damage ?? 0))}
-                        </span>
-                      </div>
-                      <Button
-                        type="button"
-                        disabled={pending || item.itemLevel > hero.level}
-                        onClick={() => onEquip(item.id)}
-                        className="mt-4 h-8 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
-                      >
-                        {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-          {mode === 'INVENTORY' && error ? (
-            <p
-              role="alert"
-              className="mt-4 border-l-2 border-destructive px-3 py-2 text-sm text-destructive"
-            >
-              {error}
-            </p>
-          ) : null}
+          <ProfileSummary
+            hero={hero}
+            inventory={inventory}
+            talents={talents}
+            clan={clan}
+            weapon={weapon}
+          />
         </aside>
       </div>
     </section>
@@ -1958,6 +1903,188 @@ function EquipmentSlot({ label }: { label: string }) {
         </p>
       </div>
     </div>
+  )
+}
+
+function InventoryVault({
+  hero,
+  inventory,
+  locationName,
+  weapon,
+  pending,
+  error,
+  onBack,
+  onEquip,
+}: {
+  hero: Hero
+  inventory: Inventory
+  locationName: string
+  weapon: InventoryItem | undefined
+  pending: boolean
+  error: string | null
+  onBack: () => void
+  onEquip: (itemId: string) => void
+}) {
+  return (
+    <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 px-5 py-4">
+        <div>
+          <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
+            {locationName} · інвентар
+          </p>
+          <h1 className="mt-1 text-xl font-semibold">Сховище героя</h1>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onBack}
+          className="h-9 rounded-sm"
+        >
+          <ArrowLeft aria-hidden="true" /> Повернутися
+        </Button>
+      </header>
+
+      <div className="border-b border-border/70 bg-background/35 p-4 sm:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-moss">
+              Сундук
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Постійне безпечне сховище предметів героя.
+            </p>
+          </div>
+          <dl className="flex gap-px bg-border/70 text-center">
+            <InventoryCount label="У сундуку" value={inventory.chest.length} />
+            <InventoryCount
+              label="У рюкзаку"
+              value={inventory.backpack.length}
+            />
+            <InventoryCount
+              label="Екіпіровано"
+              value={inventory.equipped.length}
+            />
+          </dl>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-4">
+          {['Усі предмети', 'Зброя', 'Броня', 'Аксесуари', 'Матеріали'].map(
+            (label, index) => (
+              <Button
+                key={label}
+                type="button"
+                variant={index === 0 ? 'secondary' : 'outline'}
+                disabled={index !== 0}
+                className="h-8 rounded-none px-3 text-xs"
+              >
+                {label}
+              </Button>
+            ),
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        {inventory.chest.length === 0 ? (
+          <div className="grid min-h-72 place-items-center border border-dashed border-border/70 bg-background/25 p-8 text-center">
+            <div>
+              <Package
+                className="mx-auto size-8 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <p className="mt-3 font-medium">Сундук порожній</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Перенесіть сюди здобич після повернення з походу.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {inventory.chest.map((item) => (
+              <InventoryItemCard
+                key={item.id}
+                hero={hero}
+                item={item}
+                weapon={weapon}
+                pending={pending}
+                onEquip={onEquip}
+              />
+            ))}
+          </div>
+        )}
+        {error ? (
+          <p
+            role="alert"
+            className="mt-4 border-l-2 border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function InventoryItemCard({
+  hero,
+  item,
+  weapon,
+  pending,
+  onEquip,
+}: {
+  hero: Hero
+  item: InventoryItem
+  weapon: InventoryItem | undefined
+  pending: boolean
+  onEquip: (itemId: string) => void
+}) {
+  const damageDelta = item.damage - (weapon?.damage ?? 0)
+
+  return (
+    <article className="flex min-h-56 flex-col border border-border/70 bg-background/45 p-4">
+      <div className="flex items-start gap-3">
+        <div className="grid size-12 shrink-0 place-items-center border border-ember/45 bg-ember/5">
+          <Sword className="size-5 text-ember" aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="font-medium leading-5">{item.name}</h2>
+          <p className="mt-1 font-mono text-[0.58rem] uppercase tracking-wider text-ember">
+            {itemRarityName(item.rarity)} · {item.itemLevel} рівень
+          </p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {item.setName}
+          </p>
+        </div>
+      </div>
+      <dl className="mt-4 grid grid-cols-2 gap-px bg-border/60 text-xs">
+        <div className="bg-panel/80 p-2">
+          <dt className="text-muted-foreground">Сила</dt>
+          <dd className="mt-1 font-mono">
+            {item.damage}/{item.damageMax}
+          </dd>
+        </div>
+        <div className="bg-panel/80 p-2">
+          <dt className="text-muted-foreground">Якість</dt>
+          <dd className="mt-1 font-mono">
+            {Math.round((item.rollQuality / 9_999) * 100)}%
+          </dd>
+        </div>
+      </dl>
+      <div className="mt-3 flex justify-between text-sm">
+        <span className="text-muted-foreground">Зміна DMG</span>
+        <span className={`font-mono ${deltaColor(damageDelta)}`}>
+          {formatDelta(damageDelta)}
+        </span>
+      </div>
+      <Button
+        type="button"
+        disabled={pending || item.itemLevel > hero.level}
+        onClick={() => onEquip(item.id)}
+        className="mt-auto h-9 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
+      >
+        {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
+      </Button>
+    </article>
   )
 }
 
