@@ -10,10 +10,12 @@ import {
   Crown,
   House,
   Map,
+  Mail,
   Package,
   Settings,
   Shield,
   Swords,
+  UserRound,
   Users,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -80,8 +82,8 @@ export function GameShell({
   )
 
   return (
-    <div className="min-h-screen bg-background pb-4 text-foreground lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)_18rem]">
-      <aside className="border-b border-border/80 bg-ink/95 lg:sticky lg:top-0 lg:h-[calc(100vh-2rem)] lg:border-r lg:border-b-0">
+    <div className="min-h-screen bg-background pb-4 text-foreground lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] xl:grid-cols-[13rem_minmax(0,1fr)_18rem]">
+      <aside className="border-b border-border/80 bg-ink/95 lg:sticky lg:top-0 lg:row-span-2 lg:h-[calc(100vh-2rem)] lg:border-r lg:border-b-0">
         <div className="border-b border-border/80 px-5 py-4">
           <p className="font-serif text-2xl tracking-[0.14em] text-foreground">
             VEILFALL
@@ -139,47 +141,50 @@ export function GameShell({
         </div>
       </aside>
 
-      <div className="min-w-0">
-        <header className="border-b border-border/80 bg-panel/90 px-4 py-3 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex min-w-60 items-center gap-3">
-              <div className="grid size-11 place-items-center border border-ember/50 bg-ember/5">
-                <Shield className="text-ember" aria-hidden="true" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{hero.name}</p>
-                <div className="mt-1 flex justify-between font-mono text-[0.6rem] text-muted-foreground">
-                  <span>Рівень {hero.level}</span>
-                  <span>{Math.round(experiencePercent)}%</span>
-                </div>
-                <div className="mt-1 h-1 bg-background">
-                  <div
-                    className="h-full bg-destructive"
-                    style={{ width: `${experiencePercent}%` }}
-                  />
-                </div>
-              </div>
+      <header className="border-b border-border/80 bg-panel/90 px-4 py-3 sm:px-6 lg:col-start-2 lg:row-start-1 xl:col-end-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-60 items-center gap-3">
+            <div className="grid size-11 place-items-center border border-ember/50 bg-ember/5">
+              <Shield className="text-ember" aria-hidden="true" />
             </div>
-            <div className="flex items-center gap-px bg-border/70 text-xs">
-              <TopResource icon={Crown} label={clanName ?? 'Без клану'} />
-              <TopResource icon={Coins} label={`${hero.gold} золота`} />
-              <TopResource icon={Compass} label={`${resourceTotal} ресурсів`} />
-              <button
-                type="button"
-                aria-label="Сповіщення"
-                className="grid size-11 place-items-center bg-background/80 text-muted-foreground hover:text-ember"
-              >
-                <Bell className="size-4" aria-hidden="true" />
-              </button>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{hero.name}</p>
+              <div className="mt-1 flex justify-between font-mono text-[0.6rem] text-muted-foreground">
+                <span>Рівень {hero.level}</span>
+                <span>{Math.round(experiencePercent)}%</span>
+              </div>
+              <div className="mt-1 h-1 bg-background">
+                <div
+                  className="h-full bg-destructive"
+                  style={{ width: `${experiencePercent}%` }}
+                />
+              </div>
             </div>
           </div>
-        </header>
+          <div className="flex min-w-0 items-center gap-px bg-border/70 text-xs">
+            <TopResource icon={Crown} label={clanName ?? 'Без клану'} />
+            <TopResource icon={Coins} label={`${hero.gold} золота`} />
+            <TopResource icon={Compass} label={`${resourceTotal} ресурсів`} />
+            <div
+              aria-label="Меню гравця"
+              className="ml-1 flex items-center gap-px"
+            >
+              <PlayerMenuItem icon={Mail} label="Повідомлення" />
+              <PlayerMenuItem icon={Bell} label="Сповіщення" />
+              <PlayerMenuItem icon={UserRound} label="Профіль" />
+              <PlayerMenuItem icon={Settings} label="Налаштування" />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="min-w-0 lg:col-start-2 lg:row-start-2">
         <div className="veil-game-surface min-h-[calc(100vh-7rem)] p-3 sm:p-5">
           {children}
         </div>
       </div>
 
-      <aside className="hidden border-l border-border/80 bg-ink/90 p-4 xl:block">
+      <aside className="hidden border-l border-border/80 bg-ink/90 p-4 xl:col-start-3 xl:row-start-2 xl:block">
         <p className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-ember">
           Хроніка
         </p>
@@ -229,6 +234,26 @@ function TopResource({
       <Icon className="size-4 text-ember" aria-hidden="true" />
       <span className="hidden sm:inline">{label}</span>
     </div>
+  )
+}
+
+function PlayerMenuItem({
+  icon: Icon,
+  label,
+}: {
+  icon: typeof Bell
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      disabled
+      title={`${label} — незабаром`}
+      aria-label={`${label} — незабаром`}
+      className="grid size-11 place-items-center bg-background/80 text-muted-foreground opacity-65 disabled:cursor-not-allowed"
+    >
+      <Icon className="size-4" aria-hidden="true" />
+    </button>
   )
 }
 

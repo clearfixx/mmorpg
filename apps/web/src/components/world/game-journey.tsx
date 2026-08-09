@@ -1753,7 +1753,7 @@ function EquipmentScreen({
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
             {locationName} · спорядження
           </p>
-          <h1 className="mt-1 text-xl font-semibold">{hero.name}</h1>
+          <h1 className="mt-1 text-xl font-semibold">Профіль {hero.name}</h1>
         </div>
         <Button
           type="button"
@@ -1766,12 +1766,20 @@ function EquipmentScreen({
       </header>
       <div className="grid lg:grid-cols-[18rem_1fr_20rem]">
         <aside className="border-b border-border/70 p-5 lg:border-r lg:border-b-0">
-          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-muted-foreground">
-            Показники
+          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ember">
+            Характеристики
           </p>
-          <dl className="mt-4 space-y-3 text-sm">
+          <dl className="mt-4 space-y-3 border-y border-border/70 py-4 text-sm">
             <div className="flex justify-between">
-              <dt>Базовий DMG</dt>
+              <dt className="text-muted-foreground">Здоров’я</dt>
+              <dd className="font-mono">{hero.baseStats.health}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Захист</dt>
+              <dd className="font-mono">{hero.baseStats.armor}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Базова атака</dt>
               <dd className="font-mono">{inventory.baseDamage}</dd>
             </div>
             <div className="flex justify-between text-ember">
@@ -1791,24 +1799,49 @@ function EquipmentScreen({
               {weapon ? weapon.name : 'Слот порожній'}
             </div>
           </div>
+          <dl className="mt-6 grid grid-cols-2 gap-px bg-border/70 text-center">
+            <InventoryCount label="У сундуку" value={inventory.chest.length} />
+            <InventoryCount
+              label="У рюкзаку"
+              value={inventory.backpack.length}
+            />
+          </dl>
         </aside>
-        <section className="relative min-h-[34rem] border-b border-border/70 p-6 lg:border-r lg:border-b-0">
+        <section className="relative min-h-[34rem] overflow-hidden border-b border-border/70 p-6 lg:border-r lg:border-b-0">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,oklch(0.52_0.1_55/20%),transparent_40%)]" />
           <p className="text-center font-mono text-[0.65rem] uppercase tracking-[0.22em] text-moss">
-            Динамічний вигляд
+            {archetypeName(hero.archetype)} · рівень {hero.level}
           </p>
-          <div className="relative mx-auto mt-8 h-96 w-52">
-            <div className="absolute top-0 left-1/2 h-16 w-14 -translate-x-1/2 border border-border bg-muted" />
-            <div className="absolute top-16 left-1/2 h-44 w-28 -translate-x-1/2 border border-border bg-panel" />
-            <div className="absolute top-60 left-1/2 h-32 w-24 -translate-x-1/2 border-x border-border bg-panel" />
-            <div className="absolute top-20 right-0 flex h-56 w-10 items-center justify-center border border-ember/60 bg-ember/5 text-ember">
-              {weapon ? (
-                <Sword className="h-7 w-7" aria-label={weapon.name} />
-              ) : (
-                <span className="font-mono text-xs">—</span>
-              )}
+          <h2 className="relative mt-2 text-center font-serif text-2xl text-ember">
+            {weapon?.setName ?? 'Мандрівник Попелястого краю'}
+          </h2>
+          <div className="relative mx-auto mt-8 grid max-w-md grid-cols-[6.5rem_1fr_6.5rem] gap-3">
+            <div className="space-y-3">
+              <EquipmentSlot label="Шолом" />
+              <EquipmentSlot label="Наплечники" />
+              <EquipmentSlot label="Нагрудник" />
+              <EquipmentSlot label="Рукавиці" />
+            </div>
+            <div className="flex min-h-80 flex-col items-center justify-center border-x border-ember/20 bg-background/25 px-3">
+              <div className="grid size-20 place-items-center rounded-full border border-ember/60 bg-ember/10 shadow-[0_0_3rem_oklch(0.55_0.12_55/20%)]">
+                <Shield className="size-10 text-ember" aria-hidden="true" />
+              </div>
+              <div className="mt-5 h-36 w-24 border border-border/80 bg-panel/80 [clip-path:polygon(15%_0,85%_0,100%_100%,0_100%)]" />
+              <div className="mt-3 flex items-center gap-2 text-ember">
+                <Sword className="size-5" aria-hidden="true" />
+                <span className="font-mono text-[0.58rem] uppercase tracking-wider">
+                  {weapon ? `+${weapon.damage} DMG` : 'Без зброї'}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <EquipmentSlot label="Амулет" />
+              <EquipmentSlot label="Кільце" />
+              <EquipmentSlot label="Пояс" />
+              <EquipmentSlot label="Черевики" />
             </div>
           </div>
-          <p className="mt-3 text-center text-xs text-muted-foreground">
+          <p className="relative mt-5 text-center text-xs text-muted-foreground">
             {inventory.mainHandVisualAssetId ?? 'Базовий вигляд без зброї'}
           </p>
         </section>
@@ -1867,6 +1900,33 @@ function EquipmentScreen({
         </aside>
       </div>
     </section>
+  )
+}
+
+function EquipmentSlot({ label }: { label: string }) {
+  return (
+    <div className="grid min-h-16 place-items-center border border-border/70 bg-background/55 px-2 text-center">
+      <div>
+        <Package
+          className="mx-auto size-4 text-muted-foreground/60"
+          aria-hidden="true"
+        />
+        <p className="mt-1 font-mono text-[0.52rem] uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function InventoryCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-background/60 px-2 py-3">
+      <dt className="font-mono text-[0.52rem] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 font-mono text-sm text-foreground">{value}</dd>
+    </div>
   )
 }
 
