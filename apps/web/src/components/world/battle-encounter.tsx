@@ -74,10 +74,10 @@ interface BattleReward {
 interface ExpeditionProgress {
   highestClearedTier: number
   checkpointTier: number
-  nextCheckpointTier: number
-  nextCheckpointCost: number
+  saveableTier: number | null
+  saveCost: number | null
   gold: number
-  canAffordNextCheckpoint: boolean
+  canAffordSave: boolean
 }
 
 export function BattleEncounter({
@@ -124,6 +124,13 @@ export function BattleEncounter({
     }
   }, [battle?.phase, battle?.version])
 
+  useEffect(() => {
+    if (battle?.status !== 'WON') return
+    void loadExpeditionProgress()
+      .then(setExpedition)
+      .catch(() => setError('Не вдалося покликати провідника.'))
+  }, [battle?.encounterTier, battle?.status])
+
   async function start() {
     setPending(true)
     setError(null)
@@ -141,17 +148,22 @@ export function BattleEncounter({
   }
 
   async function hireGuide() {
-    if (!expedition) return
+    if (
+      !expedition ||
+      battle?.status !== 'WON' ||
+      expedition.saveableTier !== battle.encounterTier
+    )
+      return
     setPending(true)
     setError(null)
     try {
       const data = await graphQl<{
         hireExpeditionGuide: ExpeditionProgress
       }>(
-        'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { highestClearedTier checkpointTier nextCheckpointTier nextCheckpointCost gold canAffordNextCheckpoint } }',
+        'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { highestClearedTier checkpointTier saveableTier saveCost gold canAffordSave } }',
         {
           input: {
-            checkpointTier: expedition.nextCheckpointTier,
+            checkpointTier: battle.encounterTier,
             idempotencyKey: crypto.randomUUID(),
           },
         },
@@ -307,34 +319,18 @@ export function BattleEncounter({
               {preparationEffect(preparation)}
             </p>
           </div>
-          {expedition ? (
+          {expedition && expedition.checkpointTier > 1 ? (
             <div className="mt-4 border border-border/70 bg-background/45 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-ember">
-                    Провідник Порожньої дороги
-                  </p>
-                  <p className="mt-2 text-sm">
-                    Старт походу: етап {expedition.checkpointTier}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Найглибший подоланий етап: {expedition.highestClearedTier}
-                  </p>
-                </div>
-                {expedition.nextCheckpointTier > expedition.checkpointTier &&
-                expedition.highestClearedTier > 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={pending || !expedition.canAffordNextCheckpoint}
-                    onClick={hireGuide}
-                    className="h-9 rounded-sm"
-                  >
-                    Зберегти етап {expedition.nextCheckpointTier} ·{' '}
-                    {expedition.nextCheckpointCost} золота
-                  </Button>
-                ) : null}
-              </div>
+              <p className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-ember">
+                Провідник Порожньої дороги
+              </p>
+              <p className="mt-2 text-sm">
+                Провідник чекає біля застави й готовий повернути вас до етапу{' '}
+                {expedition.checkpointTier} в обхід переможених ворогів.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Оплачений маршрут зберігається назавжди.
+              </p>
             </div>
           ) : null}
           {error ? (
@@ -400,7 +396,9 @@ export function BattleEncounter({
                 maxHealth={battle.hero.maxHealth}
                 pending={pending}
                 reward={reward}
+                expedition={expedition}
                 onClaim={claimReward}
+                onSave={hireGuide}
                 onContinue={continueAdventure}
                 onReturn={returnToWatchpost}
               />
@@ -524,7 +522,9 @@ function BattleResult({
   maxHealth,
   pending,
   reward,
+  expedition,
   onClaim,
+  onSave,
   onContinue,
   onReturn,
 }: {
@@ -535,7 +535,9 @@ function BattleResult({
   maxHealth: number
   pending: boolean
   reward: BattleReward | null
+  expedition: ExpeditionProgress | null
   onClaim: () => void
+  onSave: () => void
   onContinue: () => void
   onReturn: () => void
 }) {
@@ -555,6 +557,14 @@ function BattleResult({
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Ходів: {turns}. Здоров’я героя: {health}/{maxHealth}.
       </p>
+      {won ? (
+        <GuideCheckpointOffer
+          encounterTier={encounterTier}
+          expedition={expedition}
+          pending={pending}
+          onSave={onSave}
+        />
+      ) : null}
       {won && !reward ? (
         <div className="mt-5 border border-ember/50 bg-background/50 p-4">
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-ember">
@@ -617,6 +627,49 @@ function BattleResult({
         </div>
       ) : null}
     </div>
+  )
+}
+
+function GuideCheckpointOffer({
+  encounterTier,
+  expedition,
+  pending,
+  onSave,
+}: {
+  encounterTier: number
+  expedition: ExpeditionProgress | null
+  pending: boolean
+  onSave: () => void
+}) {
+  const secured = (expedition?.checkpointTier ?? 1) >= encounterTier
+  const canSave = expedition?.saveableTier === encounterTier
+
+  return (
+    <section className="mt-5 border border-border/70 bg-background/45 p-4">
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-ember">
+        Таємничий провідник
+      </p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        {secured
+          ? `Провідник уже знає безпечний шлях до етапу ${encounterTier}.`
+          : encounterTier === 1
+            ? 'Провідник спостерігає за вами, але початок дороги й так доступний без оплати.'
+            : `Провідник пропонує запам’ятати шлях до етапу ${encounterTier}. У наступному поході він проведе вас сюди в обхід ворогів.`}
+      </p>
+      {canSave ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending || !expedition.canAffordSave}
+          onClick={onSave}
+          className="mt-3 h-9 rounded-sm"
+        >
+          {expedition.canAffordSave
+            ? `Закріпити маршрут · ${expedition.saveCost} золота`
+            : `Потрібно ${expedition.saveCost} золота`}
+        </Button>
+      ) : null}
+    </section>
   )
 }
 
@@ -745,7 +798,7 @@ async function loadActiveBattle(): Promise<Battle | null> {
 
 async function loadExpeditionProgress(): Promise<ExpeditionProgress> {
   const data = await graphQl<{ expeditionProgress: ExpeditionProgress }>(
-    '{ expeditionProgress { highestClearedTier checkpointTier nextCheckpointTier nextCheckpointCost gold canAffordNextCheckpoint } }',
+    '{ expeditionProgress { highestClearedTier checkpointTier saveableTier saveCost gold canAffordSave } }',
   )
   return data.expeditionProgress
 }

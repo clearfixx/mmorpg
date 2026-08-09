@@ -505,6 +505,75 @@ describe('Health (e2e)', () => {
         },
       });
 
+    await prisma.client.character.update({
+      where: { id: rewardedCharacter.id },
+      data: { gold: { increment: 100 } },
+    });
+    await prisma.client.characterWorldState.update({
+      where: { characterId: rewardedCharacter.id },
+      data: { highestClearedTier: 2 },
+    });
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ expeditionProgress { highestClearedTier checkpointTier saveableTier saveCost canAffordSave } }',
+      })
+      .expect(200)
+      .expect({
+        data: {
+          expeditionProgress: {
+            highestClearedTier: 2,
+            checkpointTier: 1,
+            saveableTier: 2,
+            saveCost: 100,
+            canAffordSave: true,
+          },
+        },
+      });
+    const futureRoute = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { checkpointTier } }',
+        variables: {
+          input: {
+            checkpointTier: 3,
+            idempotencyKey: `future-guide-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(futureRoute.text).toContain('errors');
+    expect(futureRoute.text).toContain(
+      'Only the highest cleared tier can be secured',
+    );
+    const securedRoute = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { checkpointTier saveableTier gold } }',
+        variables: {
+          input: {
+            checkpointTier: 2,
+            idempotencyKey: `guide-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(securedRoute.body).toEqual({
+      data: {
+        hireExpeditionGuide: {
+          checkpointTier: 2,
+          saveableTier: null,
+          gold: 48,
+        },
+      },
+    });
+
     await prisma.client.battle.create({
       data: {
         characterId: rewardedCharacter.id,

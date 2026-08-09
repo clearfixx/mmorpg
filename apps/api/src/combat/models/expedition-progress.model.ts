@@ -4,8 +4,8 @@ import { Field, Int, ObjectType } from '@nestjs/graphql';
 export class ExpeditionProgressModel {
   @Field(() => Int) highestClearedTier!: number;
   @Field(() => Int) checkpointTier!: number;
-  @Field(() => Int) nextCheckpointTier!: number;
-  @Field(() => Int) nextCheckpointCost!: number;
+  @Field(() => Int, { nullable: true }) saveableTier!: number | null;
+  @Field(() => Int, { nullable: true }) saveCost!: number | null;
   @Field(() => Int) gold!: number;
-  @Field(() => Boolean) canAffordNextCheckpoint!: boolean;
+  @Field(() => Boolean) canAffordSave!: boolean;
 }

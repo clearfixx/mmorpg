@@ -334,12 +334,12 @@ type EquippedItemModel {
 }
 
 type ExpeditionProgressModel {
-  canAffordNextCheckpoint: Boolean!
+  canAffordSave: Boolean!
   checkpointTier: Int!
   gold: Int!
   highestClearedTier: Int!
-  nextCheckpointCost: Int!
-  nextCheckpointTier: Int!
+  saveCost: Int
+  saveableTier: Int
 }
 
 type FactionStateModel {

@@ -93,16 +93,17 @@ export class CombatService {
     });
     const highestClearedTier = character.worldState?.highestClearedTier ?? 0;
     const checkpointTier = character.worldState?.guideCheckpointTier ?? 1;
-    const nextCheckpointTier = Math.max(2, highestClearedTier + 1);
-    const nextCheckpointCost = expeditionCheckpointCost(nextCheckpointTier);
+    const saveableTier =
+      highestClearedTier > checkpointTier ? highestClearedTier : null;
+    const saveCost =
+      saveableTier === null ? null : expeditionCheckpointCost(saveableTier);
     return {
       highestClearedTier,
       checkpointTier,
-      nextCheckpointTier,
-      nextCheckpointCost,
+      saveableTier,
+      saveCost,
       gold: character.gold,
-      canAffordNextCheckpoint:
-        highestClearedTier > 0 && character.gold >= nextCheckpointCost,
+      canAffordSave: saveCost !== null && character.gold >= saveCost,
     };
   }
 
@@ -134,25 +135,47 @@ export class CombatService {
       const state = await tx.characterWorldState.findUniqueOrThrow({
         where: { characterId },
       });
-      if (input.checkpointTier !== state.highestClearedTier + 1)
+      if (input.checkpointTier !== state.highestClearedTier)
         throw new BadRequestException(
-          'Checkpoint must follow the highest cleared tier',
+          'Only the highest cleared tier can be secured',
         );
       if (input.checkpointTier <= state.guideCheckpointTier)
         throw new BadRequestException('Checkpoint is already secured');
+      const latestVictory = await tx.battle.findFirst({
+        where: {
+          characterId,
+          status: BattleStatus.WON,
+          resultAcknowledgedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { state: true },
+      });
+      const clearedTier = (
+        latestVictory?.state as { encounterTier?: number } | undefined
+      )?.encounterTier;
+      if (clearedTier !== input.checkpointTier)
+        throw new BadRequestException(
+          'A fresh victory at this tier is required to secure the route',
+        );
+      const secured = await tx.characterWorldState.updateMany({
+        where: {
+          characterId,
+          highestClearedTier: input.checkpointTier,
+          guideCheckpointTier: { lt: input.checkpointTier },
+        },
+        data: {
+          guideCheckpointTier: input.checkpointTier,
+          version: { increment: 1 },
+        },
+      });
+      if (secured.count !== 1)
+        throw new ConflictException('Checkpoint state changed; refresh');
       const paid = await tx.character.updateMany({
         where: { id: characterId, gold: { gte: cost } },
         data: { gold: { decrement: cost }, version: { increment: 1 } },
       });
       if (paid.count !== 1)
         throw new BadRequestException('Not enough gold for the guide');
-      await tx.characterWorldState.update({
-        where: { characterId },
-        data: {
-          guideCheckpointTier: input.checkpointTier,
-          version: { increment: 1 },
-        },
-      });
       await tx.expeditionGuideCommand.create({
         data: {
           characterId,
