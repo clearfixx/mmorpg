@@ -142,3 +142,17 @@ export function itemLevelForReward(
 ): number {
   return clampItemLevel(characterLevel + Math.max(0, encounterTier - 1))
 }
+
+export function equipmentDropChancePercent(encounterTier: number): number {
+  const tier = Math.max(1, Math.floor(encounterTier))
+  if (tier <= 2 || tier % 5 === 0) return 100
+  return Math.min(45, 28 + Math.floor(tier / 10) * 2)
+}
+
+export function shouldDropEquipment(
+  encounterTier: number,
+  roll: number,
+): boolean {
+  const normalizedRoll = ((Math.floor(roll) % 10_000) + 10_000) % 10_000
+  return normalizedRoll < equipmentDropChancePercent(encounterTier) * 100
+}

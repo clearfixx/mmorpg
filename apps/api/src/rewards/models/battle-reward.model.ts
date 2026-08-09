@@ -39,5 +39,6 @@ export class BattleRewardModel {
   @Field(() => Int) experience!: number;
   @Field(() => Int) gold!: number;
   @Field(() => [ResourceBalanceModel]) resources!: ResourceBalanceModel[];
-  @Field(() => RewardItemModel) item!: RewardItemModel;
+  @Field(() => RewardItemModel, { nullable: true })
+  item!: RewardItemModel | null;
 }

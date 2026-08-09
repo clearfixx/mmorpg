@@ -40,7 +40,7 @@ type BattleRewardModel {
   claimId: ID!
   experience: Int!
   gold: Int!
-  item: RewardItemModel!
+  item: RewardItemModel
   resources: [ResourceBalanceModel!]!
 }
 

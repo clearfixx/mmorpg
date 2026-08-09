@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ITEM_RARITIES,
+  equipmentDropChancePercent,
   itemDamageRange,
   itemLevelForReward,
   maxRarityForEncounterTier,
   rarityForRoll,
   rollItemPower,
+  shouldDropEquipment,
   sumEquipmentStats,
 } from './items'
 
@@ -64,5 +66,15 @@ describe('item power', () => {
         { damage: 3, armor: 2 },
       ]),
     ).toEqual({ damage: 15, armor: 10, health: 25 })
+  })
+
+  it('guarantees onboarding and milestone drops but rolls ordinary fights', () => {
+    expect(equipmentDropChancePercent(1)).toBe(100)
+    expect(equipmentDropChancePercent(2)).toBe(100)
+    expect(equipmentDropChancePercent(5)).toBe(100)
+    expect(equipmentDropChancePercent(3)).toBe(28)
+    expect(shouldDropEquipment(3, 2_799)).toBe(true)
+    expect(shouldDropEquipment(3, 2_800)).toBe(false)
+    expect(shouldDropEquipment(10, 9_999)).toBe(true)
   })
 })

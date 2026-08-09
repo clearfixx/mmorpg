@@ -69,7 +69,7 @@ interface BattleReward {
     binding: string
     setName: string
     location: 'CHEST' | 'BACKPACK'
-  }
+  } | null
 }
 
 interface ExpeditionProgress {
@@ -595,7 +595,7 @@ function BattleResult({
             завдаватиме на 6 більше шкоди. Нагорода: +{40 + encounterTier * 20}{' '}
             досвіду і +{18 + encounterTier * 12} золота.
           </p>
-          {reward.item.location === 'BACKPACK' ? (
+          {reward.item?.location === 'BACKPACK' ? (
             <p className="text-destructive">
               Продовження залишить трофей у похідному рюкзаку. Загибель у
               наступному бою знищить усю незбережену здобич.
@@ -623,7 +623,7 @@ function BattleResult({
             >
               {pending
                 ? 'Шукаємо шлях…'
-                : reward.item.location === 'BACKPACK'
+                : reward.item?.location === 'BACKPACK'
                   ? `Ризикнути · етап ${encounterTier + 1}`
                   : `Продовжити пригоду · етап ${encounterTier + 1}`}
             </Button>
@@ -674,6 +674,8 @@ function GuideCheckpointOffer({
 }
 
 function RewardReveal({ reward }: { reward: BattleReward }) {
+  const item = reward.item
+
   return (
     <section
       className="mt-5 border border-moss/50 bg-background/55 p-4"
@@ -682,24 +684,40 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
       <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
         Нагороду отримано
       </p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-[5rem_1fr]">
-        <div className="grid size-20 place-items-center border border-ember/50 bg-ember/5 font-mono text-2xl text-ember">
-          V
-        </div>
+      <div
+        className={`mt-4 grid gap-4 ${item ? 'sm:grid-cols-[5rem_1fr]' : ''}`}
+      >
+        {item ? (
+          <div className="grid size-20 place-items-center border border-ember/50 bg-ember/5 font-mono text-2xl text-ember">
+            V
+          </div>
+        ) : null}
         <div>
-          <p className="text-lg font-semibold">{reward.item.name}</p>
-          <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-wider text-ember">
-            {rarityName(reward.item.rarity)} · {reward.item.itemLevel} рівень ·
-            комплект {reward.item.setName}
+          <p className="text-lg font-semibold">
+            {item ? item.name : 'Матеріали та бойовий досвід'}
           </p>
+          {item ? (
+            <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-wider text-ember">
+              {rarityName(item.rarity)} · {item.itemLevel} рівень · комплект{' '}
+              {item.setName}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Цього разу серед трофеїв не знайдено предмета екіпіровки.
+            </p>
+          )}
           <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-center sm:grid-cols-4">
-            <RewardStat label="DMG" value={`+${reward.item.damage}`} />
-            <RewardStat label="ARM" value={`+${reward.item.armor}`} />
-            <RewardStat label="HP" value={`+${reward.item.health}`} />
-            <RewardStat
-              label="Якість"
-              value={`${Math.round((reward.item.rollQuality / 9_999) * 100)}%`}
-            />
+            {item ? (
+              <>
+                <RewardStat label="DMG" value={`+${item.damage}`} />
+                <RewardStat label="ARM" value={`+${item.armor}`} />
+                <RewardStat label="HP" value={`+${item.health}`} />
+                <RewardStat
+                  label="Якість"
+                  value={`${Math.round((item.rollQuality / 9_999) * 100)}%`}
+                />
+              </>
+            ) : null}
             <RewardStat label="EXP" value={`+${reward.experience}`} />
             <RewardStat label="Золото" value={`+${reward.gold}`} />
             <RewardStat
@@ -707,13 +725,15 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
               value={`+${reward.resources[0]?.amount ?? 0}`}
             />
           </dl>
-          <p
-            className={`mt-3 text-xs leading-5 ${reward.item.location === 'BACKPACK' ? 'text-destructive' : 'text-muted-foreground'}`}
-          >
-            {reward.item.location === 'BACKPACK'
-              ? 'Предмет лежить у похідному рюкзаку. Поверніться на заставу, щоб перенести його до постійного сундука. Якщо продовжите шлях і загинете — трофей буде втрачено.'
-              : 'Предмет переміщено до постійного сундука. Він прив’яжеться до героя після екіпірування.'}
-          </p>
+          {item ? (
+            <p
+              className={`mt-3 text-xs leading-5 ${item.location === 'BACKPACK' ? 'text-destructive' : 'text-muted-foreground'}`}
+            >
+              {item.location === 'BACKPACK'
+                ? 'Предмет лежить у похідному рюкзаку. Поверніться на заставу, щоб перенести його до постійного сундука. Якщо продовжите шлях і загинете — трофей буде втрачено.'
+                : 'Предмет переміщено до постійного сундука. Він прив’яжеться до героя після екіпірування.'}
+            </p>
+          ) : null}
         </div>
       </div>
     </section>
@@ -803,7 +823,9 @@ async function loadExpeditionProgress(): Promise<ExpeditionProgress> {
   return data.expeditionProgress
 }
 
-function rarityName(rarity: BattleReward['item']['rarity']): string {
+function rarityName(
+  rarity: NonNullable<BattleReward['item']>['rarity'],
+): string {
   return {
     COMMON: 'Звичайний',
     UNCOMMON: 'Незвичайний',

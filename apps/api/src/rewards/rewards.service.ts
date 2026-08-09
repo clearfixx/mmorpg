@@ -13,6 +13,7 @@ import {
   progressionForExperience,
   rarityForRoll,
   rollItemPower,
+  shouldDropEquipment,
 } from '@veilfall/game-engine';
 import {
   BadRequestException,
@@ -70,6 +71,10 @@ export class RewardsService {
       (battle.state as unknown as { encounterTier?: number }).encounterTier ??
       1;
     const definition = rewardDefinitionFor(battle.character.archetype, tier);
+    const rewardDigest = createHash('sha256')
+      .update(`equipment-drop:${battle.id}`)
+      .digest();
+    const dropsItem = shouldDropEquipment(tier, rewardDigest.readUInt16BE(0));
     const roll = this.rollForBattle(
       battle.id,
       battle.character.level,
@@ -93,43 +98,45 @@ export class RewardsService {
             resourceAmount: resource.amount,
           },
         });
-        const item = await tx.itemInstance.create({
-          data: {
-            definitionId: definition.definitionId,
-            ownerId: characterId,
-            sourceBattleId: battle.id,
-            rewardClaimId: createdClaim.id,
-            itemLevel: roll.itemLevel,
-            rarity: roll.rarity,
-            rollQuality: roll.rollQuality,
-            damage: roll.damage,
-            armor: roll.armor,
-            health: roll.health,
-            binding: ItemBinding.BOUND_ON_EQUIP,
-            location: tier === 1 ? ItemLocation.CHEST : ItemLocation.BACKPACK,
-            setId: definition.setId,
-            visualAssetId: definition.visualAssetId,
-          },
-        });
-        await tx.itemLineageEvent.create({
-          data: {
-            itemId: item.id,
-            type: ItemLineageType.CREATED_FROM_BATTLE_REWARD,
-            payload: {
-              battleId: battle.id,
-              encounterId: battle.encounterId,
+        if (dropsItem) {
+          const item = await tx.itemInstance.create({
+            data: {
+              definitionId: definition.definitionId,
+              ownerId: characterId,
+              sourceBattleId: battle.id,
+              rewardClaimId: createdClaim.id,
               itemLevel: roll.itemLevel,
               rarity: roll.rarity,
               rollQuality: roll.rollQuality,
-              damageRange: { min: roll.damageMin, max: roll.damageMax },
-              stats: {
-                damage: roll.damage,
-                armor: roll.armor,
-                health: roll.health,
+              damage: roll.damage,
+              armor: roll.armor,
+              health: roll.health,
+              binding: ItemBinding.BOUND_ON_EQUIP,
+              location: tier === 1 ? ItemLocation.CHEST : ItemLocation.BACKPACK,
+              setId: definition.setId,
+              visualAssetId: definition.visualAssetId,
+            },
+          });
+          await tx.itemLineageEvent.create({
+            data: {
+              itemId: item.id,
+              type: ItemLineageType.CREATED_FROM_BATTLE_REWARD,
+              payload: {
+                battleId: battle.id,
+                encounterId: battle.encounterId,
+                itemLevel: roll.itemLevel,
+                rarity: roll.rarity,
+                rollQuality: roll.rollQuality,
+                damageRange: { min: roll.damageMin, max: roll.damageMax },
+                stats: {
+                  damage: roll.damage,
+                  armor: roll.armor,
+                  health: roll.health,
+                },
               },
             },
-          },
-        });
+          });
+        }
         const progressedCharacter = await tx.character.update({
           where: { id: characterId },
           data: {
@@ -260,7 +267,15 @@ export class RewardsService {
       visualAssetId: string;
     } | null;
   }): BattleRewardModel {
-    if (!claim.item) throw new ConflictException('Reward item is incomplete');
+    if (!claim.item)
+      return {
+        claimId: claim.id,
+        battleId: claim.battleId,
+        experience: claim.experience,
+        gold: claim.gold,
+        resources: [resourceBalance(claim.resourceType, claim.resourceAmount)],
+        item: null,
+      };
     const definition = itemDefinition(claim.item.definitionId);
     if (!definition)
       throw new ConflictException('Reward definition is missing');
