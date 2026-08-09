@@ -70,7 +70,7 @@
     @apply bg-background font-sans;
   }
   body {
-    @apply min-h-screen bg-background text-foreground antialiased;
+    @apply min-h-screen bg-background pb-8 text-foreground antialiased;
   }
   button,
   a {
