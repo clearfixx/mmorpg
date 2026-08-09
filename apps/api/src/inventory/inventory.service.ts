@@ -30,11 +30,30 @@ const BASE_DAMAGE = {
   [CharacterArchetype.ARCANIST]: 21,
 };
 
-const ITEM_NAMES: Record<string, string> = {
-  'veteran-notched-blade-v1': 'Зазубрений клинок Ветерана',
-  'veteran-ashwood-bow-v1': 'Ясеневий лук Ветерана',
-  'veteran-cracked-focus-v1': 'Тріснутий фокус Ветерана',
+const ITEM_DEFINITIONS: Record<
+  string,
+  { name: string; equipmentSlots: readonly EquipmentSlot[] }
+> = {
+  'veteran-notched-blade-v1': {
+    name: 'Зазубрений клинок Ветерана',
+    equipmentSlots: [EquipmentSlot.MAIN_HAND],
+  },
+  'veteran-ashwood-bow-v1': {
+    name: 'Ясеневий лук Ветерана',
+    equipmentSlots: [EquipmentSlot.MAIN_HAND],
+  },
+  'veteran-cracked-focus-v1': {
+    name: 'Тріснутий фокус Ветерана',
+    equipmentSlots: [EquipmentSlot.MAIN_HAND],
+  },
 };
+
+export function isEquipmentSlotCompatible(
+  definitionId: string,
+  slot: EquipmentSlot,
+): boolean {
+  return ITEM_DEFINITIONS[definitionId]?.equipmentSlots.includes(slot) ?? false;
+}
 
 @Injectable()
 export class InventoryService {
@@ -49,8 +68,6 @@ export class InventoryService {
   }
 
   async equip(userId: string, input: EquipItemInput): Promise<InventoryModel> {
-    if (input.slot !== EquipmentSlot.MAIN_HAND)
-      throw new BadRequestException('Equipment slot is unavailable');
     const characterId = await this.characters.requireIdForUser(userId);
     const payloadHash = createHash('sha256')
       .update(`${input.itemId}:${input.slot}:${input.expectedCharacterVersion}`)
@@ -83,6 +100,8 @@ export class InventoryService {
         });
         if (!item)
           throw new BadRequestException('Item is not available in your chest');
+        if (!isEquipmentSlotCompatible(item.definitionId, input.slot))
+          throw new BadRequestException('Item is incompatible with this slot');
         if (item.itemLevel > character.level)
           throw new BadRequestException('Character level is too low');
         const version = await tx.character.updateMany({
@@ -216,7 +235,7 @@ export class InventoryService {
       ...item,
       damageMin: damageRange.min,
       damageMax: damageRange.max,
-      name: ITEM_NAMES[item.definitionId] ?? 'Невідомий предмет',
+      name: ITEM_DEFINITIONS[item.definitionId]?.name ?? 'Невідомий предмет',
       setName: item.setId === 'veteran' ? 'Ветеран' : item.setId,
     };
   }

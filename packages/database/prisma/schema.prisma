@@ -89,7 +89,20 @@ enum ItemLineageType {
 }
 
 enum EquipmentSlot {
+  HEAD
+  SHOULDERS
+  CHEST
+  BRACERS
+  HANDS
+  WAIST
+  LEGS
+  FEET
   MAIN_HAND
+  OFF_HAND
+  AMULET
+  BRACELET
+  RING_LEFT
+  RING_RIGHT
 }
 
 enum TalentType {

@@ -62,13 +62,29 @@ interface InventoryItem {
   visualAssetId: string
 }
 
+type EquipmentSlotKey =
+  | 'HEAD'
+  | 'SHOULDERS'
+  | 'CHEST'
+  | 'BRACERS'
+  | 'HANDS'
+  | 'WAIST'
+  | 'LEGS'
+  | 'FEET'
+  | 'MAIN_HAND'
+  | 'OFF_HAND'
+  | 'AMULET'
+  | 'BRACELET'
+  | 'RING_LEFT'
+  | 'RING_RIGHT'
+
 interface Inventory {
   characterVersion: number
   baseDamage: number
   totalDamage: number
   chest: InventoryItem[]
   backpack: InventoryItem[]
-  equipped: Array<{ slot: 'MAIN_HAND'; item: InventoryItem }>
+  equipped: Array<{ slot: EquipmentSlotKey; item: InventoryItem }>
   mainHandVisualAssetId: string | null
 }
 
@@ -1764,6 +1780,9 @@ function EquipmentScreen({
   const weapon = inventory.equipped.find(
     (entry) => entry.slot === 'MAIN_HAND',
   )?.item
+  const equippedBySlot = new Map(
+    inventory.equipped.map((entry) => [entry.slot, entry.item]),
+  )
 
   if (mode === 'INVENTORY')
     return (
@@ -1808,13 +1827,28 @@ function EquipmentScreen({
           </h2>
           <div className="relative mx-auto mt-7 grid max-w-xl grid-cols-[7rem_1fr_7rem] gap-3">
             <div className="space-y-3">
-              <EquipmentSlot label="Шолом" />
-              <EquipmentSlot label="Наплечники" />
-              <EquipmentSlot label="Нагрудник" />
-              <EquipmentSlot label="Наручі" />
-              <EquipmentSlot label="Рукавиці" />
-              <EquipmentSlot label="Штани" />
-              <EquipmentSlot label="Черевики" />
+              <EquipmentSlot label="Шолом" item={equippedBySlot.get('HEAD')} />
+              <EquipmentSlot
+                label="Наплечники"
+                item={equippedBySlot.get('SHOULDERS')}
+              />
+              <EquipmentSlot
+                label="Нагрудник"
+                item={equippedBySlot.get('CHEST')}
+              />
+              <EquipmentSlot
+                label="Наручі"
+                item={equippedBySlot.get('BRACERS')}
+              />
+              <EquipmentSlot
+                label="Рукавиці"
+                item={equippedBySlot.get('HANDS')}
+              />
+              <EquipmentSlot label="Штани" item={equippedBySlot.get('LEGS')} />
+              <EquipmentSlot
+                label="Черевики"
+                item={equippedBySlot.get('FEET')}
+              />
             </div>
             <div className="flex min-h-80 flex-col items-center justify-center border-x border-ember/20 bg-background/25 px-3">
               <div className="grid size-20 place-items-center rounded-full border border-ember/60 bg-ember/10 shadow-[0_0_3rem_oklch(0.55_0.12_55/20%)]">
@@ -1829,12 +1863,27 @@ function EquipmentScreen({
               </div>
             </div>
             <div className="space-y-3">
-              <EquipmentSlot label="Амулет" />
-              <EquipmentSlot label="Браслет" />
-              <EquipmentSlot label="Каблучка I" />
-              <EquipmentSlot label="Каблучка II" />
-              <EquipmentSlot label="Пояс" />
-              <EquipmentSlot label="Друга рука" />
+              <EquipmentSlot
+                label="Амулет"
+                item={equippedBySlot.get('AMULET')}
+              />
+              <EquipmentSlot
+                label="Браслет"
+                item={equippedBySlot.get('BRACELET')}
+              />
+              <EquipmentSlot
+                label="Каблучка I"
+                item={equippedBySlot.get('RING_LEFT')}
+              />
+              <EquipmentSlot
+                label="Каблучка II"
+                item={equippedBySlot.get('RING_RIGHT')}
+              />
+              <EquipmentSlot label="Пояс" item={equippedBySlot.get('WAIST')} />
+              <EquipmentSlot
+                label="Друга рука"
+                item={equippedBySlot.get('OFF_HAND')}
+              />
             </div>
           </div>
           <p className="relative mt-5 text-center text-xs text-muted-foreground">
@@ -1855,17 +1904,28 @@ function EquipmentScreen({
   )
 }
 
-function EquipmentSlot({ label }: { label: string }) {
+function EquipmentSlot({
+  label,
+  item,
+}: {
+  label: string
+  item?: InventoryItem
+}) {
   return (
     <div className="grid min-h-12 place-items-center border border-border/70 bg-background/55 px-2 text-center">
       <div>
         <Package
-          className="mx-auto size-4 text-muted-foreground/60"
+          className={`mx-auto size-4 ${item ? 'text-ember' : 'text-muted-foreground/60'}`}
           aria-hidden="true"
         />
         <p className="mt-1 font-mono text-[0.52rem] uppercase tracking-wider text-muted-foreground">
           {label}
         </p>
+        {item ? (
+          <p className="mt-1 truncate text-[0.58rem] text-foreground">
+            {item.name}
+          </p>
+        ) : null}
       </div>
     </div>
   )

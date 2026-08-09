@@ -312,7 +312,20 @@ input EquipItemInput {
 }
 
 enum EquipmentSlot {
+  AMULET
+  BRACELET
+  BRACERS
+  CHEST
+  FEET
+  HANDS
+  HEAD
+  LEGS
   MAIN_HAND
+  OFF_HAND
+  RING_LEFT
+  RING_RIGHT
+  SHOULDERS
+  WAIST
 }
 
 type EquippedItemModel {
