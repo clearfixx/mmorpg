@@ -183,43 +183,44 @@ model User {
 }
 
 model Character {
-  id                     String                     @id @default(uuid()) @db.Uuid
-  userId                 String                     @unique @map("user_id") @db.Uuid
-  name                   String                     @db.VarChar(24)
-  nameKey                String                     @unique @map("name_key") @db.VarChar(64)
-  archetype              CharacterArchetype
-  origin                 CharacterOrigin            @default(ROAD_SURVIVOR)
-  avatarMode             AvatarMode                 @default(STATIC) @map("avatar_mode")
-  staticAvatarId         String?                    @map("static_avatar_id") @db.VarChar(64)
-  level                  Int                        @default(1)
-  experience             Int                        @default(0)
-  gold                   Int                        @default(0)
-  version                Int                        @default(1)
-  faction                WorldFaction?
-  factionChanges         Int                        @default(0) @map("faction_changes")
-  createdAt              DateTime                   @default(now()) @map("created_at")
-  updatedAt              DateTime                   @updatedAt @map("updated_at")
-  user                   User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  worldState             CharacterWorldState?
-  worldCommands          WorldCommand[]
-  battles                Battle[]
-  rewardClaims           RewardClaim[]
-  items                  ItemInstance[]
-  equipment              EquipmentAssignment[]
-  inventoryCommands      InventoryCommand[]
-  talents                CharacterTalent[]
-  talentCommands         TalentCommand[]
-  resources              CharacterResource[]
-  resourceLedger         ResourceLedgerEntry[]
-  clanMembership         ClanMembership?
-  clanCommands           ClanCommand[]
-  clanContributions      ClanContribution[]
-  clanBossParticipations ClanBossParticipant[]
-  clanBossRewardClaims   ClanBossRewardClaim[]
-  craftJobs              CraftJob[]
-  craftCommands          CraftCommand[]
-  recipeKnowledge        CharacterRecipeKnowledge[]
-  factionCommands        FactionCommand[]
+  id                      String                     @id @default(uuid()) @db.Uuid
+  userId                  String                     @unique @map("user_id") @db.Uuid
+  name                    String                     @db.VarChar(24)
+  nameKey                 String                     @unique @map("name_key") @db.VarChar(64)
+  archetype               CharacterArchetype
+  origin                  CharacterOrigin            @default(ROAD_SURVIVOR)
+  avatarMode              AvatarMode                 @default(STATIC) @map("avatar_mode")
+  staticAvatarId          String?                    @map("static_avatar_id") @db.VarChar(64)
+  level                   Int                        @default(1)
+  experience              Int                        @default(0)
+  gold                    Int                        @default(0)
+  version                 Int                        @default(1)
+  faction                 WorldFaction?
+  factionChanges          Int                        @default(0) @map("faction_changes")
+  createdAt               DateTime                   @default(now()) @map("created_at")
+  updatedAt               DateTime                   @updatedAt @map("updated_at")
+  user                    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  worldState              CharacterWorldState?
+  worldCommands           WorldCommand[]
+  battles                 Battle[]
+  rewardClaims            RewardClaim[]
+  items                   ItemInstance[]
+  equipment               EquipmentAssignment[]
+  inventoryCommands       InventoryCommand[]
+  expeditionGuideCommands ExpeditionGuideCommand[]
+  talents                 CharacterTalent[]
+  talentCommands          TalentCommand[]
+  resources               CharacterResource[]
+  resourceLedger          ResourceLedgerEntry[]
+  clanMembership          ClanMembership?
+  clanCommands            ClanCommand[]
+  clanContributions       ClanContribution[]
+  clanBossParticipations  ClanBossParticipant[]
+  clanBossRewardClaims    ClanBossRewardClaim[]
+  craftJobs               CraftJob[]
+  craftCommands           CraftCommand[]
+  recipeKnowledge         CharacterRecipeKnowledge[]
+  factionCommands         FactionCommand[]
 
   @@map("characters")
 }
@@ -527,11 +528,27 @@ model CharacterWorldState {
   preparationChoice   PreparationChoice? @map("preparation_choice")
   version             Int                @default(1)
   cinderhavenUnlocked Boolean            @default(false) @map("cinderhaven_unlocked")
+  highestClearedTier  Int                @default(0) @map("highest_cleared_tier")
+  guideCheckpointTier Int                @default(1) @map("guide_checkpoint_tier")
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   character           Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@map("character_world_states")
+}
+
+model ExpeditionGuideCommand {
+  id             String    @id @default(uuid()) @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  checkpointTier Int       @map("checkpoint_tier")
+  goldCost       Int       @map("gold_cost")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("expedition_guide_commands")
 }
 
 model RewardClaim {

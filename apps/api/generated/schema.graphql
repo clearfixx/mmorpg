@@ -333,6 +333,15 @@ type EquippedItemModel {
   slot: EquipmentSlot!
 }
 
+type ExpeditionProgressModel {
+  canAffordNextCheckpoint: Boolean!
+  checkpointTier: Int!
+  gold: Int!
+  highestClearedTier: Int!
+  nextCheckpointCost: Int!
+  nextCheckpointTier: Int!
+}
+
 type FactionStateModel {
   ashenStrength: Int!
   canChangeFaction: Boolean!
@@ -344,6 +353,11 @@ type FactionStateModel {
   frontLevelMax: Int!
   frontLevelMin: Int!
   nextScriptedShiftAt: DateTime!
+}
+
+input HireExpeditionGuideInput {
+  checkpointTier: Int!
+  idempotencyKey: String!
 }
 
 type InventoryItemModel {
@@ -417,6 +431,7 @@ type Mutation {
   createCharacter(input: CreateCharacterInput!): CharacterModel!
   createClan(input: CreateClanInput!): ClanModel!
   equipItem(input: EquipItemInput!): InventoryModel!
+  hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
   joinClan(input: JoinClanInput!): ClanModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!
@@ -449,6 +464,7 @@ type Query {
   activeBattle: BattleModel
   currentClanBoss: ClanBossModel
   currentLocation: WorldStateModel!
+  expeditionProgress: ExpeditionProgressModel!
   latestBattle: BattleModel
   myCharacter: CharacterModel
   myClan: ClanModel

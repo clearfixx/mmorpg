@@ -19,13 +19,21 @@ import {
   ConflictException,
   Injectable,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { WorldService } from '../world/world.service';
 import { SubmitCombatCommandInput } from './dto/submit-combat-command.input';
 import { ContinueAdventureInput } from './dto/continue-adventure.input';
+import { HireExpeditionGuideInput } from './dto/hire-expedition-guide.input';
 import { BattleModel } from './models/battle.model';
+import { ExpeditionProgressModel } from './models/expedition-progress.model';
+
+export function expeditionCheckpointCost(tier: number): number {
+  const safeTier = Math.max(2, Math.floor(tier));
+  return safeTier * safeTier * 25;
+}
 
 @Injectable()
 export class CombatService {
@@ -76,6 +84,87 @@ export class CombatService {
     );
   }
 
+  async expeditionProgress(userId: string): Promise<ExpeditionProgressModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const character = await this.prisma.client.character.findUniqueOrThrow({
+      where: { id: characterId },
+      select: { gold: true, worldState: true },
+    });
+    const highestClearedTier = character.worldState?.highestClearedTier ?? 0;
+    const checkpointTier = character.worldState?.guideCheckpointTier ?? 1;
+    const nextCheckpointTier = Math.max(2, highestClearedTier + 1);
+    const nextCheckpointCost = expeditionCheckpointCost(nextCheckpointTier);
+    return {
+      highestClearedTier,
+      checkpointTier,
+      nextCheckpointTier,
+      nextCheckpointCost,
+      gold: character.gold,
+      canAffordNextCheckpoint:
+        highestClearedTier > 0 && character.gold >= nextCheckpointCost,
+    };
+  }
+
+  async hireGuide(
+    userId: string,
+    input: HireExpeditionGuideInput,
+  ): Promise<ExpeditionProgressModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const payloadHash = createHash('sha256')
+      .update(`GUIDE:${input.checkpointTier}`)
+      .digest('hex');
+    const existing = await this.prisma.client.expeditionGuideCommand.findUnique(
+      {
+        where: {
+          characterId_idempotencyKey: {
+            characterId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      },
+    );
+    if (existing) {
+      if (existing.payloadHash !== payloadHash)
+        throw new ConflictException('Command key was used for another tier');
+      return this.expeditionProgress(userId);
+    }
+    const cost = expeditionCheckpointCost(input.checkpointTier);
+    await this.prisma.client.$transaction(async (tx) => {
+      const state = await tx.characterWorldState.findUniqueOrThrow({
+        where: { characterId },
+      });
+      if (input.checkpointTier !== state.highestClearedTier + 1)
+        throw new BadRequestException(
+          'Checkpoint must follow the highest cleared tier',
+        );
+      if (input.checkpointTier <= state.guideCheckpointTier)
+        throw new BadRequestException('Checkpoint is already secured');
+      const paid = await tx.character.updateMany({
+        where: { id: characterId, gold: { gte: cost } },
+        data: { gold: { decrement: cost }, version: { increment: 1 } },
+      });
+      if (paid.count !== 1)
+        throw new BadRequestException('Not enough gold for the guide');
+      await tx.characterWorldState.update({
+        where: { characterId },
+        data: {
+          guideCheckpointTier: input.checkpointTier,
+          version: { increment: 1 },
+        },
+      });
+      await tx.expeditionGuideCommand.create({
+        data: {
+          characterId,
+          idempotencyKey: input.idempotencyKey,
+          payloadHash,
+          checkpointTier: input.checkpointTier,
+          goldCost: cost,
+        },
+      });
+    });
+    return this.expeditionProgress(userId);
+  }
+
   async start(userId: string): Promise<BattleModel> {
     const context = await this.world.encounterContext(userId);
     const active = await this.prisma.client.battle.findFirst({
@@ -104,7 +193,7 @@ export class CombatService {
       character.archetype,
       context.preparation,
       character.equipment[0]?.item.damage ?? 0,
-      1,
+      context.checkpointTier,
       character.level,
       this.combatTalentBonuses(character.talents),
     );
@@ -112,8 +201,8 @@ export class CombatService {
       data: {
         characterId: context.characterId,
         activeCharacterId: context.characterId,
-        encounterId: 'rift-scarred-marauder-v1',
-        seed: 1701,
+        encounterId: `hollow-road-tier-${context.checkpointTier}`,
+        seed: 1701 + context.checkpointTier,
         state: state as unknown as Prisma.InputJsonValue,
       },
     });
@@ -235,6 +324,13 @@ export class CombatService {
             preparationChoice: null,
             version: { increment: 1 },
           },
+        });
+      }
+      if (status === BattleStatus.WON) {
+        const clearedTier = next.encounterTier ?? 1;
+        await tx.characterWorldState.updateMany({
+          where: { characterId, highestClearedTier: { lt: clearedTier } },
+          data: { highestClearedTier: clearedTier },
         });
       }
       return tx.battle.findUniqueOrThrow({ where: { id: battle.id } });
@@ -452,6 +548,13 @@ export class CombatService {
             preparationChoice: null,
             version: { increment: 1 },
           },
+        });
+      }
+      if (result.count === 1 && status === BattleStatus.WON) {
+        const clearedTier = next.encounterTier ?? 1;
+        await tx.characterWorldState.updateMany({
+          where: { characterId, highestClearedTier: { lt: clearedTier } },
+          data: { highestClearedTier: clearedTier },
         });
       }
       return result.count === 1;

@@ -69,6 +69,15 @@ interface BattleReward {
   }
 }
 
+interface ExpeditionProgress {
+  highestClearedTier: number
+  checkpointTier: number
+  nextCheckpointTier: number
+  nextCheckpointCost: number
+  gold: number
+  canAffordNextCheckpoint: boolean
+}
+
 export function BattleEncounter({
   heroName,
   preparation,
@@ -81,10 +90,14 @@ export function BattleEncounter({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reward, setReward] = useState<BattleReward | null>(null)
+  const [expedition, setExpedition] = useState<ExpeditionProgress | null>(null)
 
   useEffect(() => {
-    void loadActiveBattle()
-      .then(setBattle)
+    void Promise.all([loadActiveBattle(), loadExpeditionProgress()])
+      .then(([activeBattle, progress]) => {
+        setBattle(activeBattle)
+        setExpedition(progress)
+      })
       .catch(() => setError('Не вдалося відновити стан бою.'))
       .finally(() => setLoading(false))
   }, [])
@@ -120,6 +133,30 @@ export function BattleEncounter({
       setBattle(data.startEncounter)
     } catch {
       setError('Не вдалося розпочати сутичку.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function hireGuide() {
+    if (!expedition) return
+    setPending(true)
+    setError(null)
+    try {
+      const data = await graphQl<{
+        hireExpeditionGuide: ExpeditionProgress
+      }>(
+        'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { highestClearedTier checkpointTier nextCheckpointTier nextCheckpointCost gold canAffordNextCheckpoint } }',
+        {
+          input: {
+            checkpointTier: expedition.nextCheckpointTier,
+            idempotencyKey: crypto.randomUUID(),
+          },
+        },
+      )
+      setExpedition(data.hireExpeditionGuide)
+    } catch {
+      setError('Провідник відмовився від угоди. Перевірте запас золота.')
     } finally {
       setPending(false)
     }
@@ -268,6 +305,36 @@ export function BattleEncounter({
               {preparationEffect(preparation)}
             </p>
           </div>
+          {expedition ? (
+            <div className="mt-4 border border-border/70 bg-background/45 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-ember">
+                    Провідник Порожньої дороги
+                  </p>
+                  <p className="mt-2 text-sm">
+                    Старт походу: етап {expedition.checkpointTier}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Найглибший подоланий етап: {expedition.highestClearedTier}
+                  </p>
+                </div>
+                {expedition.nextCheckpointTier > expedition.checkpointTier &&
+                expedition.highestClearedTier > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={pending || !expedition.canAffordNextCheckpoint}
+                    onClick={hireGuide}
+                    className="h-9 rounded-sm"
+                  >
+                    Зберегти етап {expedition.nextCheckpointTier} ·{' '}
+                    {expedition.nextCheckpointCost} золота
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {error ? (
             <p role="alert" className="mt-4 text-sm text-destructive">
               {error}
@@ -278,7 +345,9 @@ export function BattleEncounter({
             disabled={pending}
             className="mt-6 h-10 rounded-sm bg-ember text-ink hover:bg-ember-bright"
           >
-            {pending ? 'Мародер наближається…' : 'Прийняти бій'}
+            {pending
+              ? 'Мародер наближається…'
+              : `Почати з етапу ${expedition?.checkpointTier ?? 1}`}
           </Button>
         </section>
       </main>
@@ -668,6 +737,13 @@ async function loadActiveBattle(): Promise<Battle | null> {
     `{ latestBattle { ${battleFields} } }`,
   )
   return data.latestBattle
+}
+
+async function loadExpeditionProgress(): Promise<ExpeditionProgress> {
+  const data = await graphQl<{ expeditionProgress: ExpeditionProgress }>(
+    '{ expeditionProgress { highestClearedTier checkpointTier nextCheckpointTier nextCheckpointCost gold canAffordNextCheckpoint } }',
+  )
+  return data.expeditionProgress
 }
 
 function rarityName(rarity: BattleReward['item']['rarity']): string {

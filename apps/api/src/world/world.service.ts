@@ -48,7 +48,11 @@ export class WorldService {
       !state.preparationChoice
     )
       throw new BadRequestException('Travel to the encounter first');
-    return { characterId, preparation: state.preparationChoice };
+    return {
+      characterId,
+      preparation: state.preparationChoice,
+      checkpointTier: state.guideCheckpointTier,
+    };
   }
 
   async prepare(
