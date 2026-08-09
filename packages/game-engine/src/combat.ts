@@ -51,6 +51,7 @@ export interface BattleState {
   talentDamageBonus: number
   talentArmorBonus: number
   encounterTier: number
+  personalBest?: boolean
   enemyLabel: string
   enemyDamageBonus: number
   hero: {

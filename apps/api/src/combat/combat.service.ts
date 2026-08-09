@@ -151,11 +151,15 @@ export class CombatService {
         select: { state: true },
       });
       const clearedTier = (
-        latestVictory?.state as { encounterTier?: number } | undefined
+        latestVictory?.state as
+          { encounterTier?: number; personalBest?: boolean } | undefined
       )?.encounterTier;
-      if (clearedTier !== input.checkpointTier)
+      const personalBest = (
+        latestVictory?.state as { personalBest?: boolean } | undefined
+      )?.personalBest;
+      if (clearedTier !== input.checkpointTier || personalBest !== true)
         throw new BadRequestException(
-          'A fresh victory at this tier is required to secure the route',
+          'A new personal-best victory is required to secure the route',
         );
       const secured = await tx.characterWorldState.updateMany({
         where: {
@@ -357,9 +361,14 @@ export class CombatService {
       }
       if (status === BattleStatus.WON) {
         const clearedTier = next.encounterTier ?? 1;
-        await tx.characterWorldState.updateMany({
+        const record = await tx.characterWorldState.updateMany({
           where: { characterId, highestClearedTier: { lt: clearedTier } },
           data: { highestClearedTier: clearedTier },
+        });
+        next.personalBest = record.count === 1;
+        await tx.battle.update({
+          where: { id: battle.id },
+          data: { state: next as unknown as Prisma.InputJsonValue },
         });
       }
       return tx.battle.findUniqueOrThrow({ where: { id: battle.id } });
@@ -586,9 +595,14 @@ export class CombatService {
       }
       if (result.count === 1 && status === BattleStatus.WON) {
         const clearedTier = next.encounterTier ?? 1;
-        await tx.characterWorldState.updateMany({
+        const record = await tx.characterWorldState.updateMany({
           where: { characterId, highestClearedTier: { lt: clearedTier } },
           data: { highestClearedTier: clearedTier },
+        });
+        next.personalBest = record.count === 1;
+        await tx.battle.update({
+          where: { id: battleId },
+          data: { state: next as unknown as Prisma.InputJsonValue },
         });
       }
       return result.count === 1;
@@ -677,6 +691,7 @@ export class CombatService {
       status: state.status,
       phase,
       encounterTier: state.encounterTier ?? 1,
+      personalBest: state.personalBest ?? false,
       enemyName:
         state.enemyLabel ??
         ((state.encounterTier ?? 1) > 1

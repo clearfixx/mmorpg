@@ -27,6 +27,7 @@ type BattleModel {
   hero: CombatantModel!
   id: ID!
   log: [CombatLogEntryModel!]!
+  personalBest: Boolean!
   phase: String!
   status: String!
   turn: Int!

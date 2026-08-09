@@ -458,7 +458,12 @@ describe('Health (e2e)', () => {
       data: {
         status: 'WON',
         version: 2,
-        state: { ...secondState, status: 'WON', version: 2 },
+        state: {
+          ...secondState,
+          status: 'WON',
+          version: 2,
+          personalBest: false,
+        },
         activeCharacterId: null,
         completedAt: new Date(),
       },
@@ -532,6 +537,24 @@ describe('Health (e2e)', () => {
           },
         },
       });
+    const replayedRoute = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { checkpointTier } }',
+        variables: {
+          input: {
+            checkpointTier: 2,
+            idempotencyKey: `replayed-guide-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(replayedRoute.text).toContain('errors');
+    expect(replayedRoute.text).toContain(
+      'A new personal-best victory is required to secure the route',
+    );
     const futureRoute = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
@@ -550,6 +573,17 @@ describe('Health (e2e)', () => {
     expect(futureRoute.text).toContain(
       'Only the highest cleared tier can be secured',
     );
+    await prisma.client.battle.update({
+      where: { id: secondBattle.id },
+      data: {
+        state: {
+          ...secondState,
+          status: 'WON',
+          version: 2,
+          personalBest: true,
+        },
+      },
+    });
     const securedRoute = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)

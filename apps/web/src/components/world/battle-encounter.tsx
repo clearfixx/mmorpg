@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase encounterTier enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier personalBest enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
   status: string
   phase: string
   encounterTier: number
+  personalBest: boolean
   enemyName: string
   version: number
   turn: number
@@ -391,6 +392,7 @@ export function BattleEncounter({
               <BattleResult
                 status={battle.status}
                 encounterTier={battle.encounterTier}
+                personalBest={battle.personalBest}
                 turns={battle.turn}
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
@@ -517,6 +519,7 @@ export function BattleEncounter({
 function BattleResult({
   status,
   encounterTier,
+  personalBest,
   turns,
   health,
   maxHealth,
@@ -530,6 +533,7 @@ function BattleResult({
 }: {
   status: string
   encounterTier: number
+  personalBest: boolean
   turns: number
   health: number
   maxHealth: number
@@ -557,7 +561,7 @@ function BattleResult({
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Ходів: {turns}. Здоров’я героя: {health}/{maxHealth}.
       </p>
-      {won ? (
+      {won && personalBest ? (
         <GuideCheckpointOffer
           encounterTier={encounterTier}
           expedition={expedition}
@@ -641,8 +645,9 @@ function GuideCheckpointOffer({
   pending: boolean
   onSave: () => void
 }) {
-  const secured = (expedition?.checkpointTier ?? 1) >= encounterTier
   const canSave = expedition?.saveableTier === encounterTier
+
+  if (!canSave) return null
 
   return (
     <section className="mt-5 border border-border/70 bg-background/45 p-4">
@@ -650,25 +655,20 @@ function GuideCheckpointOffer({
         Таємничий провідник
       </p>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        {secured
-          ? `Провідник уже знає безпечний шлях до етапу ${encounterTier}.`
-          : encounterTier === 1
-            ? 'Провідник спостерігає за вами, але початок дороги й так доступний без оплати.'
-            : `Провідник пропонує запам’ятати шлях до етапу ${encounterTier}. У наступному поході він проведе вас сюди в обхід ворогів.`}
+        Провідник пропонує запам’ятати шлях до етапу {encounterTier}. У
+        наступному поході він проведе вас сюди в обхід ворогів.
       </p>
-      {canSave ? (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={pending || !expedition.canAffordSave}
-          onClick={onSave}
-          className="mt-3 h-9 rounded-sm"
-        >
-          {expedition.canAffordSave
-            ? `Закріпити маршрут · ${expedition.saveCost} золота`
-            : `Потрібно ${expedition.saveCost} золота`}
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending || !expedition.canAffordSave}
+        onClick={onSave}
+        className="mt-3 h-9 rounded-sm"
+      >
+        {expedition.canAffordSave
+          ? `Закріпити маршрут · ${expedition.saveCost} золота`
+          : `Потрібно ${expedition.saveCost} золота`}
+      </Button>
     </section>
   )
 }
