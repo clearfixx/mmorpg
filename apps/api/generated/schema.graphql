@@ -348,6 +348,7 @@ type FactionStateModel {
 
 type InventoryItemModel {
   binding: String!
+  compatibleSlots: [EquipmentSlot!]!
   damage: Int!
   damageMax: Int!
   damageMin: Int!
@@ -527,6 +528,7 @@ input RetreatInput {
 
 type RewardItemModel {
   binding: ItemBinding!
+  compatibleSlots: [EquipmentSlot!]!
   damage: Int!
   damageMax: Int!
   damageMin: Int!

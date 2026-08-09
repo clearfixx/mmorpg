@@ -55,6 +55,12 @@ export function isEquipmentSlotCompatible(
   return ITEM_DEFINITIONS[definitionId]?.equipmentSlots.includes(slot) ?? false;
 }
 
+export function equipmentSlotsForDefinition(
+  definitionId: string,
+): EquipmentSlot[] {
+  return [...(ITEM_DEFINITIONS[definitionId]?.equipmentSlots ?? [])];
+}
+
 @Injectable()
 export class InventoryService {
   constructor(
@@ -235,6 +241,7 @@ export class InventoryService {
       ...item,
       damageMin: damageRange.min,
       damageMax: damageRange.max,
+      compatibleSlots: equipmentSlotsForDefinition(item.definitionId),
       name: ITEM_DEFINITIONS[item.definitionId]?.name ?? 'Невідомий предмет',
       setName: item.setId === 'veteran' ? 'Ветеран' : item.setId,
     };

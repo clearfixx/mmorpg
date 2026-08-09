@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
+import { equipmentSlotsForDefinition } from '../inventory/inventory.service';
 import { resourceBalance } from '../resources/resource-catalog';
 import { ClaimBattleRewardInput } from './dto/claim-battle-reward.input';
 import { BattleRewardModel } from './models/battle-reward.model';
@@ -274,6 +275,7 @@ export class RewardsService {
         ...claim.item,
         damageMin: damageRange.min,
         damageMax: damageRange.max,
+        compatibleSlots: equipmentSlotsForDefinition(claim.item.definitionId),
         name: definition.name,
         setName: 'Ветеран',
       },

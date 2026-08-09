@@ -14,6 +14,7 @@ export class InventoryItemModel {
   @Field(() => Int) damage!: number;
   @Field(() => Int) damageMin!: number;
   @Field(() => Int) damageMax!: number;
+  @Field(() => [EquipmentSlot]) compatibleSlots!: EquipmentSlot[];
   @Field() binding!: string;
   @Field() setName!: string;
   @Field() visualAssetId!: string;

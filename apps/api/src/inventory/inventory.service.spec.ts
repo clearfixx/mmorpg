@@ -1,6 +1,9 @@
 import { EquipmentSlot } from '@veilfall/database';
 
-import { isEquipmentSlotCompatible } from './inventory.service';
+import {
+  equipmentSlotsForDefinition,
+  isEquipmentSlotCompatible,
+} from './inventory.service';
 
 describe('equipment slot compatibility', () => {
   it('allows the starter weapons only in the main hand', () => {
@@ -22,5 +25,12 @@ describe('equipment slot compatibility', () => {
     expect(
       isEquipmentSlotCompatible('unknown-item', EquipmentSlot.RING_LEFT),
     ).toBe(false);
+    expect(equipmentSlotsForDefinition('unknown-item')).toEqual([]);
+  });
+
+  it('exposes compatible slots to clients', () => {
+    expect(equipmentSlotsForDefinition('veteran-ashwood-bow-v1')).toEqual([
+      EquipmentSlot.MAIN_HAND,
+    ]);
   });
 });

@@ -57,6 +57,7 @@ interface InventoryItem {
   damage: number
   damageMin: number
   damageMax: number
+  compatibleSlots: EquipmentSlotKey[]
   binding: string
   setName: string
   visualAssetId: string
@@ -408,12 +409,13 @@ export function GameJourney() {
           pending={pending}
           error={error}
           onBack={() => setView('LOBBY')}
-          onEquip={async (itemId) => {
+          onEquip={async (itemId, slot) => {
             setPending(true)
             setError(null)
             try {
               const next = await executeInventoryMutation(
                 itemId,
+                slot,
                 inventory.characterVersion,
               )
               setInventory(next)
@@ -1791,7 +1793,7 @@ function EquipmentScreen({
   pending: boolean
   error: string | null
   onBack: () => void
-  onEquip: (itemId: string) => void
+  onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
   const weapon = inventory.equipped.find(
     (entry) => entry.slot === 'MAIN_HAND',
@@ -1964,7 +1966,7 @@ function InventoryVault({
   pending: boolean
   error: string | null
   onBack: () => void
-  onEquip: (itemId: string) => void
+  onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
   return (
     <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
@@ -2077,7 +2079,7 @@ function InventoryItemCard({
   item: InventoryItem
   weapon: InventoryItem | undefined
   pending: boolean
-  onEquip: (itemId: string) => void
+  onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
   const damageDelta = item.damage - (weapon?.damage ?? 0)
 
@@ -2119,8 +2121,15 @@ function InventoryItemCard({
       </div>
       <Button
         type="button"
-        disabled={pending || item.itemLevel > hero.level}
-        onClick={() => onEquip(item.id)}
+        disabled={
+          pending ||
+          item.itemLevel > hero.level ||
+          item.compatibleSlots.length === 0
+        }
+        onClick={() => {
+          const slot = item.compatibleSlots[0]
+          if (slot) onEquip(item.id, slot)
+        }}
         className="mt-auto h-9 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
       >
         {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
@@ -2271,6 +2280,7 @@ function InventoryCount({ label, value }: { label: string; value: number }) {
 
 async function executeInventoryMutation(
   itemId: string,
+  slot: EquipmentSlotKey,
   expectedCharacterVersion: number,
 ): Promise<Inventory> {
   const response = await fetch(endpoint, {
@@ -2279,11 +2289,11 @@ async function executeInventoryMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } } } }',
+        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } } } }',
       variables: {
         input: {
           itemId,
-          slot: 'MAIN_HAND',
+          slot,
           expectedCharacterVersion,
           idempotencyKey: crypto.randomUUID(),
         },
@@ -2315,7 +2325,7 @@ async function loadJourney(): Promise<{
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
+          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       }),
     })
     const payload = (await response.json()) as {

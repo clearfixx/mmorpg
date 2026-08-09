@@ -1,4 +1,9 @@
-import { ItemBinding, ItemLocation, ItemRarity } from '@veilfall/database';
+import {
+  EquipmentSlot,
+  ItemBinding,
+  ItemLocation,
+  ItemRarity,
+} from '@veilfall/database';
 import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 import { ResourceBalanceModel } from '../../resources/models/resource-balance.model';
@@ -18,6 +23,7 @@ export class RewardItemModel {
   @Field(() => Int) damage!: number;
   @Field(() => Int) damageMin!: number;
   @Field(() => Int) damageMax!: number;
+  @Field(() => [EquipmentSlot]) compatibleSlots!: EquipmentSlot[];
   @Field(() => ItemBinding) binding!: ItemBinding;
   @Field(() => ItemLocation) location!: ItemLocation;
   @Field() setName!: string;
