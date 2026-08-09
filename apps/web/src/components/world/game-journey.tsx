@@ -1797,43 +1797,8 @@ function EquipmentScreen({
           <ArrowLeft aria-hidden="true" /> Повернутися
         </Button>
       </header>
-      <div className="grid lg:grid-cols-[18rem_1fr_20rem]">
-        <aside className="border-b border-border/70 p-5 lg:border-r lg:border-b-0">
-          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ember">
-            Характеристики
-          </p>
-          <dl className="mt-4 space-y-3 border-y border-border/70 py-4 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">Здоров’я</dt>
-              <dd className="font-mono">{hero.baseStats.health}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">Захист</dt>
-              <dd className="font-mono">{hero.baseStats.armor}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">Базова атака</dt>
-              <dd className="font-mono">{inventory.baseDamage}</dd>
-            </div>
-            <div className="flex justify-between text-ember">
-              <dt>Зброя</dt>
-              <dd className="font-mono">+{weapon?.damage ?? 0}</dd>
-            </div>
-            <div className="flex justify-between border-t border-border pt-3 font-medium">
-              <dt>Загальний DMG</dt>
-              <dd className="font-mono">{inventory.totalDamage}</dd>
-            </div>
-          </dl>
-          <div className="mt-8">
-            <p className="font-mono text-[0.6rem] uppercase tracking-wider text-muted-foreground">
-              Основна рука
-            </p>
-            <div className="mt-2 border border-ember/50 bg-ember/5 p-3 text-sm">
-              {weapon ? weapon.name : 'Слот порожній'}
-            </div>
-          </div>
-        </aside>
-        <section className="relative min-h-[34rem] overflow-hidden border-b border-border/70 p-6 lg:border-r lg:border-b-0">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <section className="relative min-h-[34rem] overflow-hidden border-b border-border/70 p-5 sm:p-6 lg:border-r lg:border-b-0">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,oklch(0.52_0.1_55/20%),transparent_40%)]" />
           <p className="text-center font-mono text-[0.65rem] uppercase tracking-[0.22em] text-moss">
             {archetypeName(hero.archetype)} · рівень {hero.level}
@@ -1841,7 +1806,7 @@ function EquipmentScreen({
           <h2 className="relative mt-2 text-center font-serif text-2xl text-ember">
             {weapon?.setName ?? 'Мандрівник Попелястого краю'}
           </h2>
-          <div className="relative mx-auto mt-8 grid max-w-md grid-cols-[6.5rem_1fr_6.5rem] gap-3">
+          <div className="relative mx-auto mt-7 grid max-w-xl grid-cols-[7rem_1fr_7rem] gap-3">
             <div className="space-y-3">
               <EquipmentSlot label="Шолом" />
               <EquipmentSlot label="Наплечники" />
@@ -2104,11 +2069,23 @@ function ProfileSummary({
   return (
     <>
       <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-ember">
-        Прогрес і статистика
+        Статистика героя
       </p>
-      <dl className="mt-4 grid grid-cols-2 gap-px bg-border/70">
+      <dl className="mt-4 divide-y divide-border/60 border-y border-border/70 bg-background/35 px-3">
+        <ProfileStat label="Здоров’я" value={hero.baseStats.health} />
+        <ProfileStat label="Захист" value={hero.baseStats.armor} />
+        <ProfileStat label="Базова атака" value={inventory.baseDamage} />
+        <ProfileStat
+          label="Бонус зброї"
+          value={weapon ? `+${weapon.damage}` : '—'}
+          accent
+        />
+        <ProfileStat
+          label="Загальний DMG"
+          value={inventory.totalDamage}
+          accent
+        />
         <ProfileStat label="Рівень" value={hero.level} />
-        <ProfileStat label="Загальний DMG" value={inventory.totalDamage} />
         <ProfileStat
           label="Досвід"
           value={`${hero.experienceIntoLevel}/${hero.experienceForNextLevel}`}
@@ -2117,7 +2094,11 @@ function ProfileSummary({
           label="Очки талантів"
           value={talents?.availablePoints ?? 0}
         />
-        <ProfileStat label="Предметів" value={inventory.equipped.length} />
+        <ProfileStat
+          label="Основна рука"
+          value={weapon?.name ?? 'Слот порожній'}
+        />
+        <ProfileStat label="Екіпіровано" value={inventory.equipped.length} />
         <ProfileStat label="Клан" value={clan?.name ?? '—'} />
       </dl>
 
@@ -2156,16 +2137,20 @@ function ProfileSummary({
 function ProfileStat({
   label,
   value,
+  accent = false,
 }: {
   label: string
   value: string | number
+  accent?: boolean
 }) {
   return (
-    <div className="min-w-0 bg-background/60 p-3">
-      <dt className="font-mono text-[0.5rem] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-1 truncate font-mono text-sm">{value}</dd>
+    <div className="flex min-w-0 items-center justify-between gap-3 py-2.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd
+        className={`max-w-[60%] truncate text-right font-mono text-sm ${accent ? 'text-ember' : ''}`}
+      >
+        {value}
+      </dd>
     </div>
   )
 }
