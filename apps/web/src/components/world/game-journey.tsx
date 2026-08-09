@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CraftingWorkshop } from '@/components/crafting/crafting-workshop'
 import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
@@ -805,7 +806,9 @@ function CinderhavenGate({
   onClaimClanBossReward: () => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
-  const [district, setDistrict] = useState<'HUB' | 'TRAINING' | 'CLAN'>('HUB')
+  const [district, setDistrict] = useState<
+    'HUB' | 'TRAINING' | 'CRAFTING' | 'CLAN'
+  >('HUB')
   const [clanName, setClanName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
 
@@ -857,6 +860,13 @@ function CinderhavenGate({
                 onClick={onOpenEquipment}
               />
               <CityDistrict
+                icon={Flame}
+                title="Майстерня"
+                description="Кодекс ремесел, паралельні станції та фонове створення матеріалів."
+                action="Відкрити майстерню"
+                onClick={() => setDistrict('CRAFTING')}
+              />
+              <CityDistrict
                 icon={Sword}
                 title="Клановий двір"
                 description="Місце формування кланів, спільних походів і боротьби з лігвами."
@@ -872,6 +882,8 @@ function CinderhavenGate({
               />
             </div>
           </section>
+        ) : district === 'CRAFTING' ? (
+          <CraftingWorkshop onBack={() => setDistrict('HUB')} />
         ) : district === 'TRAINING' && talents ? (
           <section className="mt-8 border-t border-border/70 pt-7">
             <Button
