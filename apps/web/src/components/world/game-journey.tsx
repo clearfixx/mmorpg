@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CraftingWorkshop } from '@/components/crafting/crafting-workshop'
 import { FactionFront } from '@/components/factions/faction-front'
+import { GameShell, type GameSection } from '@/components/layout/game-shell'
 import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
@@ -813,84 +814,146 @@ function CinderhavenGate({
   >('HUB')
   const [clanName, setClanName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
+  const activeSection: GameSection = {
+    HUB: 'LOBBY',
+    TRAINING: 'CHARACTER',
+    CRAFTING: 'CRAFTING',
+    FRONT: 'MAP',
+    CLAN: 'CLAN',
+  }[district] as GameSection
+
+  function navigate(section: GameSection) {
+    if (section === 'INVENTORY') return onOpenEquipment()
+    if (section === 'CHARACTER') return setDistrict('TRAINING')
+    if (section === 'LOBBY') return setDistrict('HUB')
+    if (section === 'CRAFTING') return setDistrict('CRAFTING')
+    if (section === 'CLAN') return setDistrict('CLAN')
+    if (section === 'MAP') return setDistrict('FRONT')
+  }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-background px-5 py-10 text-foreground">
-      <section className="w-full max-w-4xl border border-border/70 bg-panel/60 p-6 sm:p-10">
-        <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-ember">
-          Попелястий край · міський вузол
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Попелястий Прихисток
-        </h1>
-        <p className="mt-6 max-w-3xl text-base leading-8 text-muted-foreground">
-          Варта впізнає клинок із Порожньої дороги. Важкі стулки розходяться, і{' '}
-          {hero.name} уперше бачить місто, де починається справжня боротьба за
-          вплив, ремесла та місце серед майбутніх кланів.
-        </p>
-        <dl className="mt-8 grid gap-px bg-border/60 sm:grid-cols-4">
-          <EndingStat label="Рівень" value={hero.level} />
-          <EndingStat
-            label="Сила"
-            value={inventory?.totalDamage ?? hero.baseStats.damage}
-          />
-          <EndingStat label="Етап" value="I завершено" />
-          <EndingStat
-            label="До рівня"
-            value={`${hero.experienceIntoLevel}/${hero.experienceForNextLevel} XP`}
-          />
-        </dl>
+    <GameShell
+      hero={{
+        name: hero.name,
+        level: hero.level,
+        archetype: hero.archetype,
+        experienceIntoLevel: hero.experienceIntoLevel,
+        experienceForNextLevel: hero.experienceForNextLevel,
+        health: hero.baseStats.health,
+        damage: inventory?.totalDamage ?? hero.baseStats.damage,
+        armor: hero.baseStats.armor,
+        gold: hero.gold,
+      }}
+      clanName={clan?.name ?? null}
+      activeSection={activeSection}
+      resourceTotal={
+        talents?.resources.reduce(
+          (total, resource) => total + resource.amount,
+          0,
+        ) ?? 0
+      }
+      onNavigate={navigate}
+    >
+      <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/80 p-5 shadow-2xl shadow-black/25 sm:p-7">
         {district === 'HUB' ? (
-          <section className="mt-8 border-t border-border/70 pt-7">
-            <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
-              Міські квартали
-            </p>
-            <h2 className="mt-2 text-xl font-medium">Куди вирушити?</h2>
-            <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
-              <CityDistrict
-                icon={Shield}
-                title="Зала гарту"
-                description="Розподілити очки розвитку та посилити базові таланти героя."
-                action="Увійти до зали"
-                onClick={() => setDistrict('TRAINING')}
+          <>
+            <section className="relative overflow-hidden border border-border/70 bg-background/70 px-6 py-8 sm:px-9">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,oklch(0.48_0.09_45/18%),transparent_38%)]" />
+              <div className="relative">
+                <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-ember">
+                  Попелястий край · міський вузол
+                </p>
+                <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+                  Вітаємо у VeilFall
+                </h1>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+                  Світ розколотий. Завіса тоншає. Попелястий Прихисток тримає
+                  останню дорогу до фронту, ремісничих кварталів і майбутніх
+                  кланових володінь. Твій меч. Твій вибір. Твоя спадщина.
+                </p>
+              </div>
+            </section>
+            <dl className="mt-3 grid gap-px bg-border/60 sm:grid-cols-4">
+              <EndingStat label="Рівень" value={hero.level} />
+              <EndingStat
+                label="Сила"
+                value={inventory?.totalDamage ?? hero.baseStats.damage}
               />
-              <CityDistrict
-                icon={Package}
-                title="Зброярня"
-                description="Переглянути постійний сундук і змінити спорядження героя."
-                action="Відкрити зброярню"
-                onClick={onOpenEquipment}
+              <EndingStat label="Етап" value="I завершено" />
+              <EndingStat
+                label="До рівня"
+                value={`${hero.experienceIntoLevel}/${hero.experienceForNextLevel} XP`}
               />
-              <CityDistrict
-                icon={Flame}
-                title="Майстерня"
-                description="Кодекс ремесел, паралельні станції та фонове створення матеріалів."
-                action="Відкрити майстерню"
-                onClick={() => setDistrict('CRAFTING')}
-              />
-              <CityDistrict
-                icon={Swords}
-                title="Воєнна рада"
-                description="Обрати сторону та побачити скриптовий стан фронту свого рівня."
-                action="Відкрити карту фронту"
+            </dl>
+            <section className="mt-3 border border-border/70 bg-background/45 p-4 sm:p-5">
+              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
+                Міські квартали
+              </p>
+              <h2 className="mt-2 text-xl font-medium">Куди вирушити?</h2>
+              <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
+                <CityDistrict
+                  icon={Shield}
+                  title="Зала гарту"
+                  description="Розподілити очки розвитку та посилити базові таланти героя."
+                  action="Увійти до зали"
+                  onClick={() => setDistrict('TRAINING')}
+                />
+                <CityDistrict
+                  icon={Package}
+                  title="Зброярня"
+                  description="Переглянути постійний сундук і змінити спорядження героя."
+                  action="Відкрити зброярню"
+                  onClick={onOpenEquipment}
+                />
+                <CityDistrict
+                  icon={Flame}
+                  title="Майстерня"
+                  description="Кодекс ремесел, паралельні станції та фонове створення матеріалів."
+                  action="Відкрити майстерню"
+                  onClick={() => setDistrict('CRAFTING')}
+                />
+                <CityDistrict
+                  icon={Swords}
+                  title="Воєнна рада"
+                  description="Обрати сторону та побачити скриптовий стан фронту свого рівня."
+                  action="Відкрити карту фронту"
+                  onClick={() => setDistrict('FRONT')}
+                />
+                <CityDistrict
+                  icon={Sword}
+                  title="Клановий двір"
+                  description="Місце формування кланів, спільних походів і боротьби з лігвами."
+                  action={clan ? 'Відкрити клан' : 'Знайти союзників'}
+                  onClick={() => setDistrict('CLAN')}
+                />
+                <CityDistrict
+                  icon={Compass}
+                  title="Торгові ряди"
+                  description="Безпечні угоди, вітрини гравців і майбутня ресурсна економіка."
+                  action="Ще зачинено"
+                  locked
+                />
+              </div>
+            </section>
+            <section className="mt-3 grid gap-px bg-border/60 md:grid-cols-3">
+              <LobbyStatus
+                title="Стан війни"
+                accent="Відкрити мапу"
+                description="Скриптовий фронт змінює контроль щогодини. Ваш рівневий діапазон захищає від сильніших героїв."
                 onClick={() => setDistrict('FRONT')}
               />
-              <CityDistrict
-                icon={Sword}
-                title="Клановий двір"
-                description="Місце формування кланів, спільних походів і боротьби з лігвами."
-                action={clan ? 'Відкрити клан' : 'Знайти союзників'}
-                onClick={() => setDistrict('CLAN')}
+              <LobbyStatus
+                title="Події"
+                accent="Міська хроніка"
+                description="Кланові лігва та майстерні вже активні. Арена й турніри відкриються у наступних главах."
               />
-              <CityDistrict
-                icon={Compass}
-                title="Торгові ряди"
-                description="Безпечні угоди, вітрини гравців і майбутня ресурсна економіка."
-                action="Ще зачинено"
-                locked
+              <LobbyStatus
+                title="Завдання дня"
+                accent="Підготовка"
+                description="Посильте героя, перевірте ремісничі черги й оберіть сторону перед виходом на фронт."
               />
-            </div>
-          </section>
+            </section>
+          </>
         ) : district === 'CRAFTING' ? (
           <CraftingWorkshop onBack={() => setDistrict('HUB')} />
         ) : district === 'FRONT' ? (
@@ -1122,7 +1185,7 @@ function CinderhavenGate({
           Повернутися на заставу
         </Button>
       </section>
-    </main>
+    </GameShell>
   )
 }
 
@@ -1174,6 +1237,40 @@ function CityDistrict({
       >
         {action}
       </Button>
+    </article>
+  )
+}
+
+function LobbyStatus({
+  title,
+  accent,
+  description,
+  onClick,
+}: {
+  title: string
+  accent: string
+  description: string
+  onClick?: () => void
+}) {
+  return (
+    <article className="bg-background/70 p-4">
+      <p className="font-mono text-[0.6rem] uppercase tracking-wider text-ember">
+        {title}
+      </p>
+      <h3 className="mt-2 text-sm font-medium">{accent}</h3>
+      <p className="mt-2 min-h-14 text-xs leading-5 text-muted-foreground">
+        {description}
+      </p>
+      {onClick ? (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onClick}
+          className="mt-2 h-7 rounded-none px-0 text-xs text-ember"
+        >
+          Детальніше <ArrowRight aria-hidden="true" />
+        </Button>
+      ) : null}
     </article>
   )
 }

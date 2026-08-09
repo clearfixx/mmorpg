@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +27,7 @@ const archetypes = [
 ] as const
 
 export function CharacterCreator() {
+  const router = useRouter()
   const [archetype, setArchetype] = useState('VANGUARD')
   const [avatarMode, setAvatarMode] = useState<'STATIC' | 'DYNAMIC'>('STATIC')
   const [avatar, setAvatar] = useState<string>('standard-01')
@@ -35,10 +37,10 @@ export function CharacterCreator() {
 
   useEffect(() => {
     void checkExistingCharacter().then((destination) => {
-      if (destination) window.location.replace(destination)
+      if (destination) router.replace(destination)
       else setChecking(false)
     })
-  }, [])
+  }, [router])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -68,7 +70,7 @@ export function CharacterCreator() {
       const payload: unknown = await response.json()
       if (!response.ok || hasGraphqlErrors(payload))
         throw new Error('CREATE_FAILED')
-      window.location.assign('/game')
+      router.push('/game')
     } catch {
       setError(
         'Не вдалося створити героя. Перевірте ім’я або спробуйте інший варіант.',
