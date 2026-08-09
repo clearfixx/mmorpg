@@ -379,14 +379,46 @@ input RegisterInput {
 
 type ResourceBalanceModel {
   amount: Int!
+  clanContributable: Boolean!
+  description: String!
+  name: String!
+  origin: ResourceOrigin!
+  rarity: ResourceRarity!
+  tradeable: Boolean!
   type: ResourceType!
+}
+
+enum ResourceOrigin {
+  BOSS_EXCLUSIVE
+  CRAFTED
+  DROPPED
+}
+
+enum ResourceRarity {
+  COMMON
+  DIVINE
+  EPIC
+  LEGENDARY
+  MYTHIC
+  RARE
+  UNCOMMON
 }
 
 enum ResourceType {
   BRONZE
+  COAL
   COPPER
+  CURSED_HEART
+  DARK_PRIEST_ASH
+  FALLEN_ELF_EYE
+  HERBS
   IRON
+  LEATHER
+  OBSIDIAN_SHARD
+  STABILIZED_CATALYST
+  TIMBER
   VEIL_ECHO
+  VEIL_STEEL
 }
 
 input RetreatInput {

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
+import { resourceBalance } from '../resources/resource-catalog';
 import { UpgradeTalentInput } from './dto/upgrade-talent.input';
 import { TalentTreeModel } from './models/talent-tree.model';
 
@@ -205,10 +206,9 @@ export class TalentsService {
           affordable: (resources.get(cost.type) ?? 0) >= cost.amount,
         };
       }),
-      resources: Object.values(ResourceType).map((type) => ({
-        type,
-        amount: resources.get(type) ?? 0,
-      })),
+      resources: Object.values(ResourceType).map((type) =>
+        resourceBalance(type, resources.get(type) ?? 0),
+      ),
     };
   }
 

@@ -75,7 +75,21 @@ type TalentType =
   | 'AWAKENED_VITALITY'
   | 'AWAKENED_POWER'
   | 'AWAKENED_RESILIENCE'
-type ResourceType = 'IRON' | 'COPPER' | 'BRONZE' | 'VEIL_ECHO'
+type ResourceType =
+  | 'IRON'
+  | 'COPPER'
+  | 'BRONZE'
+  | 'COAL'
+  | 'TIMBER'
+  | 'LEATHER'
+  | 'HERBS'
+  | 'OBSIDIAN_SHARD'
+  | 'VEIL_STEEL'
+  | 'STABILIZED_CATALYST'
+  | 'VEIL_ECHO'
+  | 'CURSED_HEART'
+  | 'FALLEN_ELF_EYE'
+  | 'DARK_PRIEST_ASH'
 
 interface TalentTree {
   characterVersion: number
@@ -879,6 +893,7 @@ function CinderhavenGate({
                 <p className="text-moss">Очки: {talents.availablePoints}</p>
                 <p className="mt-1 text-muted-foreground">
                   {talents.resources
+                    .filter((resource) => resource.amount > 0)
                     .map(
                       (resource) =>
                         `${resourceName(resource.type)}: ${resource.amount}`,
@@ -1192,6 +1207,7 @@ function ClanHall({
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
               {clan.treasury
+                .filter((resource) => resource.amount > 0)
                 .map(
                   (resource) =>
                     `${resourceName(resource.type)}: ${resource.amount}`,
@@ -1949,7 +1965,17 @@ function resourceName(value: ResourceType): string {
     IRON: 'залізо',
     COPPER: 'мідь',
     BRONZE: 'бронза',
+    COAL: 'вугілля',
+    TIMBER: 'деревина',
+    LEATHER: 'шкіра',
+    HERBS: 'лікувальні трави',
+    OBSIDIAN_SHARD: 'уламок обсидіану',
+    VEIL_STEEL: 'сталь Завіси',
+    STABILIZED_CATALYST: 'стабілізований каталізатор',
     VEIL_ECHO: 'відгомін Завіси',
+    CURSED_HEART: 'серце Проклятого лицаря',
+    FALLEN_ELF_EYE: 'око Павшого ельфа',
+    DARK_PRIEST_ASH: 'попіл Темного жерця',
   }[value]
 }
 

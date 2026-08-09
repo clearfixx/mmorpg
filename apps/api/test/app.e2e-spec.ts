@@ -623,6 +623,35 @@ describe('Health (e2e)', () => {
         affordable: true,
       }),
     );
+    const resourceCatalog = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myResources { type amount name origin rarity tradeable clanContributable } }',
+      })
+      .expect(200);
+    const resourceCatalogPayload = JSON.parse(resourceCatalog.text) as {
+      data: { myResources: Array<Record<string, unknown>> };
+    };
+    expect(resourceCatalogPayload.data.myResources).toContainEqual({
+      type: 'IRON',
+      amount: 50,
+      name: 'Залізо',
+      origin: 'DROPPED',
+      rarity: 'COMMON',
+      tradeable: true,
+      clanContributable: true,
+    });
+    expect(resourceCatalogPayload.data.myResources).toContainEqual(
+      expect.objectContaining({
+        type: 'CURSED_HEART',
+        amount: 0,
+        origin: 'BOSS_EXCLUSIVE',
+        rarity: 'MYTHIC',
+        clanContributable: false,
+      }),
+    );
     const talentKey = `talent-${Date.now()}`;
     const upgradeTalent = () =>
       request(server)

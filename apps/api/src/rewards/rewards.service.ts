@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
+import { resourceBalance } from '../resources/resource-catalog';
 import { ClaimBattleRewardInput } from './dto/claim-battle-reward.input';
 import { BattleRewardModel } from './models/battle-reward.model';
 
@@ -268,7 +269,7 @@ export class RewardsService {
       battleId: claim.battleId,
       experience: claim.experience,
       gold: claim.gold,
-      resources: [{ type: claim.resourceType, amount: claim.resourceAmount }],
+      resources: [resourceBalance(claim.resourceType, claim.resourceAmount)],
       item: {
         ...claim.item,
         damageMin: damageRange.min,

@@ -4,6 +4,7 @@ import {
   ResourceType,
   WorldLocation,
 } from '@veilfall/database';
+import { resourceDefinition } from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -13,6 +14,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
+import { resourceBalance } from '../resources/resource-catalog';
 import { CreateClanInput } from './dto/create-clan.input';
 import { ContributeClanResourceInput } from './dto/contribute-clan-resource.input';
 import { JoinClanInput } from './dto/join-clan.input';
@@ -177,6 +179,11 @@ export class ClansService {
     input: ContributeClanResourceInput,
   ): Promise<ClanModel> {
     const characterId = await this.characters.requireIdForUser(userId);
+    const contributionResource = resourceDefinition(input.resourceType);
+    if (!contributionResource.clanContributable)
+      throw new BadRequestException(
+        'This resource cannot be contributed through the ordinary treasury',
+      );
     const payloadHash = this.hash(
       `CONTRIBUTE:${input.resourceType}:${input.amount}:${input.expectedClanVersion}`,
     );
@@ -434,12 +441,13 @@ export class ClansService {
         joinedAt: member.joinedAt,
         contribution: member.contribution,
       })),
-      treasury: Object.values(ResourceType).map((type) => ({
-        type,
-        amount:
+      treasury: Object.values(ResourceType).map((type) =>
+        resourceBalance(
+          type,
           membership.clan.resources.find((resource) => resource.type === type)
             ?.balance ?? 0,
-      })),
+        ),
+      ),
       developments: Object.values(ClanDevelopmentBranch).map((branch) => {
         const rank =
           membership.clan.developments.find(
@@ -490,12 +498,7 @@ export class ClansService {
   }
 
   private resourceWeight(type: ResourceType): number {
-    return {
-      [ResourceType.IRON]: 1,
-      [ResourceType.COPPER]: 3,
-      [ResourceType.BRONZE]: 8,
-      [ResourceType.VEIL_ECHO]: 25,
-    }[type];
+    return resourceDefinition(type).clanContributionWeight;
   }
 
   private progressionFor(experience: number): {
