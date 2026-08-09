@@ -3,13 +3,18 @@
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarDays,
+  Castle,
   Compass,
   Eye,
   Flame,
   Package,
+  ScrollText,
   Shield,
   Sword,
   Swords,
+  Target,
+  Trophy,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 
@@ -259,7 +264,13 @@ const availableGameSections: readonly GameSection[] = [
 ]
 
 type JourneyView =
-  'LOBBY' | 'PROFILE' | 'INVENTORY' | 'CRAFTING' | 'CLAN' | 'FRONT'
+  | 'LOBBY'
+  | 'WATCHPOST'
+  | 'PROFILE'
+  | 'INVENTORY'
+  | 'CRAFTING'
+  | 'CLAN'
+  | 'FRONT'
 
 type CityDistrictKey = 'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN'
 
@@ -514,7 +525,10 @@ export function GameJourney() {
                 ? 'FRONT'
                 : 'HUB'
         }
-        onReturn={() => travel('BROKEN_WATCHPOST')}
+        onReturn={async () => {
+          await travel('BROKEN_WATCHPOST')
+          setView('LOBBY')
+        }}
         onOpenProfile={() => setView('PROFILE')}
         onOpenEquipment={() => setView('INVENTORY')}
         onCreateClan={async (name) => {
@@ -746,6 +760,33 @@ export function GameJourney() {
     (route) => route.destination === 'CINDERHAVEN_GATE',
   )
 
+  if (view === 'LOBBY')
+    return (
+      <JourneyShell
+        hero={hero}
+        inventory={inventory}
+        talents={talents}
+        clan={clan}
+        activeSection="LOBBY"
+        location={world.currentLocation}
+        onNavigate={navigate}
+      >
+        <LobbyDashboard
+          hero={hero}
+          inventory={inventory}
+          clan={clan}
+          cinderhaven={cinderhaven}
+          pending={pending}
+          onOpenWatchpost={() => setView('WATCHPOST')}
+          onEnterCinderhaven={() => travel('CINDERHAVEN_GATE')}
+          onOpenInventory={() => setView('INVENTORY')}
+          onOpenCrafting={() => setView('CRAFTING')}
+          onOpenClan={() => setView('CLAN')}
+          onOpenFront={() => setView('FRONT')}
+        />
+      </JourneyShell>
+    )
+
   return (
     <JourneyShell
       hero={hero}
@@ -910,37 +951,358 @@ export function GameJourney() {
                 <ArrowRight aria-hidden="true" />
               </Button>
             </div>
-
-            <div className="mt-6 border border-border/70 bg-panel/55 p-5">
-              <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
-                Наступний рубіж
-              </p>
-              <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h3 className="text-lg font-medium">
-                    Ворота Попелястого Прихистку
-                  </h3>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                    {cinderhaven?.locked
-                      ? cinderhaven.lockReason
-                      : 'Трофей довів вашу силу. Вартові відчинили шлях до міста.'}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={pending || cinderhaven?.locked !== false}
-                  onClick={() => travel('CINDERHAVEN_GATE')}
-                  className="h-10 shrink-0 rounded-sm"
-                >
-                  Увійти до воріт <ArrowRight aria-hidden="true" />
-                </Button>
-              </div>
-            </div>
           </div>
         </section>
       </div>
     </JourneyShell>
+  )
+}
+
+function LobbyDashboard({
+  hero,
+  inventory,
+  clan,
+  cinderhaven,
+  pending,
+  onOpenWatchpost,
+  onEnterCinderhaven,
+  onOpenInventory,
+  onOpenCrafting,
+  onOpenClan,
+  onOpenFront,
+}: {
+  hero: Hero
+  inventory: Inventory | null
+  clan: Clan | null
+  cinderhaven:
+    | { destination: Location; locked: boolean; lockReason: string | null }
+    | undefined
+  pending: boolean
+  onOpenWatchpost: () => void
+  onEnterCinderhaven: () => void
+  onOpenInventory: () => void
+  onOpenCrafting: () => void
+  onOpenClan: () => void
+  onOpenFront: () => void
+}) {
+  const damage = inventory?.totalDamage ?? hero.baseStats.damage
+
+  return (
+    <main className="mx-auto w-full max-w-7xl space-y-3">
+      <section className="relative min-h-72 overflow-hidden border border-border/70 bg-[linear-gradient(105deg,rgba(12,10,8,0.98)_5%,rgba(19,15,11,0.86)_52%,rgba(55,30,20,0.42)),radial-gradient(circle_at_78%_45%,rgba(191,82,40,0.26),transparent_34%)] px-6 py-8 sm:px-10 sm:py-10">
+        <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_center,rgba(205,112,55,0.13),transparent_66%)]" />
+        <div className="relative max-w-2xl">
+          <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-ember">
+            Попелястий край · серверний світ
+          </p>
+          <h1 className="mt-4 font-serif text-4xl tracking-tight sm:text-5xl">
+            Вітаємо у VeilFall
+          </h1>
+          <p className="mt-4 max-w-xl text-sm leading-7 text-muted-foreground sm:text-base">
+            Світ розколотий, а Завіса тоншає. Оберіть наступний шлях, стежте за
+            війною фракцій і повертайтеся до тих рубежів, які ще пам’ятають ваше
+            ім’я.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3 text-xs">
+            <span className="border border-ember/40 bg-background/55 px-3 py-2 text-ember">
+              Рівень {hero.level}
+            </span>
+            <span className="border border-border/70 bg-background/55 px-3 py-2">
+              Сила {damage}
+            </span>
+            <span className="border border-border/70 bg-background/55 px-3 py-2">
+              {clan?.name ?? 'Без клану'}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section
+        aria-label="Швидкі активності"
+        className="grid gap-px bg-border/70 sm:grid-cols-2 xl:grid-cols-6"
+      >
+        <LobbyActivity
+          icon={Swords}
+          title="Зламана застава"
+          subtitle="Підготовка · PvE-похід"
+          onClick={onOpenWatchpost}
+        />
+        <LobbyActivity
+          icon={Castle}
+          title="Попелястий Прихисток"
+          subtitle={
+            cinderhaven?.locked
+              ? (cinderhaven.lockReason ?? 'Шлях зачинено')
+              : 'Місто · розвиток героя'
+          }
+          disabled={pending || cinderhaven?.locked !== false}
+          onClick={onEnterCinderhaven}
+        />
+        <LobbyActivity
+          icon={Package}
+          title="Інвентар"
+          subtitle={`${inventory?.chest.length ?? 0} предметів у сундуку`}
+          onClick={onOpenInventory}
+        />
+        <LobbyActivity
+          icon={Flame}
+          title="Майстерня"
+          subtitle="Крафт і черги створення"
+          onClick={onOpenCrafting}
+        />
+        <LobbyActivity
+          icon={Trophy}
+          title="Клан"
+          subtitle={clan?.name ?? 'Знайти союзників'}
+          onClick={onOpenClan}
+        />
+        <LobbyActivity
+          icon={Compass}
+          title="Карта війни"
+          subtitle="Фракції та території"
+          onClick={onOpenFront}
+        />
+      </section>
+
+      <section className="grid gap-3 xl:grid-cols-[1.05fr_1fr_1fr]">
+        <LobbyPanel
+          icon={Swords}
+          title="Стан війни"
+          action="Оновлення через 12:34"
+        >
+          <div className="space-y-4">
+            <FactionInfluence
+              name="Вартові Завіси"
+              value={64}
+              color="bg-destructive"
+            />
+            <FactionInfluence
+              name="Тіньовий Ковен"
+              value={36}
+              color="bg-sky-700"
+            />
+            <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
+              Контроль над землями: 19 із 28 територій.
+            </p>
+          </div>
+        </LobbyPanel>
+        <LobbyPanel
+          icon={CalendarDays}
+          title="Найближчі події"
+          action="Сьогодні"
+        >
+          <LobbyLine
+            title="Битва за Північну заставу"
+            meta="через 28 хв"
+            accent
+          />
+          <LobbyLine title="Вітри Завіси" meta="через 1 год 45 хв" />
+          <LobbyLine title="Турнір кланів" meta="через 6 год" />
+        </LobbyPanel>
+        <LobbyPanel
+          icon={Target}
+          title="Завдання дня"
+          action="Оновлення опівночі"
+        >
+          <DailyTask title="Здобути 10 перемог" progress="6/10" percent={60} />
+          <DailyTask
+            title="Зібрати 25 ресурсів"
+            progress="10/25"
+            percent={40}
+          />
+          <DailyTask title="Завершити 3 ремесла" progress="1/3" percent={33} />
+        </LobbyPanel>
+      </section>
+
+      <section className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+        <LobbyPanel
+          icon={Castle}
+          title="Контроль територій"
+          action="Попелястий край"
+        >
+          <div className="grid gap-px bg-border/60 sm:grid-cols-2">
+            <Territory name="Північна застава" status="Наш контроль" />
+            <Territory name="Західна застава" status="Наш контроль" />
+            <Territory name="Східна застава" status="Оспорюється" contested />
+            <Territory
+              name="Південна застава"
+              status="Під контролем ворога"
+              enemy
+            />
+          </div>
+        </LobbyPanel>
+        <LobbyPanel
+          icon={ScrollText}
+          title="Хроніка світу"
+          action="Останні події"
+        >
+          <LobbyLine
+            title="Фронт Завіси змістився на схід"
+            meta="12 хв тому"
+            accent
+          />
+          <LobbyLine
+            title="Майстерні Прихистку відновили роботу"
+            meta="24 хв тому"
+          />
+          <LobbyLine
+            title={
+              clan
+                ? `Клан ${clan.name} тримає раду`
+                : 'Новий клан вступив у світ'
+            }
+            meta="1 год тому"
+          />
+        </LobbyPanel>
+      </section>
+    </main>
+  )
+}
+
+function LobbyActivity({
+  icon: Icon,
+  title,
+  subtitle,
+  disabled = false,
+  onClick,
+}: {
+  icon: typeof Swords
+  title: string
+  subtitle: string
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="group min-h-32 bg-panel/85 p-4 text-left transition hover:bg-ember/8 disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      <Icon
+        className="size-5 text-ember transition group-hover:text-ember-bright"
+        aria-hidden="true"
+      />
+      <span className="mt-5 block font-medium">{title}</span>
+      <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+        {subtitle}
+      </span>
+    </button>
+  )
+}
+
+function LobbyPanel({
+  icon: Icon,
+  title,
+  action,
+  children,
+}: {
+  icon: typeof Swords
+  title: string
+  action: string
+  children: ReactNode
+}) {
+  return (
+    <section className="border border-border/70 bg-panel/70">
+      <header className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+        <h2 className="flex items-center gap-2 font-medium">
+          <Icon className="size-4 text-ember" aria-hidden="true" />
+          {title}
+        </h2>
+        <span className="font-mono text-[0.55rem] uppercase tracking-wider text-muted-foreground">
+          {action}
+        </span>
+      </header>
+      <div className="p-4">{children}</div>
+    </section>
+  )
+}
+
+function FactionInfluence({
+  name,
+  value,
+  color,
+}: {
+  name: string
+  value: number
+  color: string
+}) {
+  return (
+    <div>
+      <div className="flex justify-between text-sm">
+        <span>{name}</span>
+        <span className="font-mono">{value}%</span>
+      </div>
+      <div className="mt-2 h-1.5 bg-background">
+        <div className={`h-full ${color}`} style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function LobbyLine({
+  title,
+  meta,
+  accent = false,
+}: {
+  title: string
+  meta: string
+  accent?: boolean
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-border/50 py-2.5 last:border-0">
+      <p className={`text-sm ${accent ? 'text-ember' : ''}`}>{title}</p>
+      <span className="shrink-0 font-mono text-[0.6rem] text-muted-foreground">
+        {meta}
+      </span>
+    </div>
+  )
+}
+
+function DailyTask({
+  title,
+  progress,
+  percent,
+}: {
+  title: string
+  progress: string
+  percent: number
+}) {
+  return (
+    <div className="border-b border-border/50 py-2.5 last:border-0">
+      <div className="flex justify-between gap-4 text-sm">
+        <span>{title}</span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {progress}
+        </span>
+      </div>
+      <div className="mt-2 h-1 bg-background">
+        <div className="h-full bg-moss" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function Territory({
+  name,
+  status,
+  contested = false,
+  enemy = false,
+}: {
+  name: string
+  status: string
+  contested?: boolean
+  enemy?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 bg-background/50 px-3 py-3 text-sm">
+      <span>{name}</span>
+      <span
+        className={`text-xs ${enemy ? 'text-sky-400' : contested ? 'text-ember' : 'text-moss'}`}
+      >
+        {status}
+      </span>
+    </div>
   )
 }
 
