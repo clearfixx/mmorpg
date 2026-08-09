@@ -16,7 +16,7 @@ This document consolidates approved direction from design discussions. `implemen
 
 Ordinary bosses do not award equipment every time. Resources, XP, and progression points may be guaranteed; swords, helmets, and other equipment use explicit random chances.
 
-Items will have levels and rarity-specific power bands. A minimum-level item of a higher rarity must not be weaker than the maximum-level version of the immediately lower rarity. Whether the final cap is 50 or 99 is still open. Equipment remains the primary source of raw combat power.
+Items have levels from 1 to 99 and rarity-specific power bands. At the same item level, the minimum primary roll of a higher rarity must exceed the maximum primary roll of the preceding rarity. A low-level higher-rarity item is not required to outperform a high-level lower-rarity item; otherwise item level would lose its purpose. Equipment remains the primary source of raw combat power.
 
 ### Hero Awakening versus item transformation
 
@@ -86,7 +86,7 @@ These follow combat balance, anti-abuse, matchmaking, and economy foundations. A
 ## Open decisions
 
 - Final name for the item-transforming ritual (must differ from Hero Awakening).
-- Item level cap: 50 or 99, plus exact non-overlapping rarity curves.
+- Exact calibration of same-level rarity curves, encounter rarity caps, and drop rates.
 - The scarce primary currency/resource used broadly across the economy, its faucets, sinks, and permanent-deficit controls.
 - Rules for claimed hidden recipes, including failed attempts and whether ingredients may be consumed without revealing why.
 - Exact crafting acceleration economy and maximum parallel queue capacity.
