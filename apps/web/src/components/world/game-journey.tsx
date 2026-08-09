@@ -214,7 +214,11 @@ const journeySections: readonly GameSection[] = [
   'CHARACTER',
   'INVENTORY',
 ]
-const equipmentSections: readonly GameSection[] = ['LOBBY', 'INVENTORY']
+const characterSections: readonly GameSection[] = [
+  'LOBBY',
+  'CHARACTER',
+  'INVENTORY',
+]
 
 function locationName(location: Location) {
   if (location === 'CINDERHAVEN_GATE') return 'Попелястий Прихисток'
@@ -283,7 +287,7 @@ export function GameJourney() {
   const [talents, setTalents] = useState<TalentTree | null>(null)
   const [clan, setClan] = useState<Clan | null>(null)
   const [clanBoss, setClanBoss] = useState<ClanBoss | null>(null)
-  const [view, setView] = useState<'LOBBY' | 'EQUIPMENT'>('LOBBY')
+  const [view, setView] = useState<'LOBBY' | 'PROFILE' | 'INVENTORY'>('LOBBY')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -354,23 +358,28 @@ export function GameJourney() {
       </main>
     )
 
-  if (view === 'EQUIPMENT' && inventory)
+  if (view !== 'LOBBY' && inventory)
     return (
       <JourneyShell
         hero={hero}
         inventory={inventory}
         talents={talents}
         clan={clan}
-        activeSection="INVENTORY"
+        activeSection={view === 'PROFILE' ? 'CHARACTER' : 'INVENTORY'}
         location={world.currentLocation}
-        availableSections={equipmentSections}
+        availableSections={characterSections}
         onNavigate={(section) => {
           if (section === 'LOBBY') setView('LOBBY')
+          if (section === 'CHARACTER') setView('PROFILE')
+          if (section === 'INVENTORY') setView('INVENTORY')
         }}
       >
         <EquipmentScreen
+          mode={view}
           hero={hero}
           inventory={inventory}
+          talents={talents}
+          clan={clan}
           locationName={locationName(world.currentLocation)}
           pending={pending}
           error={error}
@@ -423,8 +432,8 @@ export function GameJourney() {
         activeSection="LOBBY"
         location={world.currentLocation}
         onNavigate={(section) => {
-          if (section === 'INVENTORY' || section === 'CHARACTER')
-            setView('EQUIPMENT')
+          if (section === 'INVENTORY') setView('INVENTORY')
+          if (section === 'CHARACTER') setView('PROFILE')
         }}
       >
         <HollowRoad hero={hero} preparation={world.preparationChoice} />
@@ -442,7 +451,8 @@ export function GameJourney() {
         pending={pending}
         error={error}
         onReturn={() => travel('BROKEN_WATCHPOST')}
-        onOpenEquipment={() => setView('EQUIPMENT')}
+        onOpenProfile={() => setView('PROFILE')}
+        onOpenEquipment={() => setView('INVENTORY')}
         onCreateClan={async (name) => {
           if (!inventory || pending) return
           await runClanAction('CREATE', name, inventory.characterVersion)
@@ -681,8 +691,8 @@ export function GameJourney() {
       activeSection="LOBBY"
       location={world.currentLocation}
       onNavigate={(section) => {
-        if (section === 'INVENTORY' || section === 'CHARACTER')
-          setView('EQUIPMENT')
+        if (section === 'INVENTORY') setView('INVENTORY')
+        if (section === 'CHARACTER') setView('PROFILE')
       }}
     >
       <div className="mx-auto grid w-full max-w-6xl border border-border/70 bg-background/75 lg:grid-cols-[15rem_1fr]">
@@ -740,7 +750,7 @@ export function GameJourney() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setView('EQUIPMENT')}
+            onClick={() => setView('INVENTORY')}
             className="mt-6 h-9 w-full justify-start rounded-sm"
           >
             <Package aria-hidden="true" />
@@ -882,6 +892,7 @@ function CinderhavenGate({
   pending,
   error,
   onReturn,
+  onOpenProfile,
   onOpenEquipment,
   onCreateClan,
   onJoinClan,
@@ -900,6 +911,7 @@ function CinderhavenGate({
   pending: boolean
   error: string | null
   onReturn: () => void
+  onOpenProfile: () => void
   onOpenEquipment: () => void
   onCreateClan: (name: string) => Promise<void>
   onJoinClan: (inviteCode: string) => Promise<void>
@@ -928,7 +940,7 @@ function CinderhavenGate({
 
   function navigate(section: GameSection) {
     if (section === 'INVENTORY') return onOpenEquipment()
-    if (section === 'CHARACTER') return setDistrict('TRAINING')
+    if (section === 'CHARACTER') return onOpenProfile()
     if (section === 'LOBBY') return setDistrict('HUB')
     if (section === 'CRAFTING') return setDistrict('CRAFTING')
     if (section === 'CLAN') return setDistrict('CLAN')
@@ -1727,16 +1739,22 @@ function HollowRoad({
 }
 
 function EquipmentScreen({
+  mode,
   hero,
   inventory,
+  talents,
+  clan,
   locationName,
   pending,
   error,
   onBack,
   onEquip,
 }: {
+  mode: 'PROFILE' | 'INVENTORY'
   hero: Hero
   inventory: Inventory
+  talents: TalentTree | null
+  clan: Clan | null
   locationName: string
   pending: boolean
   error: string | null
@@ -1751,9 +1769,11 @@ function EquipmentScreen({
       <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
         <div>
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
-            {locationName} · спорядження
+            {locationName} · {mode === 'PROFILE' ? 'персонаж' : 'інвентар'}
           </p>
-          <h1 className="mt-1 text-xl font-semibold">Профіль {hero.name}</h1>
+          <h1 className="mt-1 text-xl font-semibold">
+            {mode === 'PROFILE' ? `Профіль ${hero.name}` : 'Сховище героя'}
+          </h1>
         </div>
         <Button
           type="button"
@@ -1761,7 +1781,7 @@ function EquipmentScreen({
           onClick={onBack}
           className="h-9 rounded-sm"
         >
-          <ArrowLeft aria-hidden="true" /> До застави
+          <ArrowLeft aria-hidden="true" /> Повернутися
         </Button>
       </header>
       <div className="grid lg:grid-cols-[18rem_1fr_20rem]">
@@ -1799,13 +1819,18 @@ function EquipmentScreen({
               {weapon ? weapon.name : 'Слот порожній'}
             </div>
           </div>
-          <dl className="mt-6 grid grid-cols-2 gap-px bg-border/70 text-center">
-            <InventoryCount label="У сундуку" value={inventory.chest.length} />
-            <InventoryCount
-              label="У рюкзаку"
-              value={inventory.backpack.length}
-            />
-          </dl>
+          {mode === 'INVENTORY' ? (
+            <dl className="mt-6 grid grid-cols-2 gap-px bg-border/70 text-center">
+              <InventoryCount
+                label="У сундуку"
+                value={inventory.chest.length}
+              />
+              <InventoryCount
+                label="У рюкзаку"
+                value={inventory.backpack.length}
+              />
+            </dl>
+          ) : null}
         </aside>
         <section className="relative min-h-[34rem] overflow-hidden border-b border-border/70 p-6 lg:border-r lg:border-b-0">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,oklch(0.52_0.1_55/20%),transparent_40%)]" />
@@ -1820,7 +1845,10 @@ function EquipmentScreen({
               <EquipmentSlot label="Шолом" />
               <EquipmentSlot label="Наплечники" />
               <EquipmentSlot label="Нагрудник" />
+              <EquipmentSlot label="Наручі" />
               <EquipmentSlot label="Рукавиці" />
+              <EquipmentSlot label="Штани" />
+              <EquipmentSlot label="Черевики" />
             </div>
             <div className="flex min-h-80 flex-col items-center justify-center border-x border-ember/20 bg-background/25 px-3">
               <div className="grid size-20 place-items-center rounded-full border border-ember/60 bg-ember/10 shadow-[0_0_3rem_oklch(0.55_0.12_55/20%)]">
@@ -1836,9 +1864,11 @@ function EquipmentScreen({
             </div>
             <div className="space-y-3">
               <EquipmentSlot label="Амулет" />
-              <EquipmentSlot label="Кільце" />
+              <EquipmentSlot label="Браслет" />
+              <EquipmentSlot label="Каблучка I" />
+              <EquipmentSlot label="Каблучка II" />
               <EquipmentSlot label="Пояс" />
-              <EquipmentSlot label="Черевики" />
+              <EquipmentSlot label="Друга рука" />
             </div>
           </div>
           <p className="relative mt-5 text-center text-xs text-muted-foreground">
@@ -1846,50 +1876,62 @@ function EquipmentScreen({
           </p>
         </section>
         <aside className="p-5">
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
-            Сундук · зброя
-          </p>
-          <div className="mt-4 space-y-3">
-            {inventory.chest.length === 0 ? (
-              <p className="border border-border/70 p-4 text-sm text-muted-foreground">
-                У сундуку немає доступної зброї.
+          {mode === 'PROFILE' ? (
+            <ProfileSummary
+              hero={hero}
+              inventory={inventory}
+              talents={talents}
+              clan={clan}
+              weapon={weapon}
+            />
+          ) : (
+            <>
+              <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-muted-foreground">
+                Сундук · зброя
               </p>
-            ) : (
-              inventory.chest.map((item) => (
-                <div
-                  key={item.id}
-                  className="border border-border/70 bg-background/45 p-4"
-                >
-                  <p className="font-medium">{item.name}</p>
-                  <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-ember">
-                    {itemRarityName(item.rarity)} · {item.itemLevel} рівень ·{' '}
-                    {item.setName}
+              <div className="mt-4 space-y-3">
+                {inventory.chest.length === 0 ? (
+                  <p className="border border-border/70 p-4 text-sm text-muted-foreground">
+                    У сундуку немає доступної зброї.
                   </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Сила предмета: {item.damage}/{item.damageMax} · якість{' '}
-                    {Math.round((item.rollQuality / 9_999) * 100)}%
-                  </p>
-                  <div className="mt-3 flex justify-between text-sm">
-                    <span className="text-muted-foreground">Зміна DMG</span>
-                    <span
-                      className={`font-mono ${deltaColor(item.damage - (weapon?.damage ?? 0))}`}
+                ) : (
+                  inventory.chest.map((item) => (
+                    <div
+                      key={item.id}
+                      className="border border-border/70 bg-background/45 p-4"
                     >
-                      {formatDelta(item.damage - (weapon?.damage ?? 0))}
-                    </span>
-                  </div>
-                  <Button
-                    type="button"
-                    disabled={pending || item.itemLevel > hero.level}
-                    onClick={() => onEquip(item.id)}
-                    className="mt-4 h-8 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
-                  >
-                    {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
-                  </Button>
-                </div>
-              ))
-            )}
-          </div>
-          {error ? (
+                      <p className="font-medium">{item.name}</p>
+                      <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-wider text-ember">
+                        {itemRarityName(item.rarity)} · {item.itemLevel} рівень
+                        · {item.setName}
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Сила предмета: {item.damage}/{item.damageMax} · якість{' '}
+                        {Math.round((item.rollQuality / 9_999) * 100)}%
+                      </p>
+                      <div className="mt-3 flex justify-between text-sm">
+                        <span className="text-muted-foreground">Зміна DMG</span>
+                        <span
+                          className={`font-mono ${deltaColor(item.damage - (weapon?.damage ?? 0))}`}
+                        >
+                          {formatDelta(item.damage - (weapon?.damage ?? 0))}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        disabled={pending || item.itemLevel > hero.level}
+                        onClick={() => onEquip(item.id)}
+                        className="mt-4 h-8 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
+                      >
+                        {pending ? 'Екіпіруємо…' : 'Взяти в основну руку'}
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+          {mode === 'INVENTORY' && error ? (
             <p
               role="alert"
               className="mt-4 border-l-2 border-destructive px-3 py-2 text-sm text-destructive"
@@ -1905,7 +1947,7 @@ function EquipmentScreen({
 
 function EquipmentSlot({ label }: { label: string }) {
   return (
-    <div className="grid min-h-16 place-items-center border border-border/70 bg-background/55 px-2 text-center">
+    <div className="grid min-h-12 place-items-center border border-border/70 bg-background/55 px-2 text-center">
       <div>
         <Package
           className="mx-auto size-4 text-muted-foreground/60"
@@ -1915,6 +1957,115 @@ function EquipmentSlot({ label }: { label: string }) {
           {label}
         </p>
       </div>
+    </div>
+  )
+}
+
+function ProfileSummary({
+  hero,
+  inventory,
+  talents,
+  clan,
+  weapon,
+}: {
+  hero: Hero
+  inventory: Inventory
+  talents: TalentTree | null
+  clan: Clan | null
+  weapon: InventoryItem | undefined
+}) {
+  return (
+    <>
+      <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-ember">
+        Прогрес і статистика
+      </p>
+      <dl className="mt-4 grid grid-cols-2 gap-px bg-border/70">
+        <ProfileStat label="Рівень" value={hero.level} />
+        <ProfileStat label="Загальний DMG" value={inventory.totalDamage} />
+        <ProfileStat
+          label="Досвід"
+          value={`${hero.experienceIntoLevel}/${hero.experienceForNextLevel}`}
+        />
+        <ProfileStat
+          label="Очки талантів"
+          value={talents?.availablePoints ?? 0}
+        />
+        <ProfileStat label="Предметів" value={inventory.equipped.length} />
+        <ProfileStat label="Клан" value={clan?.name ?? '—'} />
+      </dl>
+
+      <div className="mt-6 border-t border-border/70 pt-5">
+        <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
+          Нагороди й відзнаки
+        </p>
+        <div className="mt-3 space-y-2">
+          <AwardBadge
+            title="Вартовий застави"
+            description="Шлях героя розпочато у Попелястому краї."
+            earned
+          />
+          <AwardBadge
+            title="Перше озброєння"
+            description={
+              weapon ? weapon.name : 'Екіпіруйте першу постійну зброю.'
+            }
+            earned={Boolean(weapon)}
+          />
+          <AwardBadge
+            title="Кланове братство"
+            description={
+              clan
+                ? `Здобуто разом із кланом ${clan.name}.`
+                : 'Приєднайтеся до клану.'
+            }
+            earned={Boolean(clan)}
+          />
+        </div>
+      </div>
+    </>
+  )
+}
+
+function ProfileStat({
+  label,
+  value,
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div className="min-w-0 bg-background/60 p-3">
+      <dt className="font-mono text-[0.5rem] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 truncate font-mono text-sm">{value}</dd>
+    </div>
+  )
+}
+
+function AwardBadge({
+  title,
+  description,
+  earned,
+}: {
+  title: string
+  description: string
+  earned: boolean
+}) {
+  return (
+    <div
+      className={`border p-3 ${earned ? 'border-ember/50 bg-ember/5' : 'border-border/70 bg-background/35 opacity-60'}`}
+    >
+      <div className="flex items-center gap-2">
+        <Shield
+          className={`size-4 ${earned ? 'text-ember' : 'text-muted-foreground'}`}
+          aria-hidden="true"
+        />
+        <p className="text-sm font-medium">{title}</p>
+      </div>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        {description}
+      </p>
     </div>
   )
 }
