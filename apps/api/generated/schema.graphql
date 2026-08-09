@@ -446,6 +446,7 @@ type Mutation {
   equipItem(input: EquipItemInput!): InventoryModel!
   hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
   invokeCursedKnight(input: InvokeBossInput!): BattleModel!
+  invokeFallenElf(input: InvokeBossInput!): BattleModel!
   joinClan(input: JoinClanInput!): ClanModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!

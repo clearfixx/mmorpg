@@ -50,7 +50,13 @@ interface BattleReward {
   experience: number
   gold: number
   resources: Array<{
-    type: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL' | 'CURSED_HEART'
+    type:
+      | 'IRON'
+      | 'COPPER'
+      | 'BRONZE'
+      | 'BOSS_INVOCATION_SEAL'
+      | 'CURSED_HEART'
+      | 'FALLEN_ELF_EYE'
     amount: number
   }>
   item: {
@@ -430,6 +436,7 @@ export function BattleEncounter({
                 personalBest={battle.personalBest}
                 rareEncounter={battle.rareEncounter}
                 summonedBoss={battle.summonedBoss}
+                enemyName={battle.enemyName}
                 turns={battle.turn}
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
@@ -559,6 +566,7 @@ function BattleResult({
   personalBest,
   rareEncounter,
   summonedBoss,
+  enemyName,
   turns,
   health,
   maxHealth,
@@ -575,6 +583,7 @@ function BattleResult({
   personalBest: boolean
   rareEncounter: boolean
   summonedBoss: boolean
+  enemyName: string
   turns: number
   health: number
   maxHealth: number
@@ -610,8 +619,9 @@ function BattleResult({
       ) : null}
       {won && summonedBoss ? (
         <p className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3 text-sm leading-6 text-ember">
-          Ритуал завершено. Серце Проклятого лицаря буде серед гарантованих
-          трофеїв і відкриє наступну ланку викликів.
+          {enemyName.includes('Саелір')
+            ? 'Саелір переможений. Око Павшого ельфа буде серед гарантованих трофеїв наступної ланки.'
+            : 'Ритуал завершено. Серце Проклятого лицаря буде серед гарантованих трофеїв і відкриє наступну ланку викликів.'}
         </p>
       ) : null}
       {won && personalBest && !summonedBoss ? (
@@ -809,7 +819,13 @@ function RewardStat({ label, value }: { label: string; value: string }) {
 }
 
 function resourceName(
-  type?: 'IRON' | 'COPPER' | 'BRONZE' | 'BOSS_INVOCATION_SEAL' | 'CURSED_HEART',
+  type?:
+    | 'IRON'
+    | 'COPPER'
+    | 'BRONZE'
+    | 'BOSS_INVOCATION_SEAL'
+    | 'CURSED_HEART'
+    | 'FALLEN_ELF_EYE',
 ): string {
   return {
     IRON: 'Залізо',
@@ -817,6 +833,7 @@ function resourceName(
     BRONZE: 'Бронза',
     BOSS_INVOCATION_SEAL: 'Печатка виклику',
     CURSED_HEART: 'Серце лицаря',
+    FALLEN_ELF_EYE: 'Око Павшого ельфа',
   }[type ?? 'IRON']
 }
 

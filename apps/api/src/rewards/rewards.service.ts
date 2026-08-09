@@ -35,6 +35,17 @@ import { resourceBalance } from '../resources/resource-catalog';
 import { ClaimBattleRewardInput } from './dto/claim-battle-reward.input';
 import { BattleRewardModel } from './models/battle-reward.model';
 
+export function invocationSealRewardAmount(): number {
+  if (process.env.NODE_ENV === 'production') return 1;
+  const configured = Number.parseInt(
+    process.env.VEILFALL_TEST_INVOCATION_SEALS ?? '',
+    10,
+  );
+  return Number.isFinite(configured)
+    ? Math.min(1_000, Math.max(1, configured))
+    : 1;
+}
+
 @Injectable()
 export class RewardsService {
   constructor(
@@ -86,13 +97,21 @@ export class RewardsService {
     const rareEncounter =
       (battle.state as unknown as { rareEncounter?: boolean }).rareEncounter ===
       true;
+    const summonedBossId = (
+      battle.state as unknown as { summonedBossId?: string }
+    ).summonedBossId;
     const summonedBoss =
       (battle.state as unknown as { summonedBoss?: boolean }).summonedBoss ===
       true;
     const resource = summonedBoss
-      ? { type: ResourceType.CURSED_HEART, amount: 1 }
+      ? summonedBossId === 'FALLEN_ELF'
+        ? { type: ResourceType.FALLEN_ELF_EYE, amount: 1 }
+        : { type: ResourceType.CURSED_HEART, amount: 1 }
       : rareEncounter
-        ? { type: ResourceType.BOSS_INVOCATION_SEAL, amount: 1 }
+        ? {
+            type: ResourceType.BOSS_INVOCATION_SEAL,
+            amount: invocationSealRewardAmount(),
+          }
         : this.resourceReward(tier);
 
     try {

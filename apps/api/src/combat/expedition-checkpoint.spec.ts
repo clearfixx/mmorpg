@@ -49,4 +49,15 @@ describe('rare encounter cadence', () => {
       shouldSpawnRareEncounter({ level: 30, encounters: 4, roll: 300 }),
     ).toBe(false);
   });
+
+  it('supports an explicit non-production test override', () => {
+    expect(
+      shouldSpawnRareEncounter({
+        level: 30,
+        encounters: 99,
+        roll: 9_999,
+        force: true,
+      }),
+    ).toBe(true);
+  });
 });

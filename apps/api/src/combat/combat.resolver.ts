@@ -55,6 +55,15 @@ export class CombatResolver {
   }
 
   @Mutation(() => BattleModel)
+  async invokeFallenElf(
+    @Args('input') input: InvokeBossInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.invokeFallenElf(viewer.id, input);
+  }
+
+  @Mutation(() => BattleModel)
   async submitCombatCommand(
     @Args('input') input: SubmitCombatCommandInput,
     @Context() context: GraphqlContext,

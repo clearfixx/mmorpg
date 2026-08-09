@@ -675,13 +675,29 @@ export function GameJourney() {
           setPending(true)
           setError(null)
           try {
-            await executeBossInvocation()
+            await executeBossInvocation('CURSED_KNIGHT')
             window.location.reload()
           } catch {
             const refreshed = await loadJourney()
             if (!refreshed.redirect) setTalents(refreshed.talents)
             setError(
               'Ритуал не розпочався. Потрібні 30 рівень, печатка виклику та вільне поле бою.',
+            )
+            setPending(false)
+          }
+        }}
+        onInvokeFallenElf={async () => {
+          if (pending) return
+          setPending(true)
+          setError(null)
+          try {
+            await executeBossInvocation('FALLEN_ELF')
+            window.location.reload()
+          } catch {
+            const refreshed = await loadJourney()
+            if (!refreshed.redirect) setTalents(refreshed.talents)
+            setError(
+              'Виклик не відбувся. Для ритуалу Павшого ельфа потрібні три Серця Проклятого лицаря.',
             )
             setPending(false)
           }
@@ -1344,6 +1360,7 @@ function CinderhavenGate({
   onAttackClanBoss,
   onClaimClanBossReward,
   onInvokeCursedKnight,
+  onInvokeFallenElf,
   onUpgrade,
 }: {
   hero: Hero
@@ -1368,6 +1385,7 @@ function CinderhavenGate({
   onAttackClanBoss: () => Promise<void>
   onClaimClanBossReward: () => Promise<void>
   onInvokeCursedKnight: () => Promise<void>
+  onInvokeFallenElf: () => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<CityDistrictKey>(initialDistrict)
@@ -1377,6 +1395,9 @@ function CinderhavenGate({
     talents?.resources.find(
       (resource) => resource.type === 'BOSS_INVOCATION_SEAL',
     )?.amount ?? 0
+  const cursedHearts =
+    talents?.resources.find((resource) => resource.type === 'CURSED_HEART')
+      ?.amount ?? 0
   const activeSection: GameSection = {
     HUB: 'LOBBY',
     TRAINING: 'CHARACTER',
@@ -1505,6 +1526,22 @@ function CinderhavenGate({
                   }
                   locked={hero.level < 30 || invocationSeals < 1}
                   onClick={onInvokeCursedKnight}
+                />
+                <CityDistrict
+                  icon={Eye}
+                  title="Заборонений гай"
+                  description={
+                    cursedHearts >= 3
+                      ? `Сердець у сховищі: ${cursedHearts}. Спалити три й викликати Павшого ельфа Саеліра.`
+                      : `Зберіть три Серця Проклятого лицаря. Зараз у сховищі: ${cursedHearts}.`
+                  }
+                  action={
+                    cursedHearts >= 3
+                      ? 'Викликати Павшого ельфа'
+                      : 'Потрібно 3 серця'
+                  }
+                  locked={hero.level < 30 || cursedHearts < 3}
+                  onClick={onInvokeFallenElf}
                 />
               </div>
             </section>
@@ -2988,19 +3025,22 @@ async function executeClanBossRewardMutation(
   return payload.data.claimClanBossReward
 }
 
-async function executeBossInvocation(): Promise<void> {
+async function executeBossInvocation(
+  boss: 'CURSED_KNIGHT' | 'FALLEN_ELF',
+): Promise<void> {
+  const field =
+    boss === 'CURSED_KNIGHT' ? 'invokeCursedKnight' : 'invokeFallenElf'
   const response = await fetch(endpoint, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      query:
-        'mutation Invoke($input: InvokeBossInput!) { invokeCursedKnight(input: $input) { id } }',
+      query: `mutation Invoke($input: InvokeBossInput!) { ${field}(input: $input) { id } }`,
       variables: { input: { idempotencyKey: crypto.randomUUID() } },
     }),
   })
   const payload = (await response.json()) as {
-    data?: { invokeCursedKnight: { id: string } }
+    data?: Record<string, { id: string }>
     errors?: unknown
   }
   if (!response.ok || payload.errors || !payload.data)

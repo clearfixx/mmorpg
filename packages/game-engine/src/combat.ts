@@ -54,6 +54,7 @@ export interface BattleState {
   personalBest?: boolean
   rareEncounter?: boolean
   summonedBoss?: boolean
+  summonedBossId?: 'CURSED_KNIGHT' | 'FALLEN_ELF'
   returnLocation?: 'BROKEN_WATCHPOST' | 'CINDERHAVEN_GATE'
   enemyLabel: string
   enemyDamageBonus: number

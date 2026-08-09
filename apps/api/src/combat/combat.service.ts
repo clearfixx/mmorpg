@@ -49,11 +49,20 @@ export function shouldSpawnRareEncounter(input: {
   level: number;
   encounters: number;
   roll: number;
+  force?: boolean;
 }): boolean {
-  if (input.level < 30 || input.encounters >= 5) return false;
+  if (input.level < 30) return false;
+  if (input.force) return true;
+  if (input.encounters >= 5) return false;
   if (input.encounters === 0) return true;
   const chances = [10_000, 2_500, 1_200, 600, 300];
   return input.roll % 10_000 < (chances[input.encounters] ?? 0);
+}
+
+function resourceInvocationText(resource: ResourceType): string {
+  return resource === ResourceType.BOSS_INVOCATION_SEAL
+    ? 'Печатка розколюється.'
+    : 'Три прокляті серця згорають у чорному полум’ї.';
 }
 
 @Injectable()
@@ -274,9 +283,54 @@ export class CombatService {
     userId: string,
     input: InvokeBossInput,
   ): Promise<BattleModel> {
+    return this.invokeBoss(userId, input, {
+      id: 'CURSED_KNIGHT',
+      encounterId: 'invoked-cursed-knight',
+      name: 'Проклятий лицар Морґрейв',
+      resource: ResourceType.BOSS_INVOCATION_SEAL,
+      resourceAmount: 1,
+      minimumHealth: 2_400,
+      healthPerLevel: 70,
+      damageBonus: 42,
+      seed: 9_001,
+    });
+  }
+
+  async invokeFallenElf(
+    userId: string,
+    input: InvokeBossInput,
+  ): Promise<BattleModel> {
+    return this.invokeBoss(userId, input, {
+      id: 'FALLEN_ELF',
+      encounterId: 'invoked-fallen-elf',
+      name: 'Павший ельф Саелір',
+      resource: ResourceType.CURSED_HEART,
+      resourceAmount: 3,
+      minimumHealth: 4_800,
+      healthPerLevel: 115,
+      damageBonus: 76,
+      seed: 9_002,
+    });
+  }
+
+  private async invokeBoss(
+    userId: string,
+    input: InvokeBossInput,
+    boss: {
+      id: 'CURSED_KNIGHT' | 'FALLEN_ELF';
+      encounterId: string;
+      name: string;
+      resource: ResourceType;
+      resourceAmount: number;
+      minimumHealth: number;
+      healthPerLevel: number;
+      damageBonus: number;
+      seed: number;
+    },
+  ): Promise<BattleModel> {
     const characterId = await this.characters.requireIdForUser(userId);
     const payloadHash = createHash('sha256')
-      .update('INVOKE:CURSED_KNIGHT')
+      .update(`INVOKE:${boss.id}`)
       .digest('hex');
     const existing = await this.prisma.client.bossInvocationCommand.findUnique({
       where: {
@@ -330,36 +384,39 @@ export class CombatService {
       bonuses,
     );
     state.summonedBoss = true;
+    state.summonedBossId = boss.id;
     state.returnLocation = 'CINDERHAVEN_GATE';
-    state.enemyLabel = 'Проклятий лицар Морґрейв';
-    state.enemy.maxHealth = Math.max(2_400, character.level * 70);
+    state.enemyLabel = boss.name;
+    state.enemy.maxHealth = Math.max(
+      boss.minimumHealth,
+      character.level * boss.healthPerLevel,
+    );
     state.enemy.health = state.enemy.maxHealth;
-    state.enemyDamageBonus += 42 + character.level;
+    state.enemyDamageBonus += boss.damageBonus + character.level;
     state.log = [
       {
         turn: 0,
         kind: 'SYSTEM',
-        message:
-          'Печатка розколюється. Проклятий лицар Морґрейв постає у ритуальному колі.',
+        message: `${resourceInvocationText(boss.resource)} ${boss.name} постає у ритуальному колі.`,
       },
     ];
     const battle = await this.prisma.client.$transaction(async (tx) => {
       const consumed = await tx.characterResource.updateMany({
         where: {
           characterId,
-          type: ResourceType.BOSS_INVOCATION_SEAL,
-          balance: { gte: 1 },
+          type: boss.resource,
+          balance: { gte: boss.resourceAmount },
         },
-        data: { balance: { decrement: 1 } },
+        data: { balance: { decrement: boss.resourceAmount } },
       });
       if (consumed.count !== 1)
-        throw new BadRequestException('A boss invocation seal is required');
+        throw new BadRequestException('The ritual components are missing');
       const created = await tx.battle.create({
         data: {
           characterId,
           activeCharacterId: characterId,
-          encounterId: 'invoked-cursed-knight',
-          seed: 9_001,
+          encounterId: boss.encounterId,
+          seed: boss.seed,
           state: state as unknown as Prisma.InputJsonValue,
         },
       });
@@ -374,8 +431,8 @@ export class CombatService {
       await tx.resourceLedgerEntry.create({
         data: {
           characterId,
-          type: ResourceType.BOSS_INVOCATION_SEAL,
-          amount: -1,
+          type: boss.resource,
+          amount: -boss.resourceAmount,
           reason: 'BOSS_INVOCATION',
           referenceId: command.id,
         },
@@ -938,6 +995,9 @@ export class CombatService {
         level,
         encounters,
         roll: digest.readUInt16BE(0),
+        force:
+          process.env.NODE_ENV !== 'production' &&
+          process.env.VEILFALL_TEST_RARE_ENCOUNTERS === 'true',
       });
       const updated = await tx.characterWorldState.updateMany({
         where: { characterId, version: current.version },
