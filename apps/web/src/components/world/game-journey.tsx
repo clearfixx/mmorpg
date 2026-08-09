@@ -225,16 +225,19 @@ const preparations = [
   },
 ]
 
-const journeySections: readonly GameSection[] = [
+const availableGameSections: readonly GameSection[] = [
   'LOBBY',
   'CHARACTER',
   'INVENTORY',
+  'CRAFTING',
+  'CLAN',
+  'MAP',
 ]
-const characterSections: readonly GameSection[] = [
-  'LOBBY',
-  'CHARACTER',
-  'INVENTORY',
-]
+
+type JourneyView =
+  'LOBBY' | 'PROFILE' | 'INVENTORY' | 'CRAFTING' | 'CLAN' | 'FRONT'
+
+type CityDistrictKey = 'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN'
 
 function locationName(location: Location) {
   if (location === 'CINDERHAVEN_GATE') return 'Попелястий Прихисток'
@@ -281,7 +284,7 @@ function JourneyShell({
       locationName={locationName(location)}
       availableSections={
         availableSections ??
-        (location === 'CINDERHAVEN_GATE' ? undefined : journeySections)
+        (location === 'CINDERHAVEN_GATE' ? undefined : availableGameSections)
       }
       resourceTotal={
         talents?.resources.reduce(
@@ -303,7 +306,7 @@ export function GameJourney() {
   const [talents, setTalents] = useState<TalentTree | null>(null)
   const [clan, setClan] = useState<Clan | null>(null)
   const [clanBoss, setClanBoss] = useState<ClanBoss | null>(null)
-  const [view, setView] = useState<'LOBBY' | 'PROFILE' | 'INVENTORY'>('LOBBY')
+  const [view, setView] = useState<JourneyView>('LOBBY')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -365,6 +368,15 @@ export function GameJourney() {
     }
   }
 
+  function navigate(section: GameSection) {
+    if (section === 'LOBBY') setView('LOBBY')
+    if (section === 'CHARACTER') setView('PROFILE')
+    if (section === 'INVENTORY') setView('INVENTORY')
+    if (section === 'CRAFTING') setView('CRAFTING')
+    if (section === 'CLAN') setView('CLAN')
+    if (section === 'MAP') setView('FRONT')
+  }
+
   if (!hero || !world)
     return (
       <main className="grid min-h-screen place-items-center bg-background px-6 text-foreground">
@@ -374,7 +386,7 @@ export function GameJourney() {
       </main>
     )
 
-  if (view !== 'LOBBY' && inventory)
+  if ((view === 'PROFILE' || view === 'INVENTORY') && inventory)
     return (
       <JourneyShell
         hero={hero}
@@ -383,12 +395,8 @@ export function GameJourney() {
         clan={clan}
         activeSection={view === 'PROFILE' ? 'CHARACTER' : 'INVENTORY'}
         location={world.currentLocation}
-        availableSections={characterSections}
-        onNavigate={(section) => {
-          if (section === 'LOBBY') setView('LOBBY')
-          if (section === 'CHARACTER') setView('PROFILE')
-          if (section === 'INVENTORY') setView('INVENTORY')
-        }}
+        availableSections={availableGameSections}
+        onNavigate={navigate}
       >
         <EquipmentScreen
           mode={view}
@@ -438,7 +446,7 @@ export function GameJourney() {
       </JourneyShell>
     )
 
-  if (world.currentLocation === 'HOLLOW_ROAD')
+  if (world.currentLocation === 'HOLLOW_ROAD' && view === 'LOBBY')
     return (
       <JourneyShell
         hero={hero}
@@ -447,16 +455,18 @@ export function GameJourney() {
         clan={clan}
         activeSection="LOBBY"
         location={world.currentLocation}
-        onNavigate={(section) => {
-          if (section === 'INVENTORY') setView('INVENTORY')
-          if (section === 'CHARACTER') setView('PROFILE')
-        }}
+        onNavigate={navigate}
       >
         <HollowRoad hero={hero} preparation={world.preparationChoice} />
       </JourneyShell>
     )
 
-  if (world.currentLocation === 'CINDERHAVEN_GATE')
+  if (
+    world.currentLocation === 'CINDERHAVEN_GATE' ||
+    view === 'CRAFTING' ||
+    view === 'CLAN' ||
+    view === 'FRONT'
+  )
     return (
       <CinderhavenGate
         hero={hero}
@@ -466,6 +476,15 @@ export function GameJourney() {
         clanBoss={clanBoss}
         pending={pending}
         error={error}
+        initialDistrict={
+          view === 'CRAFTING'
+            ? 'CRAFTING'
+            : view === 'CLAN'
+              ? 'CLAN'
+              : view === 'FRONT'
+                ? 'FRONT'
+                : 'HUB'
+        }
         onReturn={() => travel('BROKEN_WATCHPOST')}
         onOpenProfile={() => setView('PROFILE')}
         onOpenEquipment={() => setView('INVENTORY')}
@@ -706,10 +725,7 @@ export function GameJourney() {
       clan={clan}
       activeSection="LOBBY"
       location={world.currentLocation}
-      onNavigate={(section) => {
-        if (section === 'INVENTORY') setView('INVENTORY')
-        if (section === 'CHARACTER') setView('PROFILE')
-      }}
+      onNavigate={navigate}
     >
       <div className="mx-auto grid w-full max-w-6xl border border-border/70 bg-background/75 lg:grid-cols-[15rem_1fr]">
         <aside className="border-b border-border/70 bg-panel/55 p-6 lg:border-r lg:border-b-0 lg:p-8">
@@ -907,6 +923,7 @@ function CinderhavenGate({
   clanBoss,
   pending,
   error,
+  initialDistrict,
   onReturn,
   onOpenProfile,
   onOpenEquipment,
@@ -926,6 +943,7 @@ function CinderhavenGate({
   clanBoss: ClanBoss | null
   pending: boolean
   error: string | null
+  initialDistrict: CityDistrictKey
   onReturn: () => void
   onOpenProfile: () => void
   onOpenEquipment: () => void
@@ -941,9 +959,7 @@ function CinderhavenGate({
   onClaimClanBossReward: () => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
-  const [district, setDistrict] = useState<
-    'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN'
-  >('HUB')
+  const [district, setDistrict] = useState<CityDistrictKey>(initialDistrict)
   const [clanName, setClanName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const activeSection: GameSection = {
@@ -1855,11 +1871,11 @@ function EquipmentScreen({
                 <Shield className="size-10 text-ember" aria-hidden="true" />
               </div>
               <div className="mt-5 h-36 w-24 border border-border/80 bg-panel/80 [clip-path:polygon(15%_0,85%_0,100%_100%,0_100%)]" />
-              <div className="mt-3 flex items-center gap-2 text-ember">
-                <Sword className="size-5" aria-hidden="true" />
-                <span className="font-mono text-[0.58rem] uppercase tracking-wider">
+              <div className="mt-3 w-full">
+                <EquipmentSlot label="Основна рука" item={weapon} />
+                <p className="mt-2 text-center font-mono text-[0.58rem] uppercase tracking-wider text-ember">
                   {weapon ? `+${weapon.damage} DMG` : 'Без зброї'}
-                </span>
+                </p>
               </div>
             </div>
             <div className="space-y-3">
