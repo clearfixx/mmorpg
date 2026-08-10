@@ -2,6 +2,46 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+input AdjustCharacterResourceInput {
+  characterId: ID!
+  delta: Int!
+  idempotencyKey: String!
+  reason: String!
+  resourceType: ResourceType!
+}
+
+type AdminAuditLogModel {
+  action: String!
+  actorEmail: String!
+  createdAt: DateTime!
+  id: ID!
+  reason: String!
+  targetId: String!
+  targetType: String!
+}
+
+type AdminCharacterModel {
+  email: String!
+  experience: Int!
+  gold: Int!
+  id: ID!
+  level: Int!
+  name: String!
+  resources: [AdminResourceModel!]!
+  userRole: UserRole!
+  version: Int!
+}
+
+type AdminMutationResultModel {
+  auditId: ID!
+  character: AdminCharacterModel!
+}
+
+type AdminResourceModel {
+  amount: Int!
+  type: ResourceType!
+}
+
 input AttackClanBossInput {
   encounterId: ID!
   expectedVersion: Int!
@@ -435,6 +475,8 @@ input LoginInput {
 }
 
 type Mutation {
+  adminAdjustCharacterResource(input: AdjustCharacterResourceInput!): AdminMutationResultModel!
+  adminSetCharacterLevel(input: SetCharacterLevelInput!): AdminMutationResultModel!
   attackClanBoss(input: AttackClanBossInput!): ClanBossModel!
   chooseFaction(input: ChooseFactionInput!): FactionStateModel!
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
@@ -445,9 +487,7 @@ type Mutation {
   createCharacter(input: CreateCharacterInput!): CharacterModel!
   createClan(input: CreateClanInput!): ClanModel!
   equipItem(input: EquipItemInput!): InventoryModel!
-  hireExpeditionGuide(
-    input: HireExpeditionGuideInput!
-  ): ExpeditionProgressModel!
+  hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
   invokeCursedKnight(input: InvokeBossInput!): BattleModel!
   invokeFallenElf(input: InvokeBossInput!): BattleModel!
   joinClan(input: JoinClanInput!): ClanModel!
@@ -480,6 +520,8 @@ input PrepareLocationInput {
 
 type Query {
   activeBattle: BattleModel
+  adminAuditLogs(take: Int = 50, targetId: String): [AdminAuditLogModel!]!
+  adminCharacters(search: String = "", take: Int = 50): [AdminCharacterModel!]!
   currentClanBoss: ClanBossModel
   currentLocation: WorldStateModel!
   expeditionProgress: ExpeditionProgressModel!
@@ -492,9 +534,7 @@ type Query {
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
 
-  """
-  API readiness probe for the foundation milestone.
-  """
+  """API readiness probe for the foundation milestone."""
   status: String!
   viewer: Viewer
 }
@@ -578,6 +618,13 @@ type RewardItemModel {
   rollQuality: Int!
   setName: String!
   visualAssetId: String!
+}
+
+input SetCharacterLevelInput {
+  characterId: ID!
+  idempotencyKey: String!
+  level: Int!
+  reason: String!
 }
 
 input StartCraftInput {

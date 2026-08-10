@@ -170,15 +170,16 @@ enum WorldFaction {
 }
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  email        String     @unique @db.VarChar(320)
-  passwordHash String     @map("password_hash") @db.VarChar(255)
-  role         UserRole   @default(PLAYER)
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  sessions     Session[]
-  character    Character?
+  id                String          @id @default(uuid()) @db.Uuid
+  email             String          @unique @db.VarChar(320)
+  passwordHash      String          @map("password_hash") @db.VarChar(255)
+  role              UserRole        @default(PLAYER)
+  status            UserStatus      @default(ACTIVE)
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  sessions          Session[]
+  character         Character?
+  adminAuditEntries AdminAuditLog[] @relation("AdminAuditActor")
 
   @@map("users")
 }
@@ -680,4 +681,24 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+model AdminAuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String   @map("payload_hash") @db.Char(64)
+  action         String   @db.VarChar(64)
+  targetType     String   @map("target_type") @db.VarChar(32)
+  targetId       String   @map("target_id") @db.VarChar(64)
+  reason         String   @db.VarChar(500)
+  before         Json
+  after          Json
+  createdAt      DateTime @default(now()) @map("created_at")
+  actor          User     @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([actorUserId, idempotencyKey])
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("admin_audit_logs")
 }

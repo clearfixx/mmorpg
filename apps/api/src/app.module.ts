@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { join } from 'node:path';
 
+import { AdminModule } from './admin/admin.module';
 import { AppResolver } from './app.resolver';
 import { CharactersModule } from './characters/characters.module';
 import { ClansModule } from './clans/clans.module';
@@ -33,6 +34,7 @@ import { WorldModule } from './world/world.module';
       context: ({ req, res }: GraphqlContext) => ({ req, res }),
     }),
     DatabaseModule,
+    AdminModule,
     IdentityModule,
     InventoryModule,
     CharactersModule,

@@ -23,8 +23,12 @@ describe('Health (e2e)', () => {
   afterEach(async () => {
     if (createdEmails.length > 0) {
       const prisma = app.get(PrismaService);
+      const emails = createdEmails.splice(0);
+      await prisma.client.adminAuditLog.deleteMany({
+        where: { actor: { email: { in: emails } } },
+      });
       await prisma.client.user.deleteMany({
-        where: { email: { in: createdEmails.splice(0) } },
+        where: { email: { in: emails } },
       });
       await prisma.client.clan.deleteMany({ where: { members: { none: {} } } });
     }
@@ -1768,6 +1772,139 @@ describe('Health (e2e)', () => {
       })
       .expect(200);
     expect(duplicate.text).toContain('errors');
+
+    const forbiddenAdminQuery = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: '{ adminCharacters { id } }' })
+      .expect(200);
+    expect(forbiddenAdminQuery.text).toContain('errors');
+    expect(forbiddenAdminQuery.text).toContain(
+      'Administrative access required',
+    );
+
+    await prisma.client.user.update({
+      where: { id: combatUser.id },
+      data: { role: 'ADMIN' },
+    });
+    const adminCharacters = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ adminCharacters(search: "Hero", take: 10) { id name email userRole level resources { type amount } } }',
+      })
+      .expect(200);
+    expect(adminCharacters.text).toContain(`"email":"${email}"`);
+    expect(adminCharacters.text).toContain('"userRole":"ADMIN"');
+
+    const ironBefore =
+      (
+        await prisma.client.characterResource.findUnique({
+          where: {
+            characterId_type: {
+              characterId: combatUser.character!.id,
+              type: 'IRON',
+            },
+          },
+        })
+      )?.balance ?? 0;
+    const resourceAdminKey = `admin-resource-${Date.now()}`;
+    const adjustResource = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Adjust($input: AdjustCharacterResourceInput!) { adminAdjustCharacterResource(input: $input) { auditId character { id version resources { type amount } } } }',
+          variables: {
+            input: {
+              characterId: combatUser.character!.id,
+              resourceType: 'IRON',
+              delta: 7,
+              reason: 'E2E verification of audited resource adjustment',
+              idempotencyKey: resourceAdminKey,
+            },
+          },
+        })
+        .expect(200);
+    const adjusted = await adjustResource();
+    const adjustedRetry = await adjustResource();
+    const adjustedPayload = JSON.parse(adjusted.text) as {
+      data: { adminAdjustCharacterResource: { auditId: string } };
+    };
+    const adjustedRetryPayload = JSON.parse(adjustedRetry.text) as {
+      data: { adminAdjustCharacterResource: { auditId: string } };
+    };
+    expect(adjustedRetryPayload.data.adminAdjustCharacterResource.auditId).toBe(
+      adjustedPayload.data.adminAdjustCharacterResource.auditId,
+    );
+    expect(
+      await prisma.client.characterResource.findUniqueOrThrow({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'IRON',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: ironBefore + 7 });
+    expect(
+      await prisma.client.resourceLedgerEntry.count({
+        where: {
+          characterId: combatUser.character!.id,
+          type: 'IRON',
+          amount: 7,
+          reason: 'ADMIN_ADJUSTMENT',
+        },
+      }),
+    ).toBe(1);
+
+    const setAdminLevel = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation SetLevel($input: SetCharacterLevelInput!) { adminSetCharacterLevel(input: $input) { auditId character { level experience } } }',
+        variables: {
+          input: {
+            characterId: combatUser.character!.id,
+            level: 31,
+            reason: 'E2E verification of audited level adjustment',
+            idempotencyKey: `admin-level-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const setAdminLevelPayload = JSON.parse(setAdminLevel.text) as {
+      data: {
+        adminSetCharacterLevel: {
+          auditId: string;
+          character: { level: number; experience: number };
+        };
+      };
+    };
+    expect(setAdminLevelPayload).toMatchObject({
+      data: {
+        adminSetCharacterLevel: {
+          character: { level: 31, experience: 90_000 },
+        },
+      },
+    });
+    const auditLogs = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query: `{ adminAuditLogs(targetId: "${combatUser.character!.id}") { action actorEmail reason } }`,
+      })
+      .expect(200);
+    expect(auditLogs.text).toContain('ADJUST_CHARACTER_RESOURCE');
+    expect(auditLogs.text).toContain('SET_CHARACTER_LEVEL');
+
+    await prisma.client.user.update({
+      where: { id: combatUser.id },
+      data: { role: 'PLAYER' },
+    });
 
     await request(server)
       .post('/graphql')
