@@ -64,6 +64,33 @@ export class CombatResolver {
   }
 
   @Mutation(() => BattleModel)
+  async invokeDarkPriest(
+    @Args('input') input: InvokeBossInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.invokeDarkPriest(viewer.id, input);
+  }
+
+  @Mutation(() => BattleModel)
+  async invokeVeilWardenFromEyes(
+    @Args('input') input: InvokeBossInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.invokeVeilWardenFromEyes(viewer.id, input);
+  }
+
+  @Mutation(() => BattleModel)
+  async invokeVeilWardenFromAsh(
+    @Args('input') input: InvokeBossInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.combat.invokeVeilWardenFromAsh(viewer.id, input);
+  }
+
+  @Mutation(() => BattleModel)
   async submitCombatCommand(
     @Args('input') input: SubmitCombatCommandInput,
     @Context() context: GraphqlContext,

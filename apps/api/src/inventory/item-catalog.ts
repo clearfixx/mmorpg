@@ -172,11 +172,24 @@ const OFFHAND_SPECIALTIES = [
   ),
 ] as const;
 
+const VEIL_WARDEN_RELIC = definition(
+  'veil-warden-heart-v1',
+  'Серце Вартового Завіси',
+  'jewel-veil-warden-heart-01',
+  [EquipmentSlot.AMULET],
+  70,
+  55,
+  220,
+  'veil-warden',
+  'Вартовий Завіси',
+);
+
 const ITEM_DEFINITIONS = new Map<string, ItemDefinition>(
   [
     ...Object.values(STARTER_WEAPONS),
     ...VETERAN_GEAR,
     ...OFFHAND_SPECIALTIES,
+    VEIL_WARDEN_RELIC,
   ].map((item) => [item.definitionId, item]),
 );
 
@@ -188,6 +201,8 @@ function definition(
   damage: number,
   armor: number,
   health: number,
+  setId = 'veteran',
+  setName = 'Ветеран',
 ): ItemDefinition {
   return {
     definitionId,
@@ -195,9 +210,13 @@ function definition(
     visualAssetId,
     equipmentSlots,
     statWeights: { damage, armor, health },
-    setId: 'veteran',
-    setName: 'Ветеран',
+    setId,
+    setName,
   };
+}
+
+export function veilWardenRelicDefinition(): ItemDefinition {
+  return VEIL_WARDEN_RELIC;
 }
 
 export function itemDefinition(definitionId: string): ItemDefinition | null {

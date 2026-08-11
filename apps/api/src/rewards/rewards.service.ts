@@ -33,6 +33,7 @@ import {
   itemDefinition,
   itemStatsForPower,
   rewardDefinitionFor,
+  veilWardenRelicDefinition,
   type ItemDefinition,
 } from '../inventory/item-catalog';
 import { resourceBalance } from '../resources/resource-catalog';
@@ -85,25 +86,31 @@ export class RewardsService {
     const tier =
       (battle.state as unknown as { encounterTier?: number }).encounterTier ??
       1;
-    const definition = rewardDefinitionFor(battle.character.archetype, tier);
+    const summonedBossId = (
+      battle.state as unknown as { summonedBossId?: string }
+    ).summonedBossId;
+    const veilWardenReward = summonedBossId === 'VEIL_WARDEN';
+    const definition = veilWardenReward
+      ? veilWardenRelicDefinition()
+      : rewardDefinitionFor(battle.character.archetype, tier);
     const rewardDigest = createHash('sha256')
       .update(`equipment-drop:${battle.id}`)
       .digest();
-    const dropsItem = shouldDropEquipment(tier, rewardDigest.readUInt16BE(0));
+    const dropsItem =
+      veilWardenReward ||
+      shouldDropEquipment(tier, rewardDigest.readUInt16BE(0));
     const roll = this.rollForBattle(
       battle.id,
       battle.character.level,
       tier,
       definition,
+      veilWardenReward ? ItemRarity.DIVINE : undefined,
     );
     const experience = 40 + (tier - 1) * 20;
     const gold = 18 + (tier - 1) * 12;
     const rareEncounter =
       (battle.state as unknown as { rareEncounter?: boolean }).rareEncounter ===
       true;
-    const summonedBossId = (
-      battle.state as unknown as { summonedBossId?: string }
-    ).summonedBossId;
     const summonedBoss =
       (battle.state as unknown as { summonedBoss?: boolean }).summonedBoss ===
       true;
@@ -116,7 +123,11 @@ export class RewardsService {
     const resources = summonedBoss
       ? summonedBossId === 'FALLEN_ELF'
         ? [{ type: ResourceType.FALLEN_ELF_EYE, amount: 1 }]
-        : [{ type: ResourceType.CURSED_HEART, amount: 1 }]
+        : summonedBossId === 'DARK_PRIEST'
+          ? [{ type: ResourceType.DARK_PRIEST_ASH, amount: 1 }]
+          : summonedBossId === 'VEIL_WARDEN'
+            ? []
+            : [{ type: ResourceType.CURSED_HEART, amount: 1 }]
       : rareEncounter
         ? [
             {
@@ -254,6 +265,7 @@ export class RewardsService {
     characterLevel: number,
     tier: number,
     definition: ItemDefinition,
+    forcedRarity?: ItemRarity,
   ): {
     itemLevel: number;
     rarity: ItemRarity;
@@ -268,10 +280,9 @@ export class RewardsService {
       .update(`first-reward:${battleId}`)
       .digest();
     const itemLevel = itemLevelForReward(characterLevel, tier);
-    const rarity = rarityForRoll(
-      digest.readUInt16BE(0),
-      maxRarityForEncounterTier(tier),
-    );
+    const rarity =
+      forcedRarity ??
+      rarityForRoll(digest.readUInt16BE(0), maxRarityForEncounterTier(tier));
     const power = rollItemPower(
       itemLevel,
       rarity,

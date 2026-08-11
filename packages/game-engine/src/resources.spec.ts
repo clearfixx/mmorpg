@@ -28,6 +28,11 @@ describe('resource catalog', () => {
       rarity: 'LEGENDARY',
       tradeable: true,
     })
+    expect(resourceDefinition('DARK_PRIEST_INVOCATION_SEAL')).toMatchObject({
+      origin: 'CRAFTED',
+      rarity: 'LEGENDARY',
+      tradeable: true,
+    })
   })
 
   it('allows the current clan progression resources explicitly', () => {

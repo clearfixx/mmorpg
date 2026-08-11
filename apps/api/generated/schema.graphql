@@ -503,7 +503,10 @@ type Mutation {
   equipItem(input: EquipItemInput!): InventoryModel!
   hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
   invokeCursedKnight(input: InvokeBossInput!): BattleModel!
+  invokeDarkPriest(input: InvokeBossInput!): BattleModel!
   invokeFallenElf(input: InvokeBossInput!): BattleModel!
+  invokeVeilWardenFromAsh(input: InvokeBossInput!): BattleModel!
+  invokeVeilWardenFromEyes(input: InvokeBossInput!): BattleModel!
   joinClan(input: JoinClanInput!): ClanModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!
@@ -600,6 +603,7 @@ enum ResourceType {
   COPPER
   CURSED_HEART
   DARK_PRIEST_ASH
+  DARK_PRIEST_INVOCATION_SEAL
   DRYAD_HEARTWOOD
   FALLEN_ELF_EYE
   HEALTH_POTION

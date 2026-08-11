@@ -18,7 +18,8 @@ interface Battle {
   personalBest: boolean
   rareEncounter: boolean
   summonedBoss: boolean
-  summonedBossId: 'CURSED_KNIGHT' | 'FALLEN_ELF' | null
+  summonedBossId:
+    'CURSED_KNIGHT' | 'FALLEN_ELF' | 'DARK_PRIEST' | 'VEIL_WARDEN' | null
   enemyName: string
   version: number
   turn: number
@@ -73,6 +74,8 @@ interface BattleReward {
       | 'BOSS_INVOCATION_SEAL'
       | 'CURSED_HEART'
       | 'FALLEN_ELF_EYE'
+      | 'DARK_PRIEST_ASH'
+      | 'DARK_PRIEST_INVOCATION_SEAL'
       | 'DRYAD_HEARTWOOD'
     amount: number
   }>
@@ -424,16 +427,12 @@ export function BattleEncounter({
           <section className="border-b border-ember/50 bg-ember/5 px-5 py-4">
             <p className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-ember">
               {battle.summonedBoss
-                ? battle.summonedBossId === 'FALLEN_ELF'
-                  ? 'Ритуальний бос · спалено три прокляті серця'
-                  : 'Ритуальний бос · витрачено печатку виклику'
+                ? ritualBossKicker(battle.summonedBossId)
                 : 'Рідкісна зустріч · доступна з 30 рівня'}
             </p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {battle.summonedBoss
-                ? battle.summonedBossId === 'FALLEN_ELF'
-                  ? 'Саелір не залишить Заборонений гай, доки ритуал не завершиться. Його око існує лише як трофей цього виклику.'
-                  : 'Морґрейв не зникне, доки ритуал не завершиться. Його серце існує лише як трофей цього виклику.'
+                ? ritualBossDescription(battle.summonedBossId)
                 : 'Носій печаті значно сильніший за звичайних ворогів. Перемога гарантовано принесе переносне закляття для виклику Проклятого лицаря.'}
             </p>
           </section>
@@ -677,9 +676,7 @@ function BattleResult({
       ) : null}
       {won && summonedBoss ? (
         <p className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3 text-sm leading-6 text-ember">
-          {enemyName.includes('Саелір')
-            ? 'Саелір переможений. Око Павшого ельфа буде серед гарантованих трофеїв наступної ланки.'
-            : 'Ритуал завершено. Серце Проклятого лицаря буде серед гарантованих трофеїв і відкриє наступну ланку викликів.'}
+          {ritualVictoryText(summonedBossId)}
         </p>
       ) : null}
       {won && personalBest && !summonedBoss ? (
@@ -697,9 +694,7 @@ function BattleResult({
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
             {summonedBoss
-              ? summonedBossId === 'FALLEN_ELF'
-                ? 'Заберіть око Саеліра перед поверненням до Прихистку.'
-                : 'Заберіть серце Морґрейва перед поверненням до Прихистку.'
+              ? ritualClaimText(summonedBossId)
               : 'Заберіть трофей ворога перед поверненням на заставу.'}
           </p>
           <Button
@@ -909,6 +904,8 @@ function resourceName(
     | 'BOSS_INVOCATION_SEAL'
     | 'CURSED_HEART'
     | 'FALLEN_ELF_EYE'
+    | 'DARK_PRIEST_ASH'
+    | 'DARK_PRIEST_INVOCATION_SEAL'
     | 'DRYAD_HEARTWOOD',
 ): string {
   return {
@@ -923,6 +920,8 @@ function resourceName(
     BOSS_INVOCATION_SEAL: 'Печатка виклику',
     CURSED_HEART: 'Серце лицаря',
     FALLEN_ELF_EYE: 'Око Павшого ельфа',
+    DARK_PRIEST_ASH: 'Попіл Темного жерця',
+    DARK_PRIEST_INVOCATION_SEAL: 'Печатка Темного жерця',
     DRYAD_HEARTWOOD: 'Серцевина кореня',
   }[type ?? 'IRON']
 }
@@ -971,6 +970,45 @@ function preparationEffect(preparation: string): string {
   if (preparation.includes('намірів'))
     return 'Ви бачите поточний і наступний намір ворога.'
   return 'Перші три ходи відновлюють по 6 HP.'
+}
+
+function ritualBossKicker(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Ритуальний бос · спалено три прокляті серця'
+  if (bossId === 'DARK_PRIEST')
+    return 'Альтернативна гілка · витрачено перековану печатку'
+  if (bossId === 'VEIL_WARDEN') return 'Третя ланка · розлом Завіси відкрито'
+  return 'Ритуальний бос · витрачено печатку виклику'
+}
+
+function ritualBossDescription(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Саелір не залишить Заборонений гай, доки ритуал не завершиться. Його око існує лише як трофей цього виклику.'
+  if (bossId === 'DARK_PRIEST')
+    return 'Нервал відкриває альтернативний шлях полювання. Його попіл може замінити очі ельфа у ритуалі третьої ланки.'
+  if (bossId === 'VEIL_WARDEN')
+    return 'Вартовий замкнув розлом власним тілом. Перемога гарантує божественне Серце Вартового Завіси.'
+  return 'Морґрейв не зникне, доки ритуал не завершиться. Його серце існує лише як трофей цього виклику.'
+}
+
+function ritualVictoryText(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Саелір переможений. Око Павшого ельфа відкриває шлях до Вартового Завіси.'
+  if (bossId === 'DARK_PRIEST')
+    return 'Нервал розсипався попелом. Три такі трофеї відкриють шлях до Вартового Завіси.'
+  if (bossId === 'VEIL_WARDEN')
+    return 'Розлом приборкано. Божественне Серце Вартового Завіси гарантовано стане вашою реліквією.'
+  return 'Ритуал завершено. Серце Проклятого лицаря відкриває наступну ланку викликів.'
+}
+
+function ritualClaimText(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Заберіть око Саеліра перед поверненням до Прихистку.'
+  if (bossId === 'DARK_PRIEST')
+    return 'Зберіть попіл Нервала перед поверненням до Прихистку.'
+  if (bossId === 'VEIL_WARDEN')
+    return 'Прийміть божественну реліквію Вартового перед закриттям розлому.'
+  return 'Заберіть серце Морґрейва перед поверненням до Прихистку.'
 }
 
 function logColor(kind: string): string {

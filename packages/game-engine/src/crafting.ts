@@ -97,6 +97,21 @@ export const CRAFTING_RECIPES = {
     output: { resourceType: 'VEIL_STEEL', amount: 1 },
     public: false,
   },
+  'dark-priest-invocation-seal-v1': {
+    id: 'dark-priest-invocation-seal-v1',
+    name: 'Печатка Темного жерця',
+    description:
+      'Ритуальна перековка змінює відбиток звичайної печатки та відкриває альтернативну гілку полювання.',
+    station: 'RITUAL_CIRCLE',
+    durationSeconds: 6 * 60 * 60,
+    ingredients: [
+      { resourceType: 'BOSS_INVOCATION_SEAL', amount: 1 },
+      { resourceType: 'STABILIZED_CATALYST', amount: 1 },
+      { resourceType: 'OBSIDIAN_SHARD', amount: 3 },
+    ],
+    output: { resourceType: 'DARK_PRIEST_INVOCATION_SEAL', amount: 1 },
+    public: true,
+  },
 } as const satisfies Record<string, CraftingRecipe>
 
 export type CraftingRecipeId = keyof typeof CRAFTING_RECIPES

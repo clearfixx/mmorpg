@@ -38,4 +38,15 @@ describe('crafting recipes', () => {
       station: 'FORGE',
     })
   })
+
+  it('recrafts a tradeable boss seal into the alternate ritual branch', () => {
+    expect(craftingRecipe('dark-priest-invocation-seal-v1')).toMatchObject({
+      station: 'RITUAL_CIRCLE',
+      durationSeconds: 21_600,
+      output: {
+        resourceType: 'DARK_PRIEST_INVOCATION_SEAL',
+        amount: 1,
+      },
+    })
+  })
 })

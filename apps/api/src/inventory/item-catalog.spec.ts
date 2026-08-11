@@ -4,6 +4,7 @@ import {
   itemDefinition,
   itemStatsForPower,
   rewardDefinitionFor,
+  veilWardenRelicDefinition,
 } from './item-catalog';
 
 describe('item catalog', () => {
@@ -32,6 +33,16 @@ describe('item catalog', () => {
       damage: 0,
       armor: 55,
       health: 180,
+    });
+  });
+
+  it('registers the Veil Warden reward as a real equippable relic', () => {
+    const relic = veilWardenRelicDefinition();
+    expect(itemDefinition(relic.definitionId)).toEqual(relic);
+    expect(relic).toMatchObject({
+      definitionId: 'veil-warden-heart-v1',
+      equipmentSlots: [EquipmentSlot.AMULET],
+      setId: 'veil-warden',
     });
   });
 });

@@ -62,9 +62,15 @@ export function shouldSpawnRareEncounter(input: {
 }
 
 function resourceInvocationText(resource: ResourceType): string {
-  return resource === ResourceType.BOSS_INVOCATION_SEAL
-    ? 'Печатка розколюється.'
-    : 'Три прокляті серця згорають у чорному полум’ї.';
+  if (resource === ResourceType.BOSS_INVOCATION_SEAL)
+    return 'Печатка розколюється.';
+  if (resource === ResourceType.DARK_PRIEST_INVOCATION_SEAL)
+    return 'Перекована печатка розсипається чорним попелом.';
+  if (resource === ResourceType.FALLEN_ELF_EYE)
+    return 'Три ока Павшого ельфа відкривають розлом.';
+  if (resource === ResourceType.DARK_PRIEST_ASH)
+    return 'Три жмені ритуального попелу окреслюють розлом.';
+  return 'Три прокляті серця згорають у чорному полум’ї.';
 }
 
 @Injectable()
@@ -376,11 +382,74 @@ export class CombatService {
     });
   }
 
+  async invokeDarkPriest(
+    userId: string,
+    input: InvokeBossInput,
+  ): Promise<BattleModel> {
+    return this.invokeBoss(userId, input, {
+      id: 'DARK_PRIEST',
+      encounterId: 'invoked-dark-priest',
+      name: 'Темний жрець Нервал',
+      resource: ResourceType.DARK_PRIEST_INVOCATION_SEAL,
+      resourceAmount: 1,
+      minimumHealth: 3_400,
+      healthPerLevel: 92,
+      damageBonus: 61,
+      seed: 9_003,
+    });
+  }
+
+  async invokeVeilWardenFromEyes(
+    userId: string,
+    input: InvokeBossInput,
+  ): Promise<BattleModel> {
+    return this.invokeVeilWarden(
+      userId,
+      input,
+      ResourceType.FALLEN_ELF_EYE,
+      3,
+      9_004,
+    );
+  }
+
+  async invokeVeilWardenFromAsh(
+    userId: string,
+    input: InvokeBossInput,
+  ): Promise<BattleModel> {
+    return this.invokeVeilWarden(
+      userId,
+      input,
+      ResourceType.DARK_PRIEST_ASH,
+      3,
+      9_005,
+    );
+  }
+
+  private invokeVeilWarden(
+    userId: string,
+    input: InvokeBossInput,
+    resource: ResourceType,
+    resourceAmount: number,
+    seed: number,
+  ): Promise<BattleModel> {
+    return this.invokeBoss(userId, input, {
+      id: 'VEIL_WARDEN',
+      encounterId: `invoked-veil-warden-${resource.toLowerCase()}`,
+      name: 'Вартовий Розколотої Завіси',
+      resource,
+      resourceAmount,
+      minimumHealth: 8_500,
+      healthPerLevel: 185,
+      damageBonus: 118,
+      seed,
+    });
+  }
+
   private async invokeBoss(
     userId: string,
     input: InvokeBossInput,
     boss: {
-      id: 'CURSED_KNIGHT' | 'FALLEN_ELF';
+      id: 'CURSED_KNIGHT' | 'FALLEN_ELF' | 'DARK_PRIEST' | 'VEIL_WARDEN';
       encounterId: string;
       name: string;
       resource: ResourceType;
@@ -393,7 +462,7 @@ export class CombatService {
   ): Promise<BattleModel> {
     const characterId = await this.characters.requireIdForUser(userId);
     const payloadHash = createHash('sha256')
-      .update(`INVOKE:${boss.id}`)
+      .update(`INVOKE:${boss.id}:${boss.resource}:${boss.resourceAmount}`)
       .digest('hex');
     const existing = await this.prisma.client.bossInvocationCommand.findUnique({
       where: {

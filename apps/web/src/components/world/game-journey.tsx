@@ -168,6 +168,7 @@ type ResourceType =
   | 'FALLEN_ELF_EYE'
   | 'DARK_PRIEST_ASH'
   | 'BOSS_INVOCATION_SEAL'
+  | 'DARK_PRIEST_INVOCATION_SEAL'
   | 'DRYAD_HEARTWOOD'
 
 interface TalentTree {
@@ -756,6 +757,15 @@ export function GameJourney() {
             setPending(false)
           }
         }}
+        onInvokeDarkPriest={() =>
+          invokeBoss(setPending, setError, 'DARK_PRIEST')
+        }
+        onInvokeVeilWardenFromEyes={() =>
+          invokeBoss(setPending, setError, 'VEIL_WARDEN_EYES')
+        }
+        onInvokeVeilWardenFromAsh={() =>
+          invokeBoss(setPending, setError, 'VEIL_WARDEN_ASH')
+        }
         onUpgrade={async (type) => {
           if (!talents || pending) return
           setPending(true)
@@ -1475,6 +1485,9 @@ function CinderhavenGate({
   onClaimClanBossReward,
   onInvokeCursedKnight,
   onInvokeFallenElf,
+  onInvokeDarkPriest,
+  onInvokeVeilWardenFromEyes,
+  onInvokeVeilWardenFromAsh,
   onUpgrade,
 }: {
   hero: Hero
@@ -1501,6 +1514,9 @@ function CinderhavenGate({
   onClaimClanBossReward: () => Promise<void>
   onInvokeCursedKnight: () => Promise<void>
   onInvokeFallenElf: () => Promise<void>
+  onInvokeDarkPriest: () => Promise<void>
+  onInvokeVeilWardenFromEyes: () => Promise<void>
+  onInvokeVeilWardenFromAsh: () => Promise<void>
   onUpgrade: (type: TalentType) => void
 }) {
   const [district, setDistrict] = useState<CityDistrictKey>(initialDistrict)
@@ -1512,6 +1528,16 @@ function CinderhavenGate({
     )?.amount ?? 0
   const cursedHearts =
     talents?.resources.find((resource) => resource.type === 'CURSED_HEART')
+      ?.amount ?? 0
+  const darkPriestSeals =
+    talents?.resources.find(
+      (resource) => resource.type === 'DARK_PRIEST_INVOCATION_SEAL',
+    )?.amount ?? 0
+  const fallenElfEyes =
+    talents?.resources.find((resource) => resource.type === 'FALLEN_ELF_EYE')
+      ?.amount ?? 0
+  const darkPriestAsh =
+    talents?.resources.find((resource) => resource.type === 'DARK_PRIEST_ASH')
       ?.amount ?? 0
   const activeSection: GameSection = {
     HUB: 'LOBBY',
@@ -1664,6 +1690,46 @@ function CinderhavenGate({
                   }
                   locked={hero.level < 30 || cursedHearts < 3}
                   onClick={onInvokeFallenElf}
+                />
+                <CityDistrict
+                  icon={Flame}
+                  title="Крипта Темного жерця"
+                  description={
+                    darkPriestSeals > 0
+                      ? `Перекованих печаток: ${darkPriestSeals}. Нервал чекає за межею ритуального кола.`
+                      : 'Перекуйте звичайну печатку в майстерні, щоб обрати альтернативну гілку виклику.'
+                  }
+                  action={
+                    darkPriestSeals > 0
+                      ? 'Викликати Темного жерця'
+                      : 'Потрібна перекована печатка'
+                  }
+                  locked={hero.level < 30 || darkPriestSeals < 1}
+                  onClick={onInvokeDarkPriest}
+                />
+                <CityDistrict
+                  icon={Sparkles}
+                  title="Розлом Завіси · шлях очей"
+                  description={`Три Ока Павшого ельфа відкриють шлях до Вартового. У сховищі: ${fallenElfEyes}. Перемога гарантує божественну реліквію.`}
+                  action={
+                    fallenElfEyes >= 3
+                      ? 'Відкрити розлом очима'
+                      : 'Потрібно 3 ока'
+                  }
+                  locked={hero.level < 30 || fallenElfEyes < 3}
+                  onClick={onInvokeVeilWardenFromEyes}
+                />
+                <CityDistrict
+                  icon={Flame}
+                  title="Розлом Завіси · шлях попелу"
+                  description={`Три Попели Темного жерця відкриють альтернативний шлях до того самого Вартового. У сховищі: ${darkPriestAsh}.`}
+                  action={
+                    darkPriestAsh >= 3
+                      ? 'Відкрити розлом попелом'
+                      : 'Потрібно 3 попели'
+                  }
+                  locked={hero.level < 30 || darkPriestAsh < 3}
+                  onClick={onInvokeVeilWardenFromAsh}
                 />
               </div>
             </section>
@@ -3156,10 +3222,20 @@ async function executeClanBossRewardMutation(
 }
 
 async function executeBossInvocation(
-  boss: 'CURSED_KNIGHT' | 'FALLEN_ELF',
+  boss:
+    | 'CURSED_KNIGHT'
+    | 'FALLEN_ELF'
+    | 'DARK_PRIEST'
+    | 'VEIL_WARDEN_EYES'
+    | 'VEIL_WARDEN_ASH',
 ): Promise<void> {
-  const field =
-    boss === 'CURSED_KNIGHT' ? 'invokeCursedKnight' : 'invokeFallenElf'
+  const field = {
+    CURSED_KNIGHT: 'invokeCursedKnight',
+    FALLEN_ELF: 'invokeFallenElf',
+    DARK_PRIEST: 'invokeDarkPriest',
+    VEIL_WARDEN_EYES: 'invokeVeilWardenFromEyes',
+    VEIL_WARDEN_ASH: 'invokeVeilWardenFromAsh',
+  }[boss]
   const response = await fetch(endpoint, {
     method: 'POST',
     credentials: 'include',
@@ -3175,6 +3251,24 @@ async function executeBossInvocation(
   }
   if (!response.ok || payload.errors || !payload.data)
     throw new Error('BOSS_INVOCATION_FAILED')
+}
+
+async function invokeBoss(
+  setPending: (pending: boolean) => void,
+  setError: (error: string | null) => void,
+  boss: 'DARK_PRIEST' | 'VEIL_WARDEN_EYES' | 'VEIL_WARDEN_ASH',
+): Promise<void> {
+  setPending(true)
+  setError(null)
+  try {
+    await executeBossInvocation(boss)
+    window.location.reload()
+  } catch {
+    setError(
+      'Ритуал не розпочався. Перевірте рівень героя, потрібні компоненти та відсутність активного бою.',
+    )
+    setPending(false)
+  }
 }
 
 async function executeTalentMutation(
@@ -3247,6 +3341,7 @@ function resourceName(value: ResourceType): string {
     FALLEN_ELF_EYE: 'око Павшого ельфа',
     DARK_PRIEST_ASH: 'попіл Темного жерця',
     BOSS_INVOCATION_SEAL: 'печатка виклику Проклятого лицаря',
+    DARK_PRIEST_INVOCATION_SEAL: 'печатка Темного жерця',
     DRYAD_HEARTWOOD: 'серцевина прадавнього кореня',
   }[value]
 }

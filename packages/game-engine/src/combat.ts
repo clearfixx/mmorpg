@@ -73,7 +73,8 @@ export interface BattleState {
   personalBest?: boolean
   rareEncounter?: boolean
   summonedBoss?: boolean
-  summonedBossId?: 'CURSED_KNIGHT' | 'FALLEN_ELF'
+  summonedBossId?:
+    'CURSED_KNIGHT' | 'FALLEN_ELF' | 'DARK_PRIEST' | 'VEIL_WARDEN'
   returnLocation?: 'BROKEN_WATCHPOST' | 'CINDERHAVEN_GATE'
   region?: 'HOLLOW_ROAD' | 'DRYAD_FOREST'
   enemyLabel: string

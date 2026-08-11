@@ -37,6 +37,7 @@ export const RESOURCE_TYPES = [
   'FALLEN_ELF_EYE',
   'DARK_PRIEST_ASH',
   'BOSS_INVOCATION_SEAL',
+  'DARK_PRIEST_INVOCATION_SEAL',
   'DRYAD_HEARTWOOD',
 ] as const
 
@@ -153,6 +154,12 @@ export const RESOURCE_DEFINITIONS: Readonly<
     'BOSS_INVOCATION_SEAL',
     'Печатка виклику Проклятого лицаря',
     'Переносне закляття, здобуте у рідкісного носія. Відкриває першу ланку ритуального полювання.',
+    'LEGENDARY',
+  ),
+  DARK_PRIEST_INVOCATION_SEAL: crafted(
+    'DARK_PRIEST_INVOCATION_SEAL',
+    'Печатка Темного жерця',
+    'Перекована печатка, що змінює першу гілку ритуального полювання й викликає Темного жерця.',
     'LEGENDARY',
   ),
   DRYAD_HEARTWOOD: bossExclusive(
