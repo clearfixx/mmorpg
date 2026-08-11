@@ -234,26 +234,91 @@ export function Marketplace({
   }
 
   return (
-    <section className="mt-2">
+    <section>
       <Button
         type="button"
         variant="ghost"
         onClick={onBack}
-        className="mb-5 h-8 rounded-sm px-2"
+        className="mb-2 h-7 rounded-sm px-2 text-xs"
       >
         <ArrowLeft aria-hidden="true" /> До міських кварталів
       </Button>
-      <header className="border border-border/70 bg-background/60 p-5">
-        <p className="font-mono text-[0.65rem] uppercase tracking-[0.22em] text-ember">
-          Попелястий Прихисток · торгові ряди
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold">Анонімний майданчик</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-          Імена продавців приховані. Оголошення діє 24 години. Застава
-          повертається лише після продажу; скасування або завершення часу спалює
-          її назавжди.
-        </p>
+      <header className="relative overflow-hidden border border-border/70 bg-background/70 px-5 py-4">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_45%,oklch(0.46_0.09_45/18%),transparent_34%)]" />
+        <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div>
+            <p className="font-serif text-xs text-ember">
+              Ринок Попелястого Прихистку
+            </p>
+            <h1 className="mt-1 font-serif text-2xl">Торгові ряди</h1>
+            <p className="mt-2 max-w-2xl text-xs leading-5 text-muted-foreground">
+              Офіційний анонімний ринок. Усі угоди проходять через ескроу,
+              товари зберігаються 24 години, а прямих пересилань між героями
+              немає.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-px border border-border/60 bg-border/60 text-xs">
+            <MarketHeaderFact label="Тривалість лота" value="24 години" />
+            <MarketHeaderFact
+              label="Комісія"
+              value={`${market?.saleFeePercent ?? 5}%`}
+            />
+            <MarketHeaderFact
+              label="Активні лоти"
+              value={`${market?.totalListings ?? 0}`}
+            />
+            <MarketHeaderFact label="Розрахунок" value="Відгомони" />
+          </div>
+        </div>
       </header>
+
+      <nav
+        className="mt-px grid grid-cols-5 gap-px bg-border/70"
+        aria-label="Розділи ринку"
+      >
+        {[
+          ['ALL', 'Усі лоти'],
+          ['EQUIPMENT', 'Спорядження'],
+          ['RESOURCE', 'Ресурси'],
+        ].map(([value, label]) => (
+          <Button
+            key={value}
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setKind(value)
+              setPage(1)
+            }}
+            className={`h-9 rounded-none border-t-2 text-xs ${kind === value ? 'border-destructive bg-destructive/10 text-ember' : 'border-transparent bg-background/80'}`}
+          >
+            {label}
+          </Button>
+        ))}
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-9 rounded-none bg-background/80 text-xs"
+          onClick={() =>
+            document
+              .getElementById('my-market-lots')
+              ?.scrollIntoView({ behavior: 'smooth' })
+          }
+        >
+          Мої товари
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-9 rounded-none bg-background/80 text-xs"
+          onClick={() =>
+            document
+              .getElementById('market-history')
+              ?.scrollIntoView({ behavior: 'smooth' })
+          }
+        >
+          Історія
+        </Button>
+      </nav>
 
       {error ? (
         <p className="mt-3 border border-destructive/60 bg-destructive/10 p-3 text-sm text-destructive">
@@ -261,9 +326,9 @@ export function Marketplace({
         </p>
       ) : null}
 
-      <div className="mt-3 grid gap-3 xl:grid-cols-[18rem_minmax(0,1fr)]">
-        <aside className="space-y-3">
-          <section className="border border-border/70 bg-background/55 p-4">
+      <div className="mt-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <aside className="space-y-2 xl:col-start-2 xl:row-start-1">
+          <section className="border border-border/70 bg-background/55 p-3">
             <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
               Баланс
             </p>
@@ -297,7 +362,10 @@ export function Marketplace({
             </p>
           </section>
 
-          <section className="border border-border/70 bg-background/55 p-4">
+          <section
+            id="my-market-lots"
+            className="border border-border/70 bg-background/55 p-4"
+          >
             <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ember">
               Виставити предмет
             </p>
@@ -449,15 +517,15 @@ export function Marketplace({
           </section>
         </aside>
 
-        <div className="space-y-3">
-          <section className="border border-border/70 bg-background/45 p-4">
+        <div className="space-y-2 xl:col-start-1 xl:row-start-1">
+          <section className="border border-border/70 bg-background/45 p-3">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ember">
                   Асортимент
                 </p>
-                <h2 className="mt-1 text-xl font-medium">
-                  Спорядження мандрівників
+                <h2 className="mt-1 font-serif text-xl">
+                  Асортимент торгових рядів
                 </h2>
               </div>
               <span className="font-mono text-xs text-muted-foreground">
@@ -553,18 +621,48 @@ export function Marketplace({
                 max={99}
               />
             </div>
-            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              {market?.listings.map((listing) => (
-                <MarketCard
-                  key={listing.id}
-                  listing={listing}
-                  pending={pending}
-                  affordable={(market?.balance ?? 0) >= listing.price}
-                  onBuy={() =>
-                    mutate('buyMarketListing', { listingId: listing.id })
-                  }
-                />
-              )) ?? null}
+            <p className="mt-4 border-b border-border/60 pb-2 font-serif text-sm text-ember">
+              Преміум спорядження
+            </p>
+            <div className="mt-2 grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
+              {market?.listings
+                .filter((listing) => listing.item)
+                .map((listing) => (
+                  <MarketCard
+                    key={listing.id}
+                    listing={listing}
+                    pending={pending}
+                    affordable={(market?.balance ?? 0) >= listing.price}
+                    onBuy={() =>
+                      mutate('buyMarketListing', { listingId: listing.id })
+                    }
+                  />
+                )) ?? null}
+            </div>
+            <p className="mt-4 border-b border-border/60 pb-2 font-serif text-sm text-moss">
+              Ресурсні лоти
+            </p>
+            <div className="mt-2 overflow-hidden border border-border/60">
+              <div className="hidden grid-cols-[minmax(10rem,1fr)_6rem_7rem_8rem_5rem] gap-2 bg-background/90 px-3 py-2 font-mono text-[0.58rem] uppercase text-muted-foreground md:grid">
+                <span>Ресурс</span>
+                <span>Кількість</span>
+                <span>За одиницю</span>
+                <span>Ціна лота</span>
+                <span />
+              </div>
+              {market?.listings
+                .filter((listing) => listing.resource)
+                .map((listing) => (
+                  <MarketResourceRow
+                    key={listing.id}
+                    listing={listing}
+                    pending={pending}
+                    affordable={(market?.balance ?? 0) >= listing.price}
+                    onBuy={() =>
+                      mutate('buyMarketListing', { listingId: listing.id })
+                    }
+                  />
+                )) ?? null}
             </div>
             {market?.listings.length === 0 ? (
               <div className="mt-4 border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
@@ -600,7 +698,10 @@ export function Marketplace({
             ) : null}
           </section>
 
-          <section className="border border-border/70 bg-background/45 p-4">
+          <section
+            id="market-history"
+            className="border border-border/70 bg-background/45 p-3"
+          >
             <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
               Історія угод
             </p>
@@ -702,6 +803,50 @@ function MarketCard({
         </Button>
       </div>
     </article>
+  )
+}
+
+function MarketResourceRow({
+  listing,
+  pending,
+  affordable,
+  onBuy,
+}: {
+  listing: Listing
+  pending: boolean
+  affordable: boolean
+  onBuy: () => void
+}) {
+  const amount = listing.resource?.amount ?? 1
+  return (
+    <div className="grid gap-2 border-t border-border/50 bg-background/55 px-3 py-2 text-xs first:border-t-0 md:grid-cols-[minmax(10rem,1fr)_6rem_7rem_8rem_5rem] md:items-center">
+      <span className="font-medium">{listingName(listing)}</span>
+      <span className="font-mono text-muted-foreground">{amount}</span>
+      <span className="font-mono text-muted-foreground">
+        {(listing.price / amount).toFixed(2)}
+      </span>
+      <span className="font-mono text-ember">{listing.price} відг.</span>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending || !affordable}
+        onClick={onBuy}
+        className="h-7 rounded-sm text-[0.65rem]"
+      >
+        Купити
+      </Button>
+    </div>
+  )
+}
+
+function MarketHeaderFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-background/80 p-2">
+      <p className="font-mono text-[0.52rem] uppercase text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 font-serif text-xs text-foreground">{value}</p>
+    </div>
   )
 }
 

@@ -48,6 +48,9 @@ interface GameShellProps {
   clanName: string | null
   activeSection: GameSection
   locationName: string
+  pageTitle?: string
+  pageSubtitle?: string
+  hideWorldSidebar?: boolean
   availableSections?: readonly GameSection[]
   resourceTotal: number
   onNavigate: (section: GameSection) => void
@@ -71,6 +74,9 @@ export function GameShell({
   clanName,
   activeSection,
   locationName,
+  pageTitle,
+  pageSubtitle,
+  hideWorldSidebar = false,
   availableSections,
   resourceTotal,
   onNavigate,
@@ -82,7 +88,9 @@ export function GameShell({
   )
 
   return (
-    <div className="min-h-screen bg-background pb-4 text-foreground lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] xl:grid-cols-[13rem_minmax(0,1fr)_18rem]">
+    <div
+      className={`min-h-screen bg-background pb-4 text-foreground lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] ${hideWorldSidebar ? 'xl:grid-cols-[13rem_minmax(0,1fr)]' : 'xl:grid-cols-[13rem_minmax(0,1fr)_18rem]'}`}
+    >
       <aside className="border-b border-border/80 bg-ink/95 lg:sticky lg:top-0 lg:row-span-2 lg:h-[calc(100vh-2rem)] lg:border-r lg:border-b-0">
         <div className="border-b border-border/80 px-5 py-4">
           <p className="font-serif text-2xl tracking-[0.14em] text-foreground">
@@ -141,9 +149,19 @@ export function GameShell({
         </div>
       </aside>
 
-      <header className="border-b border-border/80 bg-panel/90 px-4 py-3 sm:px-6 lg:col-start-2 lg:row-start-1 xl:col-end-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-60 items-center gap-3">
+      <header
+        className={`border-b border-border/80 bg-panel/95 lg:col-start-2 lg:row-start-1 ${hideWorldSidebar ? 'xl:col-end-3' : 'xl:col-end-4'}`}
+      >
+        <div className="grid min-h-20 items-stretch divide-y divide-border/70 xl:grid-cols-[17rem_minmax(17rem,1fr)_15rem_auto] xl:divide-x xl:divide-y-0">
+          <div className="hidden min-w-0 px-5 py-3 xl:block">
+            <p className="truncate font-serif text-xl text-foreground">
+              {pageTitle ?? sectionName(activeSection)}
+            </p>
+            <p className="mt-1 truncate font-serif text-xs text-ember">
+              {pageSubtitle ?? locationName}
+            </p>
+          </div>
+          <div className="flex min-w-0 items-center gap-3 px-4 py-3 sm:px-5">
             <div className="grid size-11 place-items-center border border-ember/50 bg-ember/5">
               <Shield className="text-ember" aria-hidden="true" />
             </div>
@@ -161,14 +179,27 @@ export function GameShell({
               </div>
             </div>
           </div>
-          <div className="flex min-w-0 items-center gap-px bg-border/70 text-xs">
-            <TopResource icon={Crown} label={clanName ?? 'Без клану'} />
-            <TopResource icon={Coins} label={`${hero.gold} золота`} />
-            <TopResource icon={Compass} label={`${resourceTotal} ресурсів`} />
-            <div
-              aria-label="Меню гравця"
-              className="ml-1 flex items-center gap-px"
-            >
+          <div className="hidden items-center gap-3 px-5 py-3 lg:flex">
+            <div className="grid size-11 place-items-center border border-ember/35 bg-background/70">
+              <Crown className="size-5 text-ember" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-serif text-base text-destructive">
+                {clanName ?? 'Без клану'}
+              </p>
+              <p className="mt-1 text-[0.6rem] text-muted-foreground">
+                Честь · Вірність · Порядок
+              </p>
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center justify-end gap-px bg-border/70 text-xs">
+            <TopResource icon={Coins} label={`${hero.gold}`} caption="Золото" />
+            <TopResource
+              icon={Compass}
+              label={`${resourceTotal}`}
+              caption="Ресурси"
+            />
+            <div aria-label="Меню гравця" className="flex items-center gap-px">
               <PlayerMenuItem icon={Mail} label="Повідомлення" />
               <PlayerMenuItem icon={Bell} label="Сповіщення" />
               <PlayerMenuItem icon={UserRound} label="Профіль" />
@@ -184,7 +215,9 @@ export function GameShell({
         </div>
       </div>
 
-      <aside className="hidden border-l border-border/80 bg-ink/90 p-4 xl:col-start-3 xl:row-start-2 xl:block">
+      <aside
+        className={`${hideWorldSidebar ? 'hidden' : 'hidden border-l border-border/80 bg-ink/90 p-4 xl:col-start-3 xl:row-start-2 xl:block'}`}
+      >
         <p className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-ember">
           Хроніка
         </p>
@@ -225,15 +258,40 @@ export function GameShell({
 function TopResource({
   icon: Icon,
   label,
+  caption,
 }: {
   icon: typeof Crown
   label: string
+  caption?: string
 }) {
   return (
-    <div className="flex h-11 items-center gap-2 bg-background/80 px-3">
+    <div className="flex h-full min-h-20 items-center gap-2 bg-background/80 px-3">
       <Icon className="size-4 text-ember" aria-hidden="true" />
-      <span className="hidden sm:inline">{label}</span>
+      <span className="hidden sm:block">
+        <span className="block font-mono text-sm">{label}</span>
+        {caption ? (
+          <span className="mt-1 block text-[0.55rem] text-muted-foreground">
+            {caption}
+          </span>
+        ) : null}
+      </span>
     </div>
+  )
+}
+
+function sectionName(section: GameSection) {
+  return (
+    {
+      LOBBY: 'Лобі',
+      CHARACTER: 'Персонаж',
+      INVENTORY: 'Інвентар',
+      QUESTS: 'Квести',
+      CRAFTING: 'Майстерня',
+      CLAN: 'Клановий двір',
+      ARENA: 'Арена',
+      MAP: 'Мапа',
+      SETTINGS: 'Налаштування',
+    }[section] ?? 'VeilFall'
   )
 }
 

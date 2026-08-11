@@ -307,6 +307,17 @@ type JourneyView =
 type CityDistrictKey =
   'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN' | 'MARKET'
 
+function cityDistrictName(district: CityDistrictKey) {
+  return {
+    HUB: 'Попелястий Прихисток',
+    TRAINING: 'Зала гарту',
+    CRAFTING: 'Майстерня',
+    FRONT: 'Воєнна рада',
+    CLAN: 'Клановий двір',
+    MARKET: 'Торгові ряди',
+  }[district]
+}
+
 function locationName(location: Location) {
   if (location === 'DRYAD_FOREST') return 'Ліс дріад'
   if (location === 'CINDERHAVEN_GATE') return 'Попелястий Прихисток'
@@ -321,6 +332,9 @@ function JourneyShell({
   clan,
   activeSection,
   location,
+  pageTitle,
+  pageSubtitle,
+  hideWorldSidebar,
   availableSections,
   onNavigate,
   children,
@@ -331,6 +345,9 @@ function JourneyShell({
   clan: Clan | null
   activeSection: GameSection
   location: Location
+  pageTitle?: string
+  pageSubtitle?: string
+  hideWorldSidebar?: boolean
   availableSections?: readonly GameSection[]
   onNavigate: (section: GameSection) => void
   children: ReactNode
@@ -351,6 +368,9 @@ function JourneyShell({
       clanName={clan?.name ?? null}
       activeSection={activeSection}
       locationName={locationName(location)}
+      pageTitle={pageTitle}
+      pageSubtitle={pageSubtitle}
+      hideWorldSidebar={hideWorldSidebar}
       availableSections={
         availableSections ??
         (location === 'CINDERHAVEN_GATE' ? undefined : availableGameSections)
@@ -1567,50 +1587,104 @@ function CinderhavenGate({
       clan={clan}
       activeSection={activeSection}
       location="CINDERHAVEN_GATE"
+      pageTitle={cityDistrictName(district)}
+      pageSubtitle="Попелястий Прихисток"
+      hideWorldSidebar={district === 'MARKET'}
       onNavigate={navigate}
     >
-      <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/80 p-5 shadow-2xl shadow-black/25 sm:p-7">
+      <section className="mx-auto w-full max-w-[96rem] border border-border/70 bg-panel/80 p-3 shadow-2xl shadow-black/25 sm:p-4">
         {district === 'HUB' ? (
           <>
-            <section className="relative overflow-hidden border border-border/70 bg-background/70 px-6 py-8 sm:px-9">
+            <section className="relative overflow-hidden border border-border/70 bg-background/70 px-5 py-5">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,oklch(0.48_0.09_45/18%),transparent_38%)]" />
-              <div className="relative">
-                <p className="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-ember">
-                  Попелястий край · нейтральний міський хаб
-                </p>
-                <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  Попелястий Прихисток
-                </h1>
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-                  Перше велике місто за Зламаною заставою тримається серед
-                  попелу й війни. Тут герої гартують таланти, змінюють
-                  спорядження, опановують ремесла, стежать за фронтом і шукають
-                  союзників для майбутніх походів.
-                </p>
-                <p className="mt-3 max-w-2xl text-xs leading-6 text-muted-foreground/80">
-                  Оберіть міський квартал нижче. Частина служб відкриватиметься
-                  разом із розвитком героя та світу.
-                </p>
+              <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_16rem]">
+                <div>
+                  <p className="font-mono text-[0.6rem] uppercase tracking-[0.25em] text-ember">
+                    Попелястий край · нейтральний хаб
+                  </p>
+                  <h1 className="mt-2 font-serif text-3xl">
+                    Попелястий Прихисток{' '}
+                    <Flame className="inline size-5 text-ember" />
+                  </h1>
+                  <p className="mt-1 font-serif text-sm text-muted-foreground">
+                    Перше велике місто за Зламаною заставою
+                  </p>
+                  <p className="mt-3 max-w-2xl text-xs leading-5 text-muted-foreground">
+                    Тут таланти стають ремеслом, спорядження — силою, а союзи —
+                    щитом у війні проти Темного жерця. Усі ключові служби міста
+                    доступні з одного екрана.
+                  </p>
+                  <dl className="mt-4 flex flex-wrap gap-6 text-xs">
+                    <div>
+                      <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+                        Статус міста
+                      </dt>
+                      <dd className="mt-1 text-moss">Нейтральний</dd>
+                    </div>
+                    <div>
+                      <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+                        Контроль
+                      </dt>
+                      <dd className="mt-1">Скриптовий фронт</dd>
+                    </div>
+                    <div>
+                      <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+                        Активні служби
+                      </dt>
+                      <dd className="mt-1 text-ember">6 районів</dd>
+                    </div>
+                  </dl>
+                </div>
+                <div className="border border-border/70 bg-background/75 p-4">
+                  <p className="font-mono text-[0.55rem] uppercase tracking-wider text-ember">
+                    Ваш прогрес
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Рівень</span>
+                      <strong className="mt-1 block font-mono text-lg">
+                        {hero.level}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Сила</span>
+                      <strong className="mt-1 block font-mono text-lg">
+                        {inventory?.totalDamage ?? hero.baseStats.damage}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[0.6rem] text-muted-foreground">
+                    До наступного рівня
+                  </p>
+                  <p className="mt-1 font-mono text-xs">
+                    {hero.experienceIntoLevel} / {hero.experienceForNextLevel}{' '}
+                    XP
+                  </p>
+                  <div className="mt-2 h-1 bg-border">
+                    <div
+                      className="h-full bg-ember"
+                      style={{
+                        width: `${Math.min(100, (hero.experienceIntoLevel / hero.experienceForNextLevel) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onOpenProfile}
+                    className="mt-3 h-8 w-full rounded-sm text-xs"
+                  >
+                    Перегляд персонажа <ArrowRight />
+                  </Button>
+                </div>
               </div>
             </section>
-            <dl className="mt-3 grid gap-px bg-border/60 sm:grid-cols-4">
-              <EndingStat label="Рівень" value={hero.level} />
-              <EndingStat
-                label="Сила"
-                value={inventory?.totalDamage ?? hero.baseStats.damage}
-              />
-              <EndingStat label="Етап" value="I завершено" />
-              <EndingStat
-                label="До рівня"
-                value={`${hero.experienceIntoLevel}/${hero.experienceForNextLevel} XP`}
-              />
-            </dl>
-            <section className="mt-3 border border-border/70 bg-background/45 p-4 sm:p-5">
+            <section className="mt-2 border border-border/70 bg-background/45 p-3">
               <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
                 Міські квартали
               </p>
-              <h2 className="mt-2 text-xl font-medium">Куди вирушити?</h2>
-              <div className="mt-4 grid gap-px bg-border/60 sm:grid-cols-2">
+              <h2 className="mt-1 font-serif text-lg">Куди вирушити?</h2>
+              <div className="mt-3 grid gap-px bg-border/60 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 <CityDistrict
                   icon={Shield}
                   title="Зала гарту"
@@ -1736,7 +1810,7 @@ function CinderhavenGate({
                 />
               </div>
             </section>
-            <section className="mt-3 grid gap-px bg-border/60 md:grid-cols-3">
+            <section className="mt-2 grid gap-px bg-border/60 md:grid-cols-3">
               <LobbyStatus
                 title="Стан війни"
                 accent="Відкрити мапу"
@@ -2029,10 +2103,14 @@ function CityDistrict({
   onClick?: () => void
 }) {
   return (
-    <article className="bg-background/70 p-5">
-      <Icon className={locked ? 'text-muted-foreground' : 'text-ember'} />
-      <h3 className="mt-4 font-medium">{title}</h3>
-      <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">
+    <article className="bg-background/70 p-3">
+      <div className="flex items-center gap-2">
+        <Icon
+          className={`size-4 ${locked ? 'text-muted-foreground' : 'text-ember'}`}
+        />
+        <h3 className="font-serif text-sm">{title}</h3>
+      </div>
+      <p className="mt-2 min-h-10 text-[0.68rem] leading-4 text-muted-foreground">
         {description}
       </p>
       <Button
@@ -2040,7 +2118,7 @@ function CityDistrict({
         variant="outline"
         disabled={locked}
         onClick={onClick}
-        className="mt-4 h-8 w-full rounded-sm"
+        className="mt-2 h-7 w-full rounded-sm text-[0.65rem]"
       >
         {action}
       </Button>
