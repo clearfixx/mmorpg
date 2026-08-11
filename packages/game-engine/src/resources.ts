@@ -26,6 +26,8 @@ export const RESOURCE_TYPES = [
   'TIMBER',
   'LEATHER',
   'WEAPON_FRAGMENT',
+  'HEALTH_POTION',
+  'MANA_POTION',
   'HERBS',
   'OBSIDIAN_SHARD',
   'VEIL_STEEL',
@@ -35,6 +37,7 @@ export const RESOURCE_TYPES = [
   'FALLEN_ELF_EYE',
   'DARK_PRIEST_ASH',
   'BOSS_INVOCATION_SEAL',
+  'DRYAD_HEARTWOOD',
 ] as const
 
 export type ResourceType = (typeof RESOURCE_TYPES)[number]
@@ -83,6 +86,18 @@ export const RESOURCE_DEFINITIONS: Readonly<
     'Уламок зброї',
     'Пошкоджена частина клинка або обладунку, придатна для переплавлення й ранніх рецептів.',
     2,
+    'UNCOMMON',
+  ),
+  HEALTH_POTION: crafted(
+    'HEALTH_POTION',
+    'Зілля відновлення',
+    'Бойове зілля, яке миттєво повертає частину здоров’я.',
+    'UNCOMMON',
+  ),
+  MANA_POTION: crafted(
+    'MANA_POTION',
+    'Зілля мани',
+    'Бойове зілля, яке відновлює запас мани для умінь і заклять.',
     'UNCOMMON',
   ),
   HERBS: dropped(
@@ -139,6 +154,13 @@ export const RESOURCE_DEFINITIONS: Readonly<
     'Печатка виклику Проклятого лицаря',
     'Переносне закляття, здобуте у рідкісного носія. Відкриває першу ланку ритуального полювання.',
     'LEGENDARY',
+  ),
+  DRYAD_HEARTWOOD: bossExclusive(
+    'DRYAD_HEARTWOOD',
+    'Серцевина прадавнього кореня',
+    'Гарантований трофей Кореневого форпосту на 35-му етапі Лісу дріад.',
+    'EPIC',
+    18,
   ),
 }
 

@@ -157,6 +157,8 @@ type ResourceType =
   | 'TIMBER'
   | 'LEATHER'
   | 'WEAPON_FRAGMENT'
+  | 'HEALTH_POTION'
+  | 'MANA_POTION'
   | 'HERBS'
   | 'OBSIDIAN_SHARD'
   | 'VEIL_STEEL'
@@ -166,6 +168,7 @@ type ResourceType =
   | 'FALLEN_ELF_EYE'
   | 'DARK_PRIEST_ASH'
   | 'BOSS_INVOCATION_SEAL'
+  | 'DRYAD_HEARTWOOD'
 
 interface TalentTree {
   characterVersion: number
@@ -3233,6 +3236,8 @@ function resourceName(value: ResourceType): string {
     TIMBER: 'деревина',
     LEATHER: 'шкіра',
     WEAPON_FRAGMENT: 'уламок зброї',
+    HEALTH_POTION: 'зілля відновлення',
+    MANA_POTION: 'зілля мани',
     HERBS: 'лікувальні трави',
     OBSIDIAN_SHARD: 'уламок обсидіану',
     VEIL_STEEL: 'сталь Завіси',
@@ -3242,6 +3247,7 @@ function resourceName(value: ResourceType): string {
     FALLEN_ELF_EYE: 'око Павшого ельфа',
     DARK_PRIEST_ASH: 'попіл Темного жерця',
     BOSS_INVOCATION_SEAL: 'печатка виклику Проклятого лицаря',
+    DRYAD_HEARTWOOD: 'серцевина прадавнього кореня',
   }[value]
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  actionsFor,
   createBattle,
   createDryadForestBattle,
   mitigateEnemyDamage,
@@ -8,6 +9,56 @@ import {
 } from './combat'
 
 describe('deterministic first battle', () => {
+  it('separates basic, equipment, spell, and potion actions', () => {
+    const actions = actionsFor('VANGUARD', {
+      offHandMode: 'SHIELD',
+      healthPotions: 2,
+      manaPotions: 1,
+    })
+    expect(new Set(actions.map((action) => action.kind))).toEqual(
+      new Set(['BASIC', 'EQUIPMENT', 'SPELL', 'POTION']),
+    )
+    expect(actions.find((action) => action.id === 'SHIELD_BASH')?.kind).toBe(
+      'EQUIPMENT',
+    )
+  })
+
+  it('changes the equipment skill with the off-hand item', () => {
+    expect(
+      actionsFor('VANGUARD', { offHandMode: 'WEAPON' }).some(
+        (action) => action.id === 'HEAVY_STRIKE',
+      ),
+    ).toBe(true)
+    expect(
+      actionsFor('ARCANIST', { offHandMode: 'FOCUS' }).some(
+        (action) => action.id === 'FOCUS_CHANNEL',
+      ),
+    ).toBe(true)
+  })
+
+  it('uses battle potion charges separately from mana', () => {
+    const state = createBattle(
+      'VANGUARD',
+      'SEARCH_ARMORY',
+      0,
+      1,
+      1,
+      undefined,
+      false,
+      { healthPotions: 1, manaPotions: 1 },
+    )
+    state.hero.health = 40
+    const healed = resolveTurn(state, 'HEALTH_POTION')
+    expect(
+      healed.log.find(
+        (entry) =>
+          entry.kind === 'HEAL' && entry.message.includes('Зілля відновлення'),
+      )?.amount,
+    ).toBe(50)
+    expect(healed.hero.health).toBeGreaterThan(state.hero.health)
+    expect(healed.healthPotionCharges).toBe(0)
+    expect(healed.hero.resource).toBeGreaterThanOrEqual(state.hero.resource)
+  })
   it('runs the Coren outpost against three simultaneous defenders', () => {
     const state = createDryadForestBattle('VANGUARD', 0, 35, 35)
     expect(state.enemies).toHaveLength(3)

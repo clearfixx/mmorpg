@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase encounterTier personalBest rareEncounter summonedBoss summonedBossId enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } enemies { id name health maxHealth activeTarget } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier personalBest rareEncounter summonedBoss summonedBossId enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } enemies { id name health maxHealth activeTarget } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description kind resource charges } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
@@ -43,6 +43,9 @@ interface Battle {
     name: string
     cost: number
     description: string
+    kind: 'BASIC' | 'EQUIPMENT' | 'SPELL' | 'POTION'
+    resource: 'NONE' | 'MANA' | 'ITEM'
+    charges: number | null
   }>
   log: Array<{
     turn: number
@@ -65,9 +68,12 @@ interface BattleReward {
       | 'COAL'
       | 'LEATHER'
       | 'WEAPON_FRAGMENT'
+      | 'HEALTH_POTION'
+      | 'MANA_POTION'
       | 'BOSS_INVOCATION_SEAL'
       | 'CURSED_HEART'
       | 'FALLEN_ELF_EYE'
+      | 'DRYAD_HEARTWOOD'
     amount: number
   }>
   item: {
@@ -438,7 +444,7 @@ export function BattleEncounter({
             title={heroName}
             value={battle.hero.health}
             max={battle.hero.maxHealth}
-            secondary={`${battle.hero.resource}/${battle.hero.maxResource} ресурсу`}
+            secondary={`${battle.hero.resource}/${battle.hero.maxResource} мани`}
           />
           <div className="grid gap-px bg-border/60">
             {battle.enemies.map((enemy) => (
@@ -525,15 +531,25 @@ export function BattleEncounter({
                     key={action.id}
                     type="button"
                     disabled={
-                      actionsLocked || battle.hero.resource < action.cost
+                      actionsLocked ||
+                      (action.resource === 'MANA' &&
+                        battle.hero.resource < action.cost) ||
+                      (action.resource === 'ITEM' && (action.charges ?? 0) < 1)
                     }
                     onClick={() => act(action.id)}
                     className="border border-border/70 bg-background/50 p-3 text-left transition hover:border-ember/60 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <span className="flex justify-between gap-3 text-sm font-medium">
+                    <span className="font-mono text-[0.55rem] uppercase tracking-wider text-moss">
+                      {actionKindName(action.kind)}
+                    </span>
+                    <span className="mt-1 flex justify-between gap-3 text-sm font-medium">
                       <span>{action.name}</span>
                       <span className="font-mono text-xs text-ember">
-                        {action.cost}
+                        {action.resource === 'MANA'
+                          ? `${action.cost} мани`
+                          : action.resource === 'ITEM'
+                            ? `${action.charges ?? 0} шт.`
+                            : 'безкоштовно'}
                       </span>
                     </span>
                     <span className="mt-1 block text-xs leading-5 text-muted-foreground">
@@ -869,6 +885,17 @@ function RewardStat({ label, value }: { label: string; value: string }) {
   )
 }
 
+function actionKindName(
+  kind: 'BASIC' | 'EQUIPMENT' | 'SPELL' | 'POTION',
+): string {
+  return {
+    BASIC: 'Базова дія',
+    EQUIPMENT: 'Уміння спорядження',
+    SPELL: 'Закляття',
+    POTION: 'Зілля',
+  }[kind]
+}
+
 function resourceName(
   type?:
     | 'IRON'
@@ -877,9 +904,12 @@ function resourceName(
     | 'COAL'
     | 'LEATHER'
     | 'WEAPON_FRAGMENT'
+    | 'HEALTH_POTION'
+    | 'MANA_POTION'
     | 'BOSS_INVOCATION_SEAL'
     | 'CURSED_HEART'
-    | 'FALLEN_ELF_EYE',
+    | 'FALLEN_ELF_EYE'
+    | 'DRYAD_HEARTWOOD',
 ): string {
   return {
     IRON: 'Залізо',
@@ -888,9 +918,12 @@ function resourceName(
     COAL: 'Вугілля',
     LEATHER: 'Шкіра',
     WEAPON_FRAGMENT: 'Уламок зброї',
+    HEALTH_POTION: 'Зілля відновлення',
+    MANA_POTION: 'Зілля мани',
     BOSS_INVOCATION_SEAL: 'Печатка виклику',
     CURSED_HEART: 'Серце лицаря',
     FALLEN_ELF_EYE: 'Око Павшого ельфа',
+    DRYAD_HEARTWOOD: 'Серцевина кореня',
   }[type ?? 'IRON']
 }
 

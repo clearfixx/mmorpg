@@ -151,11 +151,33 @@ const VETERAN_GEAR = [
   ),
 ] as const;
 
+const OFFHAND_SPECIALTIES = [
+  definition(
+    'veteran-offhand-blade-v1',
+    'Короткий клинок Ветерана',
+    'offhand-veteran-blade-01',
+    [EquipmentSlot.OFF_HAND],
+    75,
+    10,
+    30,
+  ),
+  definition(
+    'veteran-offhand-focus-v1',
+    'Фокус Ветерана',
+    'offhand-veteran-focus-01',
+    [EquipmentSlot.OFF_HAND],
+    55,
+    20,
+    60,
+  ),
+] as const;
+
 const ITEM_DEFINITIONS = new Map<string, ItemDefinition>(
-  [...Object.values(STARTER_WEAPONS), ...VETERAN_GEAR].map((item) => [
-    item.definitionId,
-    item,
-  ]),
+  [
+    ...Object.values(STARTER_WEAPONS),
+    ...VETERAN_GEAR,
+    ...OFFHAND_SPECIALTIES,
+  ].map((item) => [item.definitionId, item]),
 );
 
 function definition(
@@ -188,6 +210,12 @@ export function rewardDefinitionFor(
 ): ItemDefinition {
   const tier = Math.max(1, Math.floor(encounterTier));
   if (tier === 1) return STARTER_WEAPONS[archetype];
+  if (tier === 35) {
+    if (archetype === CharacterArchetype.RANGER) return OFFHAND_SPECIALTIES[0];
+    if (archetype === CharacterArchetype.ARCANIST)
+      return OFFHAND_SPECIALTIES[1];
+    return VETERAN_GEAR[8];
+  }
   return VETERAN_GEAR[(tier - 2) % VETERAN_GEAR.length];
 }
 

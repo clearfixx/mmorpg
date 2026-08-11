@@ -26,6 +26,32 @@ export interface CraftingRecipe {
 }
 
 export const CRAFTING_RECIPES = {
+  'health-potion-v1': {
+    id: 'health-potion-v1',
+    name: 'Зілля відновлення',
+    description: 'Простий бойовий настій для відновлення здоров’я.',
+    station: 'ALCHEMY_TABLE',
+    durationSeconds: 20,
+    ingredients: [
+      { resourceType: 'HERBS', amount: 3 },
+      { resourceType: 'TIMBER', amount: 1 },
+    ],
+    output: { resourceType: 'HEALTH_POTION', amount: 1 },
+    public: true,
+  },
+  'mana-potion-v1': {
+    id: 'mana-potion-v1',
+    name: 'Зілля мани',
+    description: 'Нестійкий настій для відновлення мани під час бою.',
+    station: 'ALCHEMY_TABLE',
+    durationSeconds: 30,
+    ingredients: [
+      { resourceType: 'HERBS', amount: 2 },
+      { resourceType: 'OBSIDIAN_SHARD', amount: 1 },
+    ],
+    output: { resourceType: 'MANA_POTION', amount: 1 },
+    public: true,
+  },
   'stabilized-catalyst-v1': {
     id: 'stabilized-catalyst-v1',
     name: 'Стабілізований каталізатор',

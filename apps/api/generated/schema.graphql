@@ -252,10 +252,13 @@ enum ClanRole {
 }
 
 type CombatActionModel {
+  charges: Int
   cost: Int!
   description: String!
   id: String!
+  kind: String!
   name: String!
+  resource: String!
 }
 
 type CombatLogEntryModel {
@@ -597,10 +600,13 @@ enum ResourceType {
   COPPER
   CURSED_HEART
   DARK_PRIEST_ASH
+  DRYAD_HEARTWOOD
   FALLEN_ELF_EYE
+  HEALTH_POTION
   HERBS
   IRON
   LEATHER
+  MANA_POTION
   OBSIDIAN_SHARD
   STABILIZED_CATALYST
   TIMBER

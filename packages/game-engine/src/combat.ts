@@ -14,12 +14,31 @@ export type ActionId =
   | 'WARD'
   | 'DISRUPTING_SPARK'
   | 'VEIL_FLARE'
+  | 'HEAVY_STRIKE'
+  | 'FOCUS_CHANNEL'
+  | 'BERSERK'
+  | 'MENDING_LIGHT'
+  | 'HEALTH_POTION'
+  | 'MANA_POTION'
+
+export type CombatActionKind = 'BASIC' | 'EQUIPMENT' | 'SPELL' | 'POTION'
+export type CombatActionResource = 'NONE' | 'MANA' | 'ITEM'
+export type OffHandMode = 'SHIELD' | 'WEAPON' | 'FOCUS' | 'EMPTY'
 
 export interface CombatAction {
   id: ActionId
   name: string
   cost: number
   description: string
+  kind: CombatActionKind
+  resource: CombatActionResource
+  charges?: number
+}
+
+export interface CombatLoadout {
+  offHandMode: OffHandMode
+  healthPotions: number
+  manaPotions: number
 }
 
 export type CombatLogKind =
@@ -68,6 +87,10 @@ export interface BattleState {
   enemy: { health: number; maxHealth: number }
   enemies?: BattleEnemy[]
   targetEnemyId?: string
+  offHandMode: OffHandMode
+  healthPotionCharges: number
+  manaPotionCharges: number
+  berserkTurns: number
   intentIndex: number
   guardedReduction: number
   bleedingTurns: number
@@ -112,7 +135,12 @@ export const INTENTS = [
   },
 ] as const
 
-const ACTIONS: Record<CombatArchetype, CombatAction[]> = {
+type BaseCombatAction = Pick<
+  CombatAction,
+  'id' | 'name' | 'cost' | 'description'
+>
+
+const ACTIONS: Record<CombatArchetype, BaseCombatAction[]> = {
   VANGUARD: [
     { id: 'STRIKE', name: 'Удар', cost: 0, description: 'Нанести 18 шкоди.' },
     {
@@ -188,8 +216,102 @@ const ACTIONS: Record<CombatArchetype, CombatAction[]> = {
   ],
 }
 
-export function actionsFor(archetype: CombatArchetype): CombatAction[] {
-  return ACTIONS[archetype]
+export function actionsFor(
+  archetype: CombatArchetype,
+  loadout: Partial<CombatLoadout> = {},
+): CombatAction[] {
+  const legacy = ACTIONS[archetype]
+  const offHandMode = loadout.offHandMode ?? defaultOffHandMode(archetype)
+  const equipment =
+    offHandMode === 'SHIELD'
+      ? asAction(ACTIONS.VANGUARD[2]!, 'EQUIPMENT', 'MANA')
+      : offHandMode === 'FOCUS'
+        ? action(
+            'FOCUS_CHANNEL',
+            'Імпульс фокуса',
+            2,
+            '18 шкоди та викриття цілі.',
+            'EQUIPMENT',
+            'MANA',
+          )
+        : offHandMode === 'WEAPON'
+          ? action(
+              'HEAVY_STRIKE',
+              'Нищівний удар',
+              2,
+              'Удар двома знаряддями: 28 шкоди.',
+              'EQUIPMENT',
+              'MANA',
+            )
+          : null
+  return [
+    asAction(legacy[0]!, 'BASIC', 'NONE'),
+    asAction(legacy[1]!, 'BASIC', 'NONE'),
+    ...(equipment ? [equipment] : []),
+    action(
+      'BERSERK',
+      'Берсерк',
+      2,
+      'Наступні три атаки завдають +10 шкоди.',
+      'SPELL',
+      'MANA',
+    ),
+    action(
+      'MENDING_LIGHT',
+      'Світло зцілення',
+      3,
+      'Відновити 32 здоров’я.',
+      'SPELL',
+      'MANA',
+    ),
+    {
+      ...action(
+        'HEALTH_POTION',
+        'Зілля відновлення',
+        0,
+        'Відновити 50 здоров’я.',
+        'POTION',
+        'ITEM',
+      ),
+      charges: loadout.healthPotions ?? 0,
+    },
+    {
+      ...action(
+        'MANA_POTION',
+        'Зілля мани',
+        0,
+        'Відновити 3 мани.',
+        'POTION',
+        'ITEM',
+      ),
+      charges: loadout.manaPotions ?? 0,
+    },
+  ]
+}
+
+function action(
+  id: ActionId,
+  name: string,
+  cost: number,
+  description: string,
+  kind: CombatActionKind,
+  resource: CombatActionResource,
+): CombatAction {
+  return { id, name, cost, description, kind, resource }
+}
+
+function asAction(
+  value: (typeof ACTIONS)[CombatArchetype][number],
+  kind: CombatActionKind,
+  resource: CombatActionResource,
+): CombatAction {
+  return { ...value, kind, resource }
+}
+
+function defaultOffHandMode(archetype: CombatArchetype): OffHandMode {
+  if (archetype === 'VANGUARD') return 'SHIELD'
+  if (archetype === 'RANGER') return 'WEAPON'
+  return 'FOCUS'
 }
 
 const ARMOR_EFFECTIVENESS = 100
@@ -222,6 +344,7 @@ export function createBattle(
   heroLevel = 1,
   talents = { health: 0, damage: 0, armor: 0 },
   rareEncounter = false,
+  loadout: Partial<CombatLoadout> = {},
 ): BattleState {
   const levelRanks = Math.max(0, Math.floor(heroLevel) - 1)
   const maxHealth =
@@ -255,6 +378,10 @@ export function createBattle(
       (encounterTier - 1) * 6 + (rareEncounter ? 18 + heroLevel : 0),
     hero: { health: maxHealth, maxHealth, resource: 3, maxResource: 5 },
     enemy: { health: enemyMaxHealth, maxHealth: enemyMaxHealth },
+    offHandMode: loadout.offHandMode ?? defaultOffHandMode(archetype),
+    healthPotionCharges: Math.max(0, Math.floor(loadout.healthPotions ?? 0)),
+    manaPotionCharges: Math.max(0, Math.floor(loadout.manaPotions ?? 0)),
+    berserkTurns: 0,
     intentIndex: 0,
     guardedReduction: 0,
     bleedingTurns: 0,
@@ -279,6 +406,7 @@ export function createDryadForestBattle(
   encounterTier = 1,
   heroLevel = 1,
   talents = { health: 0, damage: 0, armor: 0 },
+  loadout: Partial<CombatLoadout> = {},
 ): BattleState {
   const state = createBattle(
     archetype,
@@ -287,6 +415,8 @@ export function createDryadForestBattle(
     encounterTier,
     heroLevel,
     talents,
+    false,
+    loadout,
   )
   state.region = 'DRYAD_FOREST'
   state.returnLocation = 'CINDERHAVEN_GATE'
@@ -333,14 +463,24 @@ export function resolveTurn(
   targetEnemyId?: string,
 ): BattleState {
   if (state.status !== 'ACTIVE') throw new Error('BATTLE_COMPLETE')
-  const action = actionsFor(state.archetype).find(
-    (candidate) => candidate.id === actionId,
-  )
+  const action = actionsFor(state.archetype, {
+    offHandMode: state.offHandMode,
+    healthPotions: state.healthPotionCharges ?? 0,
+    manaPotions: state.manaPotionCharges ?? 0,
+  }).find((candidate) => candidate.id === actionId)
   if (!action) throw new Error('ACTION_UNAVAILABLE')
-  if (state.hero.resource < action.cost)
+  if (action.resource === 'MANA' && state.hero.resource < action.cost)
     throw new Error('INSUFFICIENT_RESOURCE')
+  if (actionId === 'HEALTH_POTION' && (state.healthPotionCharges ?? 0) < 1)
+    throw new Error('POTION_UNAVAILABLE')
+  if (actionId === 'MANA_POTION' && (state.manaPotionCharges ?? 0) < 1)
+    throw new Error('POTION_UNAVAILABLE')
 
   const next: BattleState = structuredClone(state)
+  next.offHandMode = state.offHandMode ?? defaultOffHandMode(state.archetype)
+  next.healthPotionCharges = state.healthPotionCharges ?? 0
+  next.manaPotionCharges = state.manaPotionCharges ?? 0
+  next.berserkTurns = state.berserkTurns ?? 0
   const enemies = next.enemies
   const target = enemies
     ? (enemies.find(
@@ -356,7 +496,7 @@ export function resolveTurn(
     next.enemy = combatantFor(target)
   }
   next.log = normalizeLog(next.log)
-  next.hero.resource -= action.cost
+  if (action.resource === 'MANA') next.hero.resource -= action.cost
   let damage = 0
 
   switch (actionId) {
@@ -371,6 +511,13 @@ export function resolveTurn(
       break
     case 'FOCUSED_SHOT':
       damage = 31
+      break
+    case 'HEAVY_STRIKE':
+      damage = 28
+      break
+    case 'FOCUS_CHANNEL':
+      damage = 18
+      next.exposed = true
       break
     case 'BARBED_ARROW':
       damage = 12
@@ -403,11 +550,54 @@ export function resolveTurn(
       })
       break
     }
+    case 'BERSERK':
+      next.berserkTurns = 3
+      next.log.push({
+        turn: state.turn,
+        kind: 'STATUS',
+        message: 'Герой входить у стан берсерка на три атаки.',
+      })
+      break
+    case 'MENDING_LIGHT':
+    case 'HEALTH_POTION': {
+      const amount = actionId === 'HEALTH_POTION' ? 50 : 32
+      const before = next.hero.health
+      next.hero.health = Math.min(
+        next.hero.maxHealth,
+        next.hero.health + amount,
+      )
+      if (actionId === 'HEALTH_POTION') next.healthPotionCharges -= 1
+      next.log.push({
+        turn: state.turn,
+        kind: 'HEAL',
+        message: `Герой застосовує «${action.name}».`,
+        amount: next.hero.health - before,
+      })
+      break
+    }
+    case 'MANA_POTION': {
+      const before = next.hero.resource
+      next.hero.resource = Math.min(
+        next.hero.maxResource,
+        next.hero.resource + 3,
+      )
+      next.manaPotionCharges -= 1
+      next.log.push({
+        turn: state.turn,
+        kind: 'STATUS',
+        message: `Герой застосовує «${action.name}» і відновлює ${next.hero.resource - before} мани.`,
+      })
+      break
+    }
   }
 
   if (damage > 0)
     damage += (state.weaponDamageBonus ?? 0) + (state.levelDamageBonus ?? 0)
   if (damage > 0) damage += state.talentDamageBonus ?? 0
+  if (damage > 0 && next.berserkTurns > 0) {
+    damage += 10
+    next.berserkTurns -= 1
+  }
 
   if (state.exposed && damage > 0) damage = Math.ceil(damage * 1.5)
   next.enemy.health = Math.max(0, next.enemy.health - damage)
@@ -419,7 +609,15 @@ export function resolveTurn(
       message: `Герой застосовує «${action.name}».`,
       amount: damage,
     })
-  else if (actionId !== 'SECOND_WIND')
+  else if (
+    ![
+      'SECOND_WIND',
+      'BERSERK',
+      'MENDING_LIGHT',
+      'HEALTH_POTION',
+      'MANA_POTION',
+    ].includes(actionId)
+  )
     next.log.push({
       turn: state.turn,
       kind: 'DEFENSE',

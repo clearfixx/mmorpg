@@ -21,6 +21,12 @@ const ACTION_IDS = [
   'WARD',
   'DISRUPTING_SPARK',
   'VEIL_FLARE',
+  'HEAVY_STRIKE',
+  'FOCUS_CHANNEL',
+  'BERSERK',
+  'MENDING_LIGHT',
+  'HEALTH_POTION',
+  'MANA_POTION',
 ];
 
 @InputType()

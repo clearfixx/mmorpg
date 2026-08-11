@@ -4,6 +4,7 @@ import {
   CINDERHAVEN_UNLOCK_TIER,
   canUnlockCinderhaven,
   dryadForestResourceDrops,
+  dryadForestMilestoneReward,
   hollowRoadResourceDrops,
 } from './world'
 
@@ -31,5 +32,11 @@ describe('world progression', () => {
       { type: 'LEATHER', amount: 1 },
       { type: 'OBSIDIAN_SHARD', amount: 1 },
     ])
+  })
+
+  it('guarantees the Coren outpost milestone trophy only at tier 35', () => {
+    expect(dryadForestMilestoneReward(34)).toBeNull()
+    expect(dryadForestMilestoneReward(35)).toBe('DRYAD_HEARTWOOD')
+    expect(dryadForestMilestoneReward(36)).toBeNull()
   })
 })

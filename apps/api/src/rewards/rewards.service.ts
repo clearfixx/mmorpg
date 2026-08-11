@@ -11,6 +11,7 @@ import {
   itemLevelForReward,
   canUnlockCinderhaven,
   dryadForestResourceDrops,
+  dryadForestMilestoneReward,
   hollowRoadResourceDrops,
   maxRarityForEncounterTier,
   progressionForExperience,
@@ -106,6 +107,12 @@ export class RewardsService {
     const summonedBoss =
       (battle.state as unknown as { summonedBoss?: boolean }).summonedBoss ===
       true;
+    const region = (battle.state as unknown as { region?: string }).region;
+    const milestoneReward =
+      region === 'DRYAD_FOREST' ? dryadForestMilestoneReward(tier) : null;
+    const milestoneResources = milestoneReward
+      ? [{ type: milestoneReward, amount: 1 }]
+      : [];
     const resources = summonedBoss
       ? summonedBossId === 'FALLEN_ELF'
         ? [{ type: ResourceType.FALLEN_ELF_EYE, amount: 1 }]
@@ -117,10 +124,7 @@ export class RewardsService {
               amount: invocationSealRewardAmount(),
             },
           ]
-        : this.resourceRewards(
-            battle.id,
-            (battle.state as unknown as { region?: string }).region,
-          );
+        : [...milestoneResources, ...this.resourceRewards(battle.id, region)];
     const legacyResource = resources[0] ?? {
       type: ResourceType.IRON,
       amount: 0,

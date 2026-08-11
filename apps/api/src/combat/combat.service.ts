@@ -16,6 +16,7 @@ import {
   talentBonuses,
   type ActionId,
   type BattleState,
+  type CombatLoadout,
 } from '@veilfall/game-engine';
 import {
   BadRequestException,
@@ -267,8 +268,24 @@ export class CombatService {
         talents: { select: { type: true, rank: true } },
         equipment: {
           select: {
-            item: { select: { damage: true, armor: true, health: true } },
+            slot: true,
+            item: {
+              select: {
+                definitionId: true,
+                damage: true,
+                armor: true,
+                health: true,
+              },
+            },
           },
+        },
+        resources: {
+          where: {
+            type: {
+              in: [ResourceType.HEALTH_POTION, ResourceType.MANA_POTION],
+            },
+          },
+          select: { type: true, balance: true },
         },
       },
     });
@@ -276,6 +293,10 @@ export class CombatService {
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
+    const loadout = this.combatLoadout(
+      character.equipment,
+      character.resources,
+    );
     const rareEncounter =
       context.region === 'DRYAD_FOREST'
         ? false
@@ -292,6 +313,7 @@ export class CombatService {
             context.checkpointTier,
             character.level,
             bonuses,
+            loadout,
           )
         : createBattle(
             character.archetype,
@@ -301,6 +323,7 @@ export class CombatService {
             character.level,
             bonuses,
             rareEncounter,
+            loadout,
           );
     const battle = await this.prisma.client.battle.create({
       data: {
@@ -402,8 +425,24 @@ export class CombatService {
         talents: { select: { type: true, rank: true } },
         equipment: {
           select: {
-            item: { select: { damage: true, armor: true, health: true } },
+            slot: true,
+            item: {
+              select: {
+                definitionId: true,
+                damage: true,
+                armor: true,
+                health: true,
+              },
+            },
           },
+        },
+        resources: {
+          where: {
+            type: {
+              in: [ResourceType.HEALTH_POTION, ResourceType.MANA_POTION],
+            },
+          },
+          select: { type: true, balance: true },
         },
       },
     });
@@ -415,6 +454,10 @@ export class CombatService {
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
+    const loadout = this.combatLoadout(
+      character.equipment,
+      character.resources,
+    );
     const state = createBattle(
       character.archetype,
       'REST_BRAZIER',
@@ -422,6 +465,8 @@ export class CombatService {
       12,
       character.level,
       bonuses,
+      false,
+      loadout,
     );
     state.summonedBoss = true;
     state.summonedBossId = boss.id;
@@ -558,7 +603,7 @@ export class CombatService {
           throw new ConflictException(
             'Battle state changed; refresh and retry',
           );
-        await tx.battleCommand.create({
+        const command = await tx.battleCommand.create({
           data: {
             battleId: battle.id,
             idempotencyKey: input.idempotencyKey,
@@ -568,6 +613,12 @@ export class CombatService {
             resultingVersion: next.version,
           },
         });
+        await this.consumeBattlePotion(
+          tx,
+          characterId,
+          input.actionId,
+          command.id,
+        );
       });
       return this.toModel(
         battle.id,
@@ -592,7 +643,7 @@ export class CombatService {
       });
       if (result.count !== 1)
         throw new ConflictException('Battle state changed; refresh and retry');
-      await tx.battleCommand.create({
+      const command = await tx.battleCommand.create({
         data: {
           battleId: battle.id,
           idempotencyKey: input.idempotencyKey,
@@ -602,6 +653,12 @@ export class CombatService {
           resultingVersion: next.version,
         },
       });
+      await this.consumeBattlePotion(
+        tx,
+        characterId,
+        input.actionId,
+        command.id,
+      );
       if (status === BattleStatus.LOST) {
         await this.loseBackpack(tx, characterId, battle.id);
         await tx.characterWorldState.update({
@@ -680,8 +737,24 @@ export class CombatService {
         talents: { select: { type: true, rank: true } },
         equipment: {
           select: {
-            item: { select: { damage: true, armor: true, health: true } },
+            slot: true,
+            item: {
+              select: {
+                definitionId: true,
+                damage: true,
+                armor: true,
+                health: true,
+              },
+            },
           },
+        },
+        resources: {
+          where: {
+            type: {
+              in: [ResourceType.HEALTH_POTION, ResourceType.MANA_POTION],
+            },
+          },
+          select: { type: true, balance: true },
         },
       },
     });
@@ -689,6 +762,10 @@ export class CombatService {
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
+    const loadout = this.combatLoadout(
+      character.equipment,
+      character.resources,
+    );
     const tier = (previousState.encounterTier ?? 1) + 1;
     const dryadForest = previousState.region === 'DRYAD_FOREST';
     const rareEncounter = dryadForest
@@ -701,6 +778,7 @@ export class CombatService {
           tier,
           character.level,
           bonuses,
+          loadout,
         )
       : createBattle(
           character.archetype,
@@ -710,6 +788,7 @@ export class CombatService {
           character.level,
           bonuses,
           rareEncounter,
+          loadout,
         );
     const battle = await this.prisma.client.$transaction(async (tx) => {
       const acknowledged = await tx.battle.updateMany({
@@ -1020,7 +1099,11 @@ export class CombatService {
         (_, offset) =>
           INTENTS[(state.intentIndex + offset) % INTENTS.length] ?? INTENTS[0],
       ),
-      actions: actionsFor(state.archetype),
+      actions: actionsFor(state.archetype, {
+        offHandMode: state.offHandMode,
+        healthPotions: state.healthPotionCharges ?? 0,
+        manaPotions: state.manaPotionCharges ?? 0,
+      }),
       log: state.log.map((entry) =>
         typeof entry === 'string'
           ? { turn: 0, kind: 'SYSTEM', message: entry }
@@ -1052,6 +1135,62 @@ export class CombatService {
         (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6 +
         equipment.armor,
     };
+  }
+
+  private combatLoadout(
+    equipment: Array<{
+      slot: string;
+      item: { definitionId: string };
+    }>,
+    resources: Array<{ type: ResourceType; balance: number }>,
+  ): CombatLoadout {
+    const offHand = equipment.find(
+      (assignment) => assignment.slot === 'OFF_HAND',
+    );
+    const offHandMode = !offHand
+      ? 'EMPTY'
+      : offHand.item.definitionId.includes('guard')
+        ? 'SHIELD'
+        : offHand.item.definitionId.includes('focus')
+          ? 'FOCUS'
+          : 'WEAPON';
+    const balance = (type: ResourceType) =>
+      resources.find((resource) => resource.type === type)?.balance ?? 0;
+    return {
+      offHandMode,
+      healthPotions: balance(ResourceType.HEALTH_POTION),
+      manaPotions: balance(ResourceType.MANA_POTION),
+    };
+  }
+
+  private async consumeBattlePotion(
+    tx: Prisma.TransactionClient,
+    characterId: string,
+    actionId: string,
+    commandId: string,
+  ): Promise<void> {
+    const type =
+      actionId === 'HEALTH_POTION'
+        ? ResourceType.HEALTH_POTION
+        : actionId === 'MANA_POTION'
+          ? ResourceType.MANA_POTION
+          : null;
+    if (!type) return;
+    const consumed = await tx.characterResource.updateMany({
+      where: { characterId, type, balance: { gte: 1 } },
+      data: { balance: { decrement: 1 } },
+    });
+    if (consumed.count !== 1)
+      throw new ConflictException('The selected potion is unavailable');
+    await tx.resourceLedgerEntry.create({
+      data: {
+        characterId,
+        type,
+        amount: -1,
+        reason: 'BATTLE_POTION',
+        referenceId: commandId,
+      },
+    });
   }
 
   private async reserveRareEncounter(

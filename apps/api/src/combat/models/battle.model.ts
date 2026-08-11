@@ -21,6 +21,9 @@ export class CombatActionModel {
   @Field() name!: string;
   @Field(() => Int) cost!: number;
   @Field() description!: string;
+  @Field() kind!: string;
+  @Field() resource!: string;
+  @Field(() => Int, { nullable: true }) charges?: number;
 }
 
 @ObjectType()
