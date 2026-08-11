@@ -23,6 +23,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CraftingWorkshop } from '@/components/crafting/crafting-workshop'
 import { FactionFront } from '@/components/factions/faction-front'
+import {
+  GameHeroBanner,
+  GameMetric,
+  GamePanel,
+  GamePosterGrid,
+  GameServiceCard,
+  gameUi,
+} from '@/components/game-ui/game-dashboard'
 import { GameShell, type GameSection } from '@/components/layout/game-shell'
 import { Marketplace } from '@/components/market/marketplace'
 import { BattleEncounter } from '@/components/world/battle-encounter'
@@ -1592,82 +1600,69 @@ function CinderhavenGate({
       hideWorldSidebar={district === 'MARKET'}
       onNavigate={navigate}
     >
-      <section className="mx-auto w-full max-w-[96rem] border border-border/70 bg-panel/80 p-3 shadow-2xl shadow-black/25 sm:p-4">
+      <section
+        className={`mx-auto w-full max-w-[96rem] border border-border/70 bg-panel/80 p-3 shadow-2xl shadow-black/25 sm:p-4 ${gameUi.pageGap}`}
+      >
         {district === 'HUB' ? (
           <>
-            <section className="relative overflow-hidden border border-border/70 bg-background/70 px-5 py-5">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_30%,oklch(0.48_0.09_45/18%),transparent_38%)]" />
-              <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_16rem]">
-                <div>
-                  <p className="font-mono text-[0.6rem] uppercase tracking-[0.25em] text-ember">
-                    Попелястий край · нейтральний хаб
-                  </p>
-                  <h1 className="mt-2 font-serif text-3xl">
-                    Попелястий Прихисток{' '}
-                    <Flame className="inline size-5 text-ember" />
-                  </h1>
-                  <p className="mt-1 font-serif text-sm text-muted-foreground">
-                    Перше велике місто за Зламаною заставою
-                  </p>
-                  <p className="mt-3 max-w-2xl text-xs leading-5 text-muted-foreground">
-                    Тут таланти стають ремеслом, спорядження — силою, а союзи —
-                    щитом у війні проти Темного жерця. Усі ключові служби міста
-                    доступні з одного екрана.
-                  </p>
-                  <dl className="mt-4 flex flex-wrap gap-6 text-xs">
-                    <div>
-                      <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
-                        Статус міста
-                      </dt>
-                      <dd className="mt-1 text-moss">Нейтральний</dd>
-                    </div>
-                    <div>
-                      <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
-                        Контроль
-                      </dt>
-                      <dd className="mt-1">Скриптовий фронт</dd>
-                    </div>
-                    <div>
-                      <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
-                        Активні служби
-                      </dt>
-                      <dd className="mt-1 text-ember">6 районів</dd>
-                    </div>
-                  </dl>
-                </div>
-                <div className="border border-border/70 bg-background/75 p-4">
-                  <p className="font-mono text-[0.55rem] uppercase tracking-wider text-ember">
+            <GameHeroBanner
+              eyebrow="Попелястий край · нейтральний хаб"
+              title={
+                <>
+                  Попелястий Прихисток{' '}
+                  <Flame className="inline size-5 text-ember" />
+                </>
+              }
+              subtitle="Перше велике місто за Зламаною заставою"
+              description={
+                <p>
+                  Тут таланти стають ремеслом, спорядження — силою, а союзи —
+                  щитом у війні. Зала гарту, зброярня, майстерня, воєнна рада,
+                  клановий двір і торгові ряди зібрані в єдиному міському вузлі.
+                </p>
+              }
+              footer={
+                <dl className="flex flex-wrap gap-8 text-xs">
+                  <div>
+                    <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+                      Статус міста
+                    </dt>
+                    <dd className="mt-1 text-moss">Нейтральний</dd>
+                  </div>
+                  <div>
+                    <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+                      Контроль
+                    </dt>
+                    <dd className="mt-1">Скриптовий фронт</dd>
+                  </div>
+                  <div>
+                    <dt className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+                      Служби
+                    </dt>
+                    <dd className="mt-1 text-ember">6 доступно</dd>
+                  </div>
+                </dl>
+              }
+              aside={
+                <>
+                  <p className="font-mono text-[0.58rem] uppercase tracking-wider text-ember">
                     Ваш прогрес
                   </p>
-                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Рівень</span>
-                      <strong className="mt-1 block font-mono text-lg">
-                        {hero.level}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Сила</span>
-                      <strong className="mt-1 block font-mono text-lg">
-                        {inventory?.totalDamage ?? hero.baseStats.damage}
-                      </strong>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-[0.6rem] text-muted-foreground">
-                    До наступного рівня
-                  </p>
-                  <p className="mt-1 font-mono text-xs">
-                    {hero.experienceIntoLevel} / {hero.experienceForNextLevel}{' '}
-                    XP
-                  </p>
-                  <div className="mt-2 h-1 bg-border">
-                    <div
-                      className="h-full bg-ember"
-                      style={{
-                        width: `${Math.min(100, (hero.experienceIntoLevel / hero.experienceForNextLevel) * 100)}%`,
-                      }}
+                  <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60">
+                    <GameMetric label="Рівень" value={hero.level} />
+                    <GameMetric
+                      label="Сила"
+                      value={inventory?.totalDamage ?? hero.baseStats.damage}
                     />
-                  </div>
+                    <GameMetric
+                      label="Досвід"
+                      value={hero.experienceIntoLevel}
+                    />
+                    <GameMetric
+                      label="До рівня"
+                      value={hero.experienceForNextLevel}
+                    />
+                  </dl>
                   <Button
                     type="button"
                     variant="outline"
@@ -1676,15 +1671,11 @@ function CinderhavenGate({
                   >
                     Перегляд персонажа <ArrowRight />
                   </Button>
-                </div>
-              </div>
-            </section>
-            <section className="mt-2 border border-border/70 bg-background/45 p-3">
-              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-moss">
-                Міські квартали
-              </p>
-              <h2 className="mt-1 font-serif text-lg">Куди вирушити?</h2>
-              <div className="mt-3 grid gap-px bg-border/60 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                </>
+              }
+            />
+            <GamePanel eyebrow="Міські квартали" title="Куди вирушити?">
+              <GamePosterGrid>
                 <CityDistrict
                   icon={Shield}
                   title="Зала гарту"
@@ -1722,17 +1713,21 @@ function CinderhavenGate({
                 />
                 <CityDistrict
                   icon={Compass}
-                  title="Брама до Лісу дріад"
-                  description="Новий похід на 70 етапів. На 35-му рубежі Кореневий форпост захищає група ворогів."
-                  action="Вирушити до лісу"
-                  onClick={onEnterDryadForest}
-                />
-                <CityDistrict
-                  icon={Compass}
                   title="Торгові ряди"
                   description="Анонімні 24-годинні оголошення, продаж спорядження та розрахунки Відгомоном Завіси."
                   action="Відкрити майданчик"
                   onClick={() => setDistrict('MARKET')}
+                />
+              </GamePosterGrid>
+            </GamePanel>
+            <GamePanel eyebrow="Приховані виклики" title="Шляхи Завіси">
+              <GamePosterGrid>
+                <CityDistrict
+                  icon={Compass}
+                  title="Брама до Лісу дріад"
+                  description="Новий похід на 70 етапів. На 35-му рубежі Кореневий форпост захищає група ворогів."
+                  action="Вирушити до лісу"
+                  onClick={onEnterDryadForest}
                 />
                 <CityDistrict
                   icon={Sparkles}
@@ -1808,9 +1803,9 @@ function CinderhavenGate({
                   locked={hero.level < 30 || darkPriestAsh < 3}
                   onClick={onInvokeVeilWardenFromAsh}
                 />
-              </div>
-            </section>
-            <section className="mt-2 grid gap-px bg-border/60 md:grid-cols-3">
+              </GamePosterGrid>
+            </GamePanel>
+            <section className="grid gap-px bg-border/60 md:grid-cols-3">
               <LobbyStatus
                 title="Стан війни"
                 accent="Відкрити мапу"
@@ -2103,26 +2098,15 @@ function CityDistrict({
   onClick?: () => void
 }) {
   return (
-    <article className="bg-background/70 p-3">
-      <div className="flex items-center gap-2">
-        <Icon
-          className={`size-4 ${locked ? 'text-muted-foreground' : 'text-ember'}`}
-        />
-        <h3 className="font-serif text-sm">{title}</h3>
-      </div>
-      <p className="mt-2 min-h-10 text-[0.68rem] leading-4 text-muted-foreground">
-        {description}
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={locked}
-        onClick={onClick}
-        className="mt-2 h-7 w-full rounded-sm text-[0.65rem]"
-      >
-        {action}
-      </Button>
-    </article>
+    <GameServiceCard
+      icon={Icon}
+      title={title}
+      description={description}
+      action={action}
+      status={locked ? 'Недоступно' : 'Доступно'}
+      locked={locked}
+      onClick={onClick}
+    />
   )
 }
 
@@ -2719,6 +2703,15 @@ function InventoryVault({
   const equippedBySlot = new Map(
     inventory.equipped.map((entry) => [entry.slot, entry.item]),
   )
+  const loot = [...inventory.chest, ...inventory.backpack].filter(
+    (item, index, items) =>
+      items.findIndex((entry) => entry.id === item.id) === index,
+  )
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(
+    loot[0]?.id ?? null,
+  )
+  const selectedItem =
+    loot.find((item) => item.id === selectedItemId) ?? loot[0] ?? null
 
   return (
     <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
@@ -2779,59 +2772,67 @@ function InventoryVault({
         </div>
       </div>
 
-      <div className="p-4 sm:p-5">
-        {inventory.chest.length === 0 ? (
-          <div className="grid min-h-72 place-items-center border border-dashed border-border/70 bg-background/25 p-8 text-center">
-            <div>
-              <Package
-                className="mx-auto size-8 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <p className="mt-3 font-medium">Сундук порожній</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Перенесіть сюди здобич після повернення з походу.
-              </p>
+      <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_19rem]">
+        <div className="min-w-0 p-4 sm:p-5">
+          {loot.length === 0 ? (
+            <div className="grid min-h-72 place-items-center border border-dashed border-border/70 bg-background/25 p-8 text-center">
+              <div>
+                <Package
+                  className="mx-auto size-8 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <p className="mt-3 font-medium">Сундук порожній</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Перенесіть сюди здобич після повернення з походу.
+                </p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {inventory.chest.map((item) => (
-              <InventoryItemCard
-                key={item.id}
-                hero={hero}
-                item={item}
-                equippedBySlot={equippedBySlot}
-                pending={pending}
-                onEquip={onEquip}
-              />
-            ))}
-          </div>
-        )}
-        {error ? (
-          <p
-            role="alert"
-            className="mt-4 border-l-2 border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        ) : null}
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+              {loot.map((item) => (
+                <InventoryItemCard
+                  key={item.id}
+                  item={item}
+                  equippedBySlot={equippedBySlot}
+                  selected={item.id === selectedItem?.id}
+                  onSelect={() => setSelectedItemId(item.id)}
+                />
+              ))}
+            </div>
+          )}
+          {error ? (
+            <p
+              role="alert"
+              className="mt-4 border-l-2 border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <aside className="border-t border-border/70 bg-background/35 p-4 lg:border-t-0 lg:border-l">
+          <InventoryItemDetails
+            hero={hero}
+            item={selectedItem}
+            equippedBySlot={equippedBySlot}
+            pending={pending}
+            onEquip={onEquip}
+          />
+        </aside>
       </div>
     </section>
   )
 }
 
 function InventoryItemCard({
-  hero,
   item,
   equippedBySlot,
-  pending,
-  onEquip,
+  selected,
+  onSelect,
 }: {
-  hero: Hero
   item: InventoryItem
   equippedBySlot: ReadonlyMap<EquipmentSlotKey, InventoryItem>
-  pending: boolean
-  onEquip: (itemId: string, slot: EquipmentSlotKey) => void
+  selected: boolean
+  onSelect: () => void
 }) {
   const targetSlot =
     item.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
@@ -2844,9 +2845,15 @@ function InventoryItemCard({
   ] as const
 
   return (
-    <article className="flex min-h-56 flex-col border border-border/70 bg-background/45 p-4">
-      <div className="flex items-start gap-3">
-        <div className="grid size-12 shrink-0 place-items-center border border-ember/45 bg-ember/5">
+    <article
+      tabIndex={0}
+      onMouseEnter={onSelect}
+      onFocus={onSelect}
+      onClick={onSelect}
+      className={`flex min-h-44 cursor-pointer flex-col border bg-background/45 p-3 outline-none transition ${selected ? 'border-ember/70 bg-ember/5' : 'border-border/70 hover:border-ember/40'}`}
+    >
+      <div className="flex items-start gap-2">
+        <div className="grid size-10 shrink-0 place-items-center border border-ember/45 bg-ember/5">
           {item.armor > item.damage ? (
             <Shield className="size-5 text-ember" aria-hidden="true" />
           ) : (
@@ -2863,7 +2870,7 @@ function InventoryItemCard({
           </p>
         </div>
       </div>
-      <dl className="mt-4 grid grid-cols-4 gap-px bg-border/60 text-xs">
+      <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-[0.65rem]">
         {[
           ['DMG', item.damage],
           ['ARM', item.armor],
@@ -2881,7 +2888,7 @@ function InventoryItemCard({
           </dd>
         </div>
       </dl>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+      <div className="mt-2 grid grid-cols-3 gap-1 text-[0.62rem]">
         {statDeltas.map(([label, delta]) => (
           <div key={label} className="flex justify-between gap-1">
             <span className="text-muted-foreground">{label}</span>
@@ -2891,6 +2898,70 @@ function InventoryItemCard({
           </div>
         ))}
       </div>
+      <p className="mt-auto pt-3 font-mono text-[0.55rem] uppercase text-muted-foreground">
+        Наведіть для деталей
+      </p>
+    </article>
+  )
+}
+
+function InventoryItemDetails({
+  hero,
+  item,
+  equippedBySlot,
+  pending,
+  onEquip,
+}: {
+  hero: Hero
+  item: InventoryItem | null
+  equippedBySlot: ReadonlyMap<EquipmentSlotKey, InventoryItem>
+  pending: boolean
+  onEquip: (itemId: string, slot: EquipmentSlotKey) => void
+}) {
+  if (!item)
+    return (
+      <div className="grid min-h-64 place-items-center text-center text-sm text-muted-foreground">
+        У сховищі поки немає предметів.
+      </div>
+    )
+
+  const targetSlot =
+    item.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
+    item.compatibleSlots[0]
+  const current = targetSlot ? equippedBySlot.get(targetSlot) : undefined
+
+  return (
+    <div className="sticky top-4">
+      <div className="grid aspect-[4/3] place-items-center border border-ember/35 bg-[radial-gradient(circle,oklch(0.5_0.1_45/18%),transparent_62%)]">
+        {item.armor > item.damage ? (
+          <Shield className="size-14 text-ember" aria-hidden="true" />
+        ) : (
+          <Sword className="size-14 text-ember" aria-hidden="true" />
+        )}
+      </div>
+      <p className="mt-4 font-mono text-[0.58rem] uppercase tracking-wider text-ember">
+        {itemRarityName(item.rarity)} · {item.itemLevel} рівень
+      </p>
+      <h2 className="mt-1 font-serif text-xl">{item.name}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">{item.setName}</p>
+      <dl className="mt-4 divide-y divide-border/60 border-y border-border/60 text-xs">
+        {[
+          ['Шкода', item.damage],
+          ['Броня', item.armor],
+          ['Здоров’я', item.health],
+          ['Якість', `${Math.round((item.rollQuality / 9_999) * 100)}%`],
+        ].map(([label, value]) => (
+          <div key={label} className="flex justify-between gap-3 py-2">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-mono">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {current ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Порівняння з: {current.name}
+        </p>
+      ) : null}
       <Button
         type="button"
         disabled={
@@ -2901,7 +2972,7 @@ function InventoryItemCard({
         onClick={() => {
           if (targetSlot) onEquip(item.id, targetSlot)
         }}
-        className="mt-auto h-9 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
+        className="mt-4 h-9 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
       >
         {pending
           ? 'Екіпіруємо…'
@@ -2909,7 +2980,7 @@ function InventoryItemCard({
             ? `Екіпірувати: ${EQUIPMENT_SLOT_NAMES[targetSlot]}`
             : 'Несумісний предмет'}
       </Button>
-    </article>
+    </div>
   )
 }
 

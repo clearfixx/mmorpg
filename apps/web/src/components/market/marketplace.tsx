@@ -5,6 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  GameHeroBanner,
+  GameMetric,
+  GamePanel,
+  gameUi,
+} from '@/components/game-ui/game-dashboard'
 
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
@@ -234,7 +240,7 @@ export function Marketplace({
   }
 
   return (
-    <section>
+    <section className={gameUi.pageGap}>
       <Button
         type="button"
         variant="ghost"
@@ -243,34 +249,43 @@ export function Marketplace({
       >
         <ArrowLeft aria-hidden="true" /> До міських кварталів
       </Button>
-      <header className="relative overflow-hidden border border-border/70 bg-background/70 px-5 py-4">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_45%,oklch(0.46_0.09_45/18%),transparent_34%)]" />
-        <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div>
-            <p className="font-serif text-xs text-ember">
-              Ринок Попелястого Прихистку
+      <GameHeroBanner
+        eyebrow="Попелястий Прихисток · офіційний ринок"
+        title="Торгові ряди"
+        subtitle="Анонімні угоди спорядженням і ресурсами"
+        description={
+          <p>
+            Усі угоди проходять через ескроу. Лот діє 24 години, прямих
+            пересилань між героями немає, а за успішний продаж стягується
+            фіксована ринкова комісія.
+          </p>
+        }
+        footer={
+          <p className="font-mono text-[0.6rem] text-muted-foreground">
+            Стандартна тривалість: 24 години · активних пропозицій:{' '}
+            {market?.totalListings ?? 0}
+          </p>
+        }
+        aside={
+          <>
+            <p className="font-mono text-[0.58rem] uppercase tracking-wider text-ember">
+              Мій баланс ринку
             </p>
-            <h1 className="mt-1 font-serif text-2xl">Торгові ряди</h1>
-            <p className="mt-2 max-w-2xl text-xs leading-5 text-muted-foreground">
-              Офіційний анонімний ринок. Усі угоди проходять через ескроу,
-              товари зберігаються 24 години, а прямих пересилань між героями
-              немає.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-px border border-border/60 bg-border/60 text-xs">
-            <MarketHeaderFact label="Тривалість лота" value="24 години" />
-            <MarketHeaderFact
-              label="Комісія"
-              value={`${market?.saleFeePercent ?? 5}%`}
-            />
-            <MarketHeaderFact
-              label="Активні лоти"
-              value={`${market?.totalListings ?? 0}`}
-            />
-            <MarketHeaderFact label="Розрахунок" value="Відгомони" />
-          </div>
-        </div>
-      </header>
+            <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60">
+              <GameMetric label="Відгомони" value={market?.balance ?? 0} />
+              <GameMetric
+                label="Комісія"
+                value={`${market?.saleFeePercent ?? 5}%`}
+              />
+              <GameMetric label="Продажі" value={market?.stats.sales ?? 0} />
+              <GameMetric
+                label="Покупки"
+                value={market?.stats.purchases ?? 0}
+              />
+            </dl>
+          </>
+        }
+      />
 
       <nav
         className="mt-px grid grid-cols-5 gap-px bg-border/70"
@@ -328,10 +343,7 @@ export function Marketplace({
 
       <div className="mt-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <aside className="space-y-2 xl:col-start-2 xl:row-start-1">
-          <section className="border border-border/70 bg-background/55 p-3">
-            <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
-              Баланс
-            </p>
+          <GamePanel eyebrow="Ринок" title="Баланс">
             <p className="mt-2 flex items-center gap-2 text-lg">
               <Coins className="size-4 text-ember" /> {market?.balance ?? 0}{' '}
               Відгомонів
@@ -342,12 +354,9 @@ export function Marketplace({
             <p className="mt-1 text-xs text-muted-foreground">
               Комісія з успішного продажу: {market?.saleFeePercent ?? 5}%
             </p>
-          </section>
+          </GamePanel>
 
-          <section className="border border-border/70 bg-background/55 p-4">
-            <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
-              Моя торгівля
-            </p>
+          <GamePanel eyebrow="Статистика" title="Моя торгівля">
             <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-xs">
               <MarketStat label="Продажі" value={market?.stats.sales ?? 0} />
               <MarketStat
@@ -360,7 +369,7 @@ export function Marketplace({
             <p className="mt-2 text-xs text-muted-foreground">
               Сплачено комісій: {market?.stats.feesPaid ?? 0}
             </p>
-          </section>
+          </GamePanel>
 
           <section
             id="my-market-lots"
@@ -698,13 +707,7 @@ export function Marketplace({
             ) : null}
           </section>
 
-          <section
-            id="market-history"
-            className="border border-border/70 bg-background/45 p-3"
-          >
-            <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
-              Історія угод
-            </p>
+          <GamePanel id="market-history" eyebrow="Архів" title="Історія угод">
             <div className="mt-3 divide-y divide-border/50">
               {market?.history.slice(0, 10).map((entry) => (
                 <div
@@ -724,7 +727,7 @@ export function Marketplace({
                 </div>
               )) ?? null}
             </div>
-          </section>
+          </GamePanel>
         </div>
       </div>
     </section>
@@ -835,17 +838,6 @@ function MarketResourceRow({
       >
         Купити
       </Button>
-    </div>
-  )
-}
-
-function MarketHeaderFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-background/80 p-2">
-      <p className="font-mono text-[0.52rem] uppercase text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 font-serif text-xs text-foreground">{value}</p>
     </div>
   )
 }
