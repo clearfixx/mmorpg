@@ -37,6 +37,25 @@ export class MarketHistoryEntryModel {
 }
 
 @ObjectType()
+export class MarketPersonalStatsModel {
+  @Field(() => Int) purchases!: number;
+  @Field(() => Int) sales!: number;
+  @Field(() => Int) spent!: number;
+  @Field(() => Int) earned!: number;
+  @Field(() => Int) feesPaid!: number;
+}
+
+@ObjectType()
+export class MarketQuoteModel {
+  @Field(() => Int) minimumPrice!: number;
+  @Field(() => Int, { nullable: true }) referencePrice!: number | null;
+  @Field(() => Int) comparableSales!: number;
+  @Field(() => Int) saleFeePercent!: number;
+  @Field(() => Int) saleFeeAtReference!: number;
+  @Field(() => Int) proceedsAtReference!: number;
+}
+
+@ObjectType()
 export class MarketplaceModel {
   @Field(() => Int) balance!: number;
   @Field(() => Int) listingDeposit!: number;
@@ -44,6 +63,7 @@ export class MarketplaceModel {
   @Field(() => Int) page!: number;
   @Field(() => Int) totalPages!: number;
   @Field(() => Int) totalListings!: number;
+  @Field(() => MarketPersonalStatsModel) stats!: MarketPersonalStatsModel;
   @Field(() => [MarketListingModel]) listings!: MarketListingModel[];
   @Field(() => [MarketListingModel]) myListings!: MarketListingModel[];
   @Field(() => [MarketHistoryEntryModel]) history!: MarketHistoryEntryModel[];

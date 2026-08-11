@@ -504,7 +504,12 @@ input LoginInput {
 
 input MarketBrowseInput {
   kind: String
+  maxLevel: Int
+  maxPrice: Int
+  minLevel: Int
+  minPrice: Int
   page: Int = 1
+  rarity: String
   search: String
   sort: String
 }
@@ -541,6 +546,29 @@ type MarketListingModel {
   status: String!
 }
 
+type MarketPersonalStatsModel {
+  earned: Int!
+  feesPaid: Int!
+  purchases: Int!
+  sales: Int!
+  spent: Int!
+}
+
+input MarketQuoteInput {
+  amount: Int
+  itemId: ID
+  resourceType: ResourceType
+}
+
+type MarketQuoteModel {
+  comparableSales: Int!
+  minimumPrice: Int!
+  proceedsAtReference: Int!
+  referencePrice: Int
+  saleFeeAtReference: Int!
+  saleFeePercent: Int!
+}
+
 type MarketplaceModel {
   balance: Int!
   history: [MarketHistoryEntryModel!]!
@@ -549,6 +577,7 @@ type MarketplaceModel {
   myListings: [MarketListingModel!]!
   page: Int!
   saleFeePercent: Int!
+  stats: MarketPersonalStatsModel!
   totalListings: Int!
   totalPages: Int!
 }
@@ -612,6 +641,7 @@ type Query {
   currentLocation: WorldStateModel!
   expeditionProgress: ExpeditionProgressModel!
   latestBattle: BattleModel
+  marketQuote(input: MarketQuoteInput!): MarketQuoteModel!
   marketplace(input: MarketBrowseInput): MarketplaceModel!
   myCharacter: CharacterModel
   myClan: ClanModel

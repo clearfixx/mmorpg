@@ -12,12 +12,16 @@ describe('MarketService', () => {
   const itemId = '44444444-4444-4444-8444-444444444444';
   const idempotencyKey = '55555555-5555-4555-8555-555555555555';
 
-  function serviceWith(transaction: Record<string, unknown>) {
+  function serviceWith(
+    transaction: Record<string, unknown>,
+    clientOverrides: Record<string, unknown> = {},
+  ) {
     const client = {
       marketCommand: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((work: (tx: unknown) => unknown) =>
         Promise.resolve(work(transaction)),
       ),
+      ...clientOverrides,
     };
     const service = new MarketService(
       { client } as unknown as PrismaService,
@@ -35,6 +39,7 @@ describe('MarketService', () => {
       page: 1,
       totalPages: 1,
       totalListings: 0,
+      stats: { purchases: 0, sales: 0, spent: 0, earned: 0, feesPaid: 0 },
       listings: [],
       myListings: [],
       history: [],
@@ -86,6 +91,36 @@ describe('MarketService', () => {
         binding: { not: ItemBinding.BOUND },
       },
       data: { location: ItemLocation.MARKET },
+    });
+  });
+
+  it('quotes an owned item from completed comparable sales', async () => {
+    const item = {
+      id: itemId,
+      ownerId: characterId,
+      definitionId: 'weapon-veteran-blade-01',
+      itemLevel: 12,
+      rarity: 'COMMON',
+    };
+    const { service } = serviceWith(
+      {},
+      {
+        itemInstance: { findFirst: jest.fn().mockResolvedValue(item) },
+        marketListing: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'sale-1', item, resourceAmount: null, price: 20 },
+            { id: 'sale-2', item, resourceAmount: null, price: 30 },
+          ]),
+        },
+      },
+    );
+
+    await expect(service.quote('user', { itemId })).resolves.toMatchObject({
+      minimumPrice: 2,
+      referencePrice: 25,
+      comparableSales: 2,
+      saleFeeAtReference: 2,
+      proceedsAtReference: 23,
     });
   });
 

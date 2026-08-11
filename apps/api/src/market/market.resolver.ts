@@ -6,7 +6,8 @@ import { CreateMarketListingInput } from './dto/create-market-listing.input';
 import { CreateMarketResourceListingInput } from './dto/create-market-resource-listing.input';
 import { MarketBrowseInput } from './dto/market-browse.input';
 import { MarketListingCommandInput } from './dto/market-listing-command.input';
-import { MarketplaceModel } from './models/marketplace.model';
+import { MarketQuoteInput } from './dto/market-quote.input';
+import { MarketplaceModel, MarketQuoteModel } from './models/marketplace.model';
 import { MarketService } from './market.service';
 
 @Resolver(() => MarketplaceModel)
@@ -24,6 +25,15 @@ export class MarketResolver {
   ) {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.market.forUser(viewer.id, input ?? undefined);
+  }
+
+  @Query(() => MarketQuoteModel)
+  async marketQuote(
+    @Args('input') input: MarketQuoteInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.market.quote(viewer.id, input);
   }
 
   @Mutation(() => MarketplaceModel)

@@ -63,9 +63,25 @@ interface MarketplaceState {
   page: number
   totalPages: number
   totalListings: number
+  stats: {
+    purchases: number
+    sales: number
+    spent: number
+    earned: number
+    feesPaid: number
+  }
   listings: Listing[]
   myListings: Listing[]
   history: HistoryEntry[]
+}
+
+interface MarketQuote {
+  minimumPrice: number
+  referencePrice: number | null
+  comparableSales: number
+  saleFeePercent: number
+  saleFeeAtReference: number
+  proceedsAtReference: number
 }
 
 interface InventoryLike {
@@ -74,7 +90,7 @@ interface InventoryLike {
 }
 
 const marketFields =
-  'balance listingDeposit saleFeePercent page totalPages totalListings listings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } myListings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } history { id price saleFee sellerProceeds status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } }'
+  'balance listingDeposit saleFeePercent page totalPages totalListings stats { purchases sales spent earned feesPaid } listings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } myListings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } history { id price saleFee sellerProceeds status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } }'
 
 export function Marketplace({
   inventory,
@@ -95,6 +111,12 @@ export function Marketplace({
   const [kind, setKind] = useState('ALL')
   const [sort, setSort] = useState('NEWEST')
   const [page, setPage] = useState(1)
+  const [rarity, setRarity] = useState('ALL')
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [minLevel, setMinLevel] = useState('')
+  const [maxLevel, setMaxLevel] = useState('')
+  const [quote, setQuote] = useState<MarketQuote | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const tradeableItems = useMemo(() => {
@@ -111,16 +133,40 @@ export function Marketplace({
   const load = useCallback(async () => {
     const data = await graphQl<{ marketplace: MarketplaceState }>(
       `query Market($input: MarketBrowseInput) { marketplace(input: $input) { ${marketFields} } }`,
-      { input: { search: search || undefined, kind, sort, page } },
+      {
+        input: browseInput({
+          search,
+          kind,
+          sort,
+          page,
+          rarity,
+          minPrice,
+          maxPrice,
+          minLevel,
+          maxLevel,
+        }),
+      },
     )
     setMarket(data.marketplace)
-  }, [kind, page, search, sort])
+  }, [kind, maxLevel, maxPrice, minLevel, minPrice, page, rarity, search, sort])
 
   useEffect(() => {
     let cancelled = false
     void graphQl<{ marketplace: MarketplaceState }>(
       `query Market($input: MarketBrowseInput) { marketplace(input: $input) { ${marketFields} } }`,
-      { input: { search: search || undefined, kind, sort, page } },
+      {
+        input: browseInput({
+          search,
+          kind,
+          sort,
+          page,
+          rarity,
+          minPrice,
+          maxPrice,
+          minLevel,
+          maxLevel,
+        }),
+      },
     )
       .then((data) => {
         if (!cancelled) setMarket(data.marketplace)
@@ -131,7 +177,33 @@ export function Marketplace({
     return () => {
       cancelled = true
     }
-  }, [kind, page, search, sort])
+  }, [kind, maxLevel, maxPrice, minLevel, minPrice, page, rarity, search, sort])
+
+  useEffect(() => {
+    const input = selectedItemId
+      ? { itemId: selectedItemId }
+      : selectedResource
+        ? {
+            resourceType: selectedResource,
+            amount: Number(resourceAmount) || 1,
+          }
+        : null
+    if (!input) return
+    let cancelled = false
+    void graphQl<{ marketQuote: MarketQuote }>(
+      'query MarketQuote($input: MarketQuoteInput!) { marketQuote(input: $input) { minimumPrice referencePrice comparableSales saleFeePercent saleFeeAtReference proceedsAtReference } }',
+      { input },
+    )
+      .then((data) => {
+        if (!cancelled) setQuote(data.marketQuote)
+      })
+      .catch(() => {
+        if (!cancelled) setQuote(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [resourceAmount, selectedItemId, selectedResource])
 
   async function mutate(field: string, input: Record<string, unknown>) {
     if (pending) return
@@ -208,12 +280,34 @@ export function Marketplace({
           </section>
 
           <section className="border border-border/70 bg-background/55 p-4">
+            <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
+              Моя торгівля
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-xs">
+              <MarketStat label="Продажі" value={market?.stats.sales ?? 0} />
+              <MarketStat
+                label="Покупки"
+                value={market?.stats.purchases ?? 0}
+              />
+              <MarketStat label="Отримано" value={market?.stats.earned ?? 0} />
+              <MarketStat label="Витрачено" value={market?.stats.spent ?? 0} />
+            </dl>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Сплачено комісій: {market?.stats.feesPaid ?? 0}
+            </p>
+          </section>
+
+          <section className="border border-border/70 bg-background/55 p-4">
             <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ember">
               Виставити предмет
             </p>
             <select
               value={selectedItemId}
-              onChange={(event) => setSelectedItemId(event.target.value)}
+              onChange={(event) => {
+                setSelectedItemId(event.target.value)
+                setSelectedResource('')
+                setQuote(null)
+              }}
               className="mt-3 h-10 w-full border border-border bg-panel px-3 text-sm"
             >
               <option value="">Оберіть незв’язаний предмет</option>
@@ -247,6 +341,7 @@ export function Marketplace({
             >
               Виставити на 24 години
             </Button>
+            {selectedItemId && quote ? <QuoteHint quote={quote} /> : null}
 
             <div className="my-4 border-t border-border/60" />
             <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
@@ -254,7 +349,11 @@ export function Marketplace({
             </p>
             <select
               value={selectedResource}
-              onChange={(event) => setSelectedResource(event.target.value)}
+              onChange={(event) => {
+                setSelectedResource(event.target.value)
+                setSelectedItemId('')
+                setQuote(null)
+              }}
               className="mt-3 h-10 w-full border border-border bg-panel px-3 text-sm"
             >
               <option value="">Оберіть ресурс</option>
@@ -275,7 +374,10 @@ export function Marketplace({
                 min={1}
                 max={10_000}
                 value={resourceAmount}
-                onChange={(event) => setResourceAmount(event.target.value)}
+                onChange={(event) => {
+                  setResourceAmount(event.target.value)
+                  setQuote(null)
+                }}
                 className="rounded-sm"
                 aria-label="Кількість ресурсу"
               />
@@ -310,6 +412,7 @@ export function Marketplace({
             >
               Виставити ресурсний лот
             </Button>
+            {selectedResource && quote ? <QuoteHint quote={quote} /> : null}
           </section>
 
           <section className="border border-border/70 bg-background/55 p-4">
@@ -396,6 +499,59 @@ export function Marketplace({
                 <option value="PRICE_ASC">Ціна: від меншої</option>
                 <option value="PRICE_DESC">Ціна: від більшої</option>
               </select>
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <select
+                value={rarity}
+                onChange={(event) => {
+                  setRarity(event.target.value)
+                  setPage(1)
+                }}
+                className="h-9 border border-border bg-panel px-2 text-xs"
+              >
+                <option value="ALL">Уся рідкість</option>
+                <option value="COMMON">Звичайні</option>
+                <option value="UNCOMMON">Незвичайні</option>
+                <option value="RARE">Рідкісні</option>
+                <option value="EPIC">Епічні</option>
+                <option value="LEGENDARY">Легендарні</option>
+                <option value="MYTHIC">Міфічні</option>
+                <option value="DIVINE">Божественні</option>
+              </select>
+              <FilterNumber
+                label="Ціна від"
+                value={minPrice}
+                onChange={(value) => {
+                  setMinPrice(value)
+                  setPage(1)
+                }}
+              />
+              <FilterNumber
+                label="Ціна до"
+                value={maxPrice}
+                onChange={(value) => {
+                  setMaxPrice(value)
+                  setPage(1)
+                }}
+              />
+              <FilterNumber
+                label="Рівень від"
+                value={minLevel}
+                onChange={(value) => {
+                  setMinLevel(value)
+                  setPage(1)
+                }}
+                max={99}
+              />
+              <FilterNumber
+                label="Рівень до"
+                value={maxLevel}
+                onChange={(value) => {
+                  setMaxLevel(value)
+                  setPage(1)
+                }}
+                max={99}
+              />
             </div>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               {market?.listings.map((listing) => (
@@ -564,6 +720,81 @@ function Stat({ label, value }: { label: string; value: number }) {
       <dd className="mt-1 font-mono">{value}</dd>
     </div>
   )
+}
+
+function MarketStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-background/80 p-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="mt-1 font-mono text-ember">{value}</dd>
+    </div>
+  )
+}
+
+function QuoteHint({ quote }: { quote: MarketQuote }) {
+  return (
+    <div className="mt-2 border border-moss/30 bg-moss/5 p-2 text-xs leading-5 text-muted-foreground">
+      <p>Мінімальна ціна: {quote.minimumPrice}</p>
+      <p>
+        Ринковий орієнтир: {quote.referencePrice ?? 'ще немає завершених угод'}
+      </p>
+      <p>
+        Після комісії: {quote.proceedsAtReference} · порівнянь:{' '}
+        {quote.comparableSales}
+      </p>
+    </div>
+  )
+}
+
+function FilterNumber({
+  label,
+  value,
+  onChange,
+  max = 1_000_000,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  max?: number
+}) {
+  return (
+    <Input
+      type="number"
+      min={1}
+      max={max}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={label}
+      aria-label={label}
+      className="h-9 rounded-sm text-xs"
+    />
+  )
+}
+
+function browseInput(values: {
+  search: string
+  kind: string
+  sort: string
+  page: number
+  rarity: string
+  minPrice: string
+  maxPrice: string
+  minLevel: string
+  maxLevel: string
+}) {
+  const number = (value: string) =>
+    value && Number(value) > 0 ? Number(value) : undefined
+  return {
+    search: values.search || undefined,
+    kind: values.kind,
+    sort: values.sort,
+    page: values.page,
+    rarity: values.rarity,
+    minPrice: number(values.minPrice),
+    maxPrice: number(values.maxPrice),
+    minLevel: number(values.minLevel),
+    maxLevel: number(values.maxLevel),
+  }
 }
 
 function formatDate(value: string): string {

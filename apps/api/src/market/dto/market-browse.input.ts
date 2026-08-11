@@ -44,4 +44,46 @@ export class MarketBrowseInput {
   @Min(1)
   @Max(100)
   page?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  minPrice?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  maxPrice?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  minLevel?: number;
+
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(99)
+  maxLevel?: number;
+
+  @Field(() => String, { nullable: true })
+  @IsOptional()
+  @IsIn([
+    'ALL',
+    'COMMON',
+    'UNCOMMON',
+    'RARE',
+    'EPIC',
+    'LEGENDARY',
+    'MYTHIC',
+    'DIVINE',
+  ])
+  rarity?: string;
 }

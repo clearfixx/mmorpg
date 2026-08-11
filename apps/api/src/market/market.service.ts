@@ -33,10 +33,12 @@ import { CreateMarketListingInput } from './dto/create-market-listing.input';
 import { CreateMarketResourceListingInput } from './dto/create-market-resource-listing.input';
 import type { MarketBrowseInput, MarketSort } from './dto/market-browse.input';
 import { MarketListingCommandInput } from './dto/market-listing-command.input';
+import { MarketQuoteInput } from './dto/market-quote.input';
 import type {
   MarketHistoryEntryModel,
   MarketplaceModel,
   MarketListingModel,
+  MarketQuoteModel,
 } from './models/marketplace.model';
 
 const LISTING_DEPOSIT = 1;
@@ -144,6 +146,61 @@ export class MarketService {
       });
     });
     return this.read(characterId);
+  }
+
+  async quote(
+    userId: string,
+    input: MarketQuoteInput,
+  ): Promise<MarketQuoteModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    if (Boolean(input.itemId) === Boolean(input.resourceType))
+      throw new BadRequestException('Choose exactly one market asset');
+
+    let minimumPrice: number;
+    let key: string;
+    let amount = 1;
+    if (input.itemId) {
+      const item = await this.prisma.client.itemInstance.findFirst({
+        where: {
+          id: input.itemId,
+          ownerId: characterId,
+          location: { in: [ItemLocation.CHEST, ItemLocation.BACKPACK] },
+          binding: { not: ItemBinding.BOUND },
+        },
+      });
+      if (!item) throw new BadRequestException('Item cannot be quoted');
+      minimumPrice = minimumEquipmentMarketPrice(item.itemLevel, item.rarity);
+      key = `ITEM:${item.definitionId}:${item.rarity}`;
+    } else {
+      const resourceType = input.resourceType!;
+      amount = input.amount ?? 1;
+      if (resourceType === ResourceType.VEIL_ECHO)
+        throw new BadRequestException('Market currency cannot be listed');
+      if (!resourceDefinition(resourceType).tradeable)
+        throw new BadRequestException('Resource cannot be traded');
+      minimumPrice = minimumResourceMarketPrice(resourceType, amount);
+      key = `RESOURCE:${resourceType}`;
+    }
+
+    const recentSales = await this.prisma.client.marketListing.findMany({
+      where: { status: MarketListingStatus.SOLD },
+      include: { item: true },
+      orderBy: { completedAt: 'desc' },
+      take: 500,
+    });
+    const comparable = buildPriceGuide(recentSales).get(key) ?? [];
+    const unitReference = medianMarketPrice(comparable);
+    const referencePrice =
+      unitReference === null ? null : unitReference * amount;
+    const quotePrice = referencePrice ?? minimumPrice;
+    return {
+      minimumPrice,
+      referencePrice,
+      comparableSales: comparable.length,
+      saleFeePercent: MARKET_SALE_FEE_PERCENT,
+      saleFeeAtReference: marketSaleFee(quotePrice),
+      proceedsAtReference: marketSellerProceeds(quotePrice),
+    };
   }
 
   async createResourceListing(
@@ -502,7 +559,15 @@ export class MarketService {
     characterId: string,
     input?: MarketBrowseInput,
   ): Promise<MarketplaceModel> {
-    const [balance, active, mine, history, recentSales] = await Promise.all([
+    const [
+      balance,
+      active,
+      mine,
+      history,
+      recentSales,
+      sellerStats,
+      buyerStats,
+    ] = await Promise.all([
       this.prisma.client.characterResource.findUnique({
         where: {
           characterId_type: { characterId, type: ResourceType.VEIL_ECHO },
@@ -544,6 +609,22 @@ export class MarketService {
         orderBy: { completedAt: 'desc' },
         take: 500,
       }),
+      this.prisma.client.marketListing.aggregate({
+        where: {
+          status: MarketListingStatus.SOLD,
+          sellerCharacterId: characterId,
+        },
+        _count: { _all: true },
+        _sum: { price: true, saleFee: true },
+      }),
+      this.prisma.client.marketListing.aggregate({
+        where: {
+          status: MarketListingStatus.SOLD,
+          buyerCharacterId: characterId,
+        },
+        _count: { _all: true },
+        _sum: { price: true },
+      }),
     ]);
     const priceGuide = buildPriceGuide(recentSales);
     const filtered = active
@@ -564,6 +645,13 @@ export class MarketService {
       page,
       totalPages,
       totalListings,
+      stats: {
+        purchases: buyerStats._count._all,
+        sales: sellerStats._count._all,
+        spent: buyerStats._sum.price ?? 0,
+        earned: (sellerStats._sum.price ?? 0) - (sellerStats._sum.saleFee ?? 0),
+        feesPaid: sellerStats._sum.saleFee ?? 0,
+      },
       listings: visible,
       myListings: mine.map((listing) =>
         this.listing(listing, true, priceGuide),
@@ -666,6 +754,18 @@ function matchesBrowse(
 ): boolean {
   if (input?.kind === 'EQUIPMENT' && !listing.item) return false;
   if (input?.kind === 'RESOURCE' && !listing.resource) return false;
+  if (input?.minPrice && listing.price < input.minPrice) return false;
+  if (input?.maxPrice && listing.price > input.maxPrice) return false;
+  if (input?.minLevel && (listing.item?.itemLevel ?? 0) < input.minLevel)
+    return false;
+  if (input?.maxLevel && (listing.item?.itemLevel ?? 100) > input.maxLevel)
+    return false;
+  if (
+    input?.rarity &&
+    input.rarity !== 'ALL' &&
+    (listing.item?.rarity ?? listing.resource?.rarity) !== input.rarity
+  )
+    return false;
   const search = input?.search?.trim().toLocaleLowerCase('uk-UA');
   if (!search) return true;
   return (
