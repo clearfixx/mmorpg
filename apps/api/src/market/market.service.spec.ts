@@ -44,9 +44,15 @@ describe('MarketService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       itemInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: itemId,
+          itemLevel: 12,
+          rarity: 'COMMON',
+        }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       marketListing: {
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn().mockResolvedValue({ id: listingId }),
       },
       resourceLedgerEntry: { create: jest.fn().mockResolvedValue({}) },
@@ -76,6 +82,50 @@ describe('MarketService', () => {
         binding: { not: ItemBinding.BOUND },
       },
       data: { location: ItemLocation.MARKET },
+    });
+  });
+
+  it('reserves a resource lot separately from its listing deposit', async () => {
+    const tx = {
+      characterResource: {
+        updateMany: jest
+          .fn()
+          .mockResolvedValueOnce({ count: 1 })
+          .mockResolvedValueOnce({ count: 1 }),
+      },
+      marketListing: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockResolvedValue({ id: listingId }),
+      },
+      resourceLedgerEntry: {
+        createMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
+      marketCommand: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const { service } = serviceWith(tx);
+
+    await service.createResourceListing('user', {
+      resourceType: ResourceType.IRON,
+      amount: 10,
+      price: 5,
+      idempotencyKey,
+    });
+
+    expect(tx.characterResource.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        characterId,
+        type: ResourceType.VEIL_ECHO,
+        balance: { gte: 1 },
+      },
+      data: { balance: { decrement: 1 } },
+    });
+    expect(tx.characterResource.updateMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        characterId,
+        type: ResourceType.IRON,
+        balance: { gte: 10 },
+      },
+      data: { balance: { decrement: 10 } },
     });
   });
 

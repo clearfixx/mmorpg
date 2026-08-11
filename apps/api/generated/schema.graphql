@@ -357,6 +357,13 @@ input CreateMarketListingInput {
   price: Int!
 }
 
+input CreateMarketResourceListingInput {
+  amount: Int!
+  idempotencyKey: String!
+  price: Int!
+  resourceType: ResourceType!
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
@@ -495,11 +502,18 @@ input LoginInput {
   password: String!
 }
 
+input MarketBrowseInput {
+  kind: String
+  search: String
+  sort: String
+}
+
 type MarketHistoryEntryModel {
   completedAt: DateTime!
   id: ID!
-  item: InventoryItemModel!
+  item: InventoryItemModel
   price: Int!
+  resource: ResourceBalanceModel
   role: String!
   status: String!
 }
@@ -514,9 +528,11 @@ type MarketListingModel {
   deposit: Int!
   expiresAt: DateTime!
   id: ID!
-  item: InventoryItemModel!
+  item: InventoryItemModel
+  minimumPrice: Int!
   own: Boolean!
   price: Int!
+  resource: ResourceBalanceModel
   status: String!
 }
 
@@ -543,6 +559,7 @@ type Mutation {
   createCharacter(input: CreateCharacterInput!): CharacterModel!
   createClan(input: CreateClanInput!): ClanModel!
   createMarketListing(input: CreateMarketListingInput!): MarketplaceModel!
+  createMarketResourceListing(input: CreateMarketResourceListingInput!): MarketplaceModel!
   equipItem(input: EquipItemInput!): InventoryModel!
   hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
   invokeCursedKnight(input: InvokeBossInput!): BattleModel!
@@ -586,7 +603,7 @@ type Query {
   currentLocation: WorldStateModel!
   expeditionProgress: ExpeditionProgressModel!
   latestBattle: BattleModel
-  marketplace: MarketplaceModel!
+  marketplace(input: MarketBrowseInput): MarketplaceModel!
   myCharacter: CharacterModel
   myClan: ClanModel
   myCrafting: CraftingStateModel!

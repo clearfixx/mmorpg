@@ -651,14 +651,16 @@ model MarketListing {
   id                String              @id @default(uuid()) @db.Uuid
   sellerCharacterId String              @map("seller_character_id") @db.Uuid
   buyerCharacterId  String?             @map("buyer_character_id") @db.Uuid
-  itemId            String              @map("item_id") @db.Uuid
+  itemId            String?             @map("item_id") @db.Uuid
+  resourceType      ResourceType?       @map("resource_type")
+  resourceAmount    Int?                @map("resource_amount")
   price             Int
   deposit           Int                 @default(1)
   status            MarketListingStatus @default(ACTIVE)
   expiresAt         DateTime            @map("expires_at")
   createdAt         DateTime            @default(now()) @map("created_at")
   completedAt       DateTime?           @map("completed_at")
-  item              ItemInstance        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  item              ItemInstance?       @relation(fields: [itemId], references: [id], onDelete: Restrict)
 
   @@index([status, expiresAt])
   @@index([itemId, createdAt])

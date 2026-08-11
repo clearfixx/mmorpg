@@ -1760,6 +1760,7 @@ function CinderhavenGate({
         ) : district === 'MARKET' ? (
           <Marketplace
             inventory={inventory}
+            resources={talents?.resources ?? []}
             onBack={() => setDistrict('HUB')}
           />
         ) : district === 'FRONT' ? (

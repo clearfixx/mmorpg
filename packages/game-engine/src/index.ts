@@ -1,6 +1,7 @@
 export * from './combat'
 export * from './crafting'
 export * from './items'
+export * from './market'
 export * from './progression'
 export * from './resources'
 export * from './world'

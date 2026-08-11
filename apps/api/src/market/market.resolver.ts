@@ -3,6 +3,8 @@ import { Args, Context, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { SessionService } from '../identity/session.service';
 import type { GraphqlContext } from '../identity/identity.types';
 import { CreateMarketListingInput } from './dto/create-market-listing.input';
+import { CreateMarketResourceListingInput } from './dto/create-market-resource-listing.input';
+import { MarketBrowseInput } from './dto/market-browse.input';
 import { MarketListingCommandInput } from './dto/market-listing-command.input';
 import { MarketplaceModel } from './models/marketplace.model';
 import { MarketService } from './market.service';
@@ -15,9 +17,22 @@ export class MarketResolver {
   ) {}
 
   @Query(() => MarketplaceModel)
-  async marketplace(@Context() context: GraphqlContext) {
+  async marketplace(
+    @Args('input', { type: () => MarketBrowseInput, nullable: true })
+    input: MarketBrowseInput | null,
+    @Context() context: GraphqlContext,
+  ) {
     const viewer = await this.sessions.requireViewer(context.req);
-    return this.market.forUser(viewer.id);
+    return this.market.forUser(viewer.id, input ?? undefined);
+  }
+
+  @Mutation(() => MarketplaceModel)
+  async createMarketResourceListing(
+    @Args('input') input: CreateMarketResourceListingInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.market.createResourceListing(viewer.id, input);
   }
 
   @Mutation(() => MarketplaceModel)

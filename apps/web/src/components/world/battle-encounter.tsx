@@ -481,7 +481,6 @@ export function BattleEncounter({
                 rareEncounter={battle.rareEncounter}
                 summonedBoss={battle.summonedBoss}
                 summonedBossId={battle.summonedBossId}
-                enemyName={battle.enemyName}
                 turns={battle.turn}
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
@@ -622,7 +621,6 @@ function BattleResult({
   rareEncounter,
   summonedBoss,
   summonedBossId,
-  enemyName,
   turns,
   health,
   maxHealth,
@@ -640,7 +638,6 @@ function BattleResult({
   rareEncounter: boolean
   summonedBoss: boolean
   summonedBossId: Battle['summonedBossId']
-  enemyName: string
   turns: number
   health: number
   maxHealth: number

@@ -24,9 +24,11 @@ interface MarketItem {
 
 interface Listing {
   id: string
-  item: MarketItem
+  item: MarketItem | null
+  resource: MarketResource | null
   price: number
   deposit: number
+  minimumPrice: number
   status: string
   expiresAt: string
   createdAt: string
@@ -35,11 +37,19 @@ interface Listing {
 
 interface HistoryEntry {
   id: string
-  item: MarketItem
+  item: MarketItem | null
+  resource: MarketResource | null
   price: number
   status: string
   role: string
   completedAt: string
+}
+
+interface MarketResource {
+  type: string
+  name: string
+  amount: number
+  rarity: string
 }
 
 interface MarketplaceState {
@@ -56,54 +66,81 @@ interface InventoryLike {
 }
 
 const marketFields =
-  'balance listingDeposit listings { id price deposit status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } } myListings { id price deposit status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } } history { id price status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName } }'
+  'balance listingDeposit listings { id price deposit minimumPrice status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } myListings { id price deposit minimumPrice status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } history { id price status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } }'
 
 export function Marketplace({
   inventory,
+  resources,
   onBack,
 }: {
   inventory: InventoryLike | null
+  resources: Array<{ type: string; amount: number }>
   onBack: () => void
 }) {
   const [market, setMarket] = useState<MarketplaceState | null>(null)
   const [selectedItemId, setSelectedItemId] = useState('')
   const [price, setPrice] = useState('1')
+  const [selectedResource, setSelectedResource] = useState('')
+  const [resourceAmount, setResourceAmount] = useState('1')
+  const [search, setSearch] = useState('')
+  const [kind, setKind] = useState('ALL')
+  const [sort, setSort] = useState('NEWEST')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const tradeableItems = useMemo(
-    () => {
-      const listed = new Set(
-        market?.myListings.map((listing) => listing.item.id) ?? [],
-      )
-      return [...(inventory?.chest ?? []), ...(inventory?.backpack ?? [])].filter(
-        (item) => item.binding !== 'BOUND' && !listed.has(item.id),
-      )
-    },
-    [inventory, market?.myListings],
-  )
+  const tradeableItems = useMemo(() => {
+    const listed = new Set(
+      market?.myListings.flatMap((listing) =>
+        listing.item ? [listing.item.id] : [],
+      ) ?? [],
+    )
+    return [...(inventory?.chest ?? []), ...(inventory?.backpack ?? [])].filter(
+      (item) => item.binding !== 'BOUND' && !listed.has(item.id),
+    )
+  }, [inventory, market?.myListings])
 
   const load = useCallback(async () => {
     const data = await graphQl<{ marketplace: MarketplaceState }>(
-      `{ marketplace { ${marketFields} } }`,
+      `query Market($input: MarketBrowseInput) { marketplace(input: $input) { ${marketFields} } }`,
+      { input: { search: search || undefined, kind, sort } },
     )
     setMarket(data.marketplace)
-  }, [])
+  }, [kind, search, sort])
 
   useEffect(() => {
-    void load().catch(() => setError('Торгові ряди тимчасово не відповідають.'))
-  }, [load])
+    let cancelled = false
+    void graphQl<{ marketplace: MarketplaceState }>(
+      `query Market($input: MarketBrowseInput) { marketplace(input: $input) { ${marketFields} } }`,
+      { input: { search: search || undefined, kind, sort } },
+    )
+      .then((data) => {
+        if (!cancelled) setMarket(data.marketplace)
+      })
+      .catch(() => {
+        if (!cancelled) setError('Торгові ряди тимчасово не відповідають.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [kind, search, sort])
 
   async function mutate(field: string, input: Record<string, unknown>) {
     if (pending) return
     setPending(true)
     setError(null)
     try {
+      const inputType =
+        field === 'createMarketListing'
+          ? 'CreateMarketListingInput'
+          : field === 'createMarketResourceListing'
+            ? 'CreateMarketResourceListingInput'
+            : 'MarketListingCommandInput'
       const data = await graphQl<Record<string, MarketplaceState>>(
-        `mutation Market($input: ${field === 'createMarketListing' ? 'CreateMarketListingInput' : 'MarketListingCommandInput'}!) { ${field}(input: $input) { ${marketFields} } }`,
+        `mutation Market($input: ${inputType}!) { ${field}(input: $input) { ${marketFields} } }`,
         { input: { ...input, idempotencyKey: crypto.randomUUID() } },
       )
       setMarket(data[field])
       if (field === 'createMarketListing') setSelectedItemId('')
+      if (field === 'createMarketResourceListing') setSelectedResource('')
     } catch {
       setError(
         'Операцію відхилено: перевірте баланс, стан предмета й актуальність оголошення.',
@@ -197,6 +234,69 @@ export function Marketplace({
             >
               Виставити на 24 години
             </Button>
+
+            <div className="my-4 border-t border-border/60" />
+            <p className="font-mono text-[0.62rem] uppercase tracking-wider text-moss">
+              Виставити ресурси
+            </p>
+            <select
+              value={selectedResource}
+              onChange={(event) => setSelectedResource(event.target.value)}
+              className="mt-3 h-10 w-full border border-border bg-panel px-3 text-sm"
+            >
+              <option value="">Оберіть ресурс</option>
+              {resources
+                .filter(
+                  (resource) =>
+                    resource.amount > 0 && resource.type !== 'VEIL_ECHO',
+                )
+                .map((resource) => (
+                  <option key={resource.type} value={resource.type}>
+                    {resourceName(resource.type)} · {resource.amount} шт.
+                  </option>
+                ))}
+            </select>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={10_000}
+                value={resourceAmount}
+                onChange={(event) => setResourceAmount(event.target.value)}
+                className="rounded-sm"
+                aria-label="Кількість ресурсу"
+              />
+              <Input
+                type="number"
+                min={1}
+                max={1_000_000}
+                value={price}
+                onChange={(event) => setPrice(event.target.value)}
+                className="rounded-sm"
+                aria-label="Ціна ресурсного лота"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                pending ||
+                !selectedResource ||
+                Number(resourceAmount) < 1 ||
+                Number(price) < 1 ||
+                !market
+              }
+              onClick={() =>
+                mutate('createMarketResourceListing', {
+                  resourceType: selectedResource,
+                  amount: Number(resourceAmount),
+                  price: Number(price),
+                })
+              }
+              className="mt-3 w-full rounded-sm"
+            >
+              Виставити ресурсний лот
+            </Button>
           </section>
 
           <section className="border border-border/70 bg-background/55 p-4">
@@ -206,7 +306,7 @@ export function Marketplace({
             <div className="mt-3 space-y-2">
               {market?.myListings.map((listing) => (
                 <div key={listing.id} className="border border-border/60 p-3">
-                  <p className="text-sm">{listing.item.name}</p>
+                  <p className="text-sm">{listingName(listing)}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {listing.price} відгомонів · до{' '}
                     {formatDate(listing.expiresAt)}
@@ -248,6 +348,33 @@ export function Marketplace({
                 {market?.listings.length ?? 0} пропозицій
               </span>
             </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_10rem_10rem]">
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Пошук предмета або ресурсу…"
+                className="rounded-sm"
+              />
+              <select
+                value={kind}
+                onChange={(event) => setKind(event.target.value)}
+                className="h-10 border border-border bg-panel px-3 text-sm"
+              >
+                <option value="ALL">Усі товари</option>
+                <option value="EQUIPMENT">Спорядження</option>
+                <option value="RESOURCE">Ресурси</option>
+              </select>
+              <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value)}
+                className="h-10 border border-border bg-panel px-3 text-sm"
+              >
+                <option value="NEWEST">Спершу нові</option>
+                <option value="ENDING">Скоро завершаться</option>
+                <option value="PRICE_ASC">Ціна: від меншої</option>
+                <option value="PRICE_DESC">Ціна: від більшої</option>
+              </select>
+            </div>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               {market?.listings.map((listing) => (
                 <MarketCard
@@ -280,7 +407,7 @@ export function Marketplace({
                 >
                   <span>
                     {entry.role === 'BUYER' ? 'Придбано' : 'Продаж'}:{' '}
-                    {entry.item.name}
+                    {historyName(entry)}
                   </span>
                   <span className="font-mono text-xs text-muted-foreground">
                     {entry.status} · {entry.price}
@@ -313,24 +440,40 @@ function MarketCard({
           <Package className="size-5 text-ember" />
         </div>
         <div className="min-w-0">
-          <h3 className="truncate font-medium">{listing.item.name}</h3>
+          <h3 className="truncate font-medium">{listingName(listing)}</h3>
           <p className="mt-1 font-mono text-[0.62rem] uppercase text-ember">
-            {rarityName(listing.item.rarity)} · {listing.item.itemLevel} рівень
+            {listing.item
+              ? `${rarityName(listing.item.rarity)} · ${listing.item.itemLevel} рівень`
+              : `${rarityName(listing.resource?.rarity ?? 'COMMON')} · ресурсний лот`}
           </p>
         </div>
       </div>
-      <dl className="mt-4 grid grid-cols-3 gap-px bg-border/60 text-center text-xs">
-        <Stat label="DMG" value={listing.item.damage} />
-        <Stat label="Броня" value={listing.item.armor} />
-        <Stat label="HP" value={listing.item.health} />
-      </dl>
+      {listing.item ? (
+        <dl className="mt-4 grid grid-cols-3 gap-px bg-border/60 text-center text-xs">
+          <Stat label="DMG" value={listing.item.damage} />
+          <Stat label="Броня" value={listing.item.armor} />
+          <Stat label="HP" value={listing.item.health} />
+        </dl>
+      ) : (
+        <div className="mt-4 border border-border/60 bg-background/70 p-3 text-sm">
+          Кількість у лоті:{' '}
+          <span className="font-mono text-ember">
+            {listing.resource?.amount ?? 0}
+          </span>
+        </div>
+      )}
       <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <Clock className="size-3.5" /> До {formatDate(listing.expiresAt)}
       </p>
       <div className="mt-4 flex items-center justify-between gap-3">
-        <span className="font-mono text-sm text-ember">
-          {listing.price} відгомонів
-        </span>
+        <div>
+          <p className="font-mono text-sm text-ember">
+            {listing.price} відгомонів
+          </p>
+          <p className="mt-1 text-[0.62rem] text-muted-foreground">
+            Мінімум: {listing.minimumPrice}
+          </p>
+        </div>
         <Button
           type="button"
           disabled={pending || !affordable}
@@ -342,6 +485,14 @@ function MarketCard({
       </div>
     </article>
   )
+}
+
+function listingName(listing: Listing): string {
+  return listing.item?.name ?? listing.resource?.name ?? 'Невідомий товар'
+}
+
+function historyName(entry: HistoryEntry): string {
+  return entry.item?.name ?? entry.resource?.name ?? 'Невідомий товар'
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -372,6 +523,32 @@ function rarityName(value: string): string {
       LEGENDARY: 'Легендарний',
       MYTHIC: 'Міфічний',
       DIVINE: 'Божественний',
+    }[value] ?? value
+  )
+}
+
+function resourceName(value: string): string {
+  return (
+    {
+      IRON: 'Залізо',
+      COPPER: 'Мідь',
+      BRONZE: 'Бронза',
+      COAL: 'Вугілля',
+      TIMBER: 'Деревина',
+      LEATHER: 'Шкіра',
+      WEAPON_FRAGMENT: 'Уламок зброї',
+      HEALTH_POTION: 'Зілля відновлення',
+      MANA_POTION: 'Зілля мани',
+      HERBS: 'Лікувальні трави',
+      OBSIDIAN_SHARD: 'Уламок обсидіану',
+      VEIL_STEEL: 'Сталь Завіси',
+      STABILIZED_CATALYST: 'Стабілізований каталізатор',
+      CURSED_HEART: 'Серце Проклятого лицаря',
+      FALLEN_ELF_EYE: 'Око Павшого ельфа',
+      DARK_PRIEST_ASH: 'Попіл Темного жерця',
+      BOSS_INVOCATION_SEAL: 'Печатка виклику',
+      DARK_PRIEST_INVOCATION_SEAL: 'Печатка Темного жерця',
+      DRYAD_HEARTWOOD: 'Серцевина прадавнього кореня',
     }[value] ?? value
   )
 }
