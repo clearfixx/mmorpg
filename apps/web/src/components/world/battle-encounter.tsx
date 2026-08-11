@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase encounterTier personalBest rareEncounter summonedBoss summonedBossId enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier personalBest rareEncounter summonedBoss summonedBossId enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } enemies { id name health maxHealth activeTarget } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
@@ -29,6 +29,13 @@ interface Battle {
     maxResource: number
   }
   enemy: { health: number; maxHealth: number }
+  enemies: Array<{
+    id: string
+    name: string
+    health: number
+    maxHealth: number
+    activeTarget: boolean
+  }>
   currentIntent: { id: string; name: string; description: string }
   visibleIntents: Array<{ id: string; name: string; description: string }>
   actions: Array<{
@@ -99,9 +106,11 @@ interface ExpeditionProgress {
 export function BattleEncounter({
   heroName,
   preparation,
+  region = 'HOLLOW_ROAD',
 }: {
   heroName: string
   preparation: string
+  region?: 'HOLLOW_ROAD' | 'DRYAD_FOREST'
 }) {
   const [battle, setBattle] = useState<Battle | null>(null)
   const [loading, setLoading] = useState(true)
@@ -109,11 +118,15 @@ export function BattleEncounter({
   const [error, setError] = useState<string | null>(null)
   const [reward, setReward] = useState<BattleReward | null>(null)
   const [expedition, setExpedition] = useState<ExpeditionProgress | null>(null)
+  const [targetEnemyId, setTargetEnemyId] = useState<string | null>(null)
 
   useEffect(() => {
     void Promise.all([loadActiveBattle(), loadExpeditionProgress()])
       .then(([activeBattle, progress]) => {
         setBattle(activeBattle)
+        setTargetEnemyId(
+          activeBattle?.enemies.find((enemy) => enemy.activeTarget)?.id ?? null,
+        )
         setExpedition(progress)
       })
       .catch(() => setError('Не вдалося відновити стан бою.'))
@@ -127,7 +140,13 @@ export function BattleEncounter({
     const timer = window.setInterval(() => {
       void loadActiveBattle()
         .then((nextBattle) => {
-          if (!cancelled && nextBattle) setBattle(nextBattle)
+          if (!cancelled && nextBattle) {
+            setBattle(nextBattle)
+            setTargetEnemyId(
+              nextBattle.enemies.find((enemy) => enemy.activeTarget)?.id ??
+                null,
+            )
+          }
         })
         .catch(() => {
           if (!cancelled) setError('Не вдалося отримати відповідь ворога.')
@@ -156,6 +175,10 @@ export function BattleEncounter({
         { input: { idempotencyKey: crypto.randomUUID() } },
       )
       setBattle(data.startEncounter)
+      setTargetEnemyId(
+        data.startEncounter.enemies.find((enemy) => enemy.activeTarget)?.id ??
+          null,
+      )
     } catch {
       setError('Не вдалося розпочати сутичку.')
     } finally {
@@ -202,12 +225,17 @@ export function BattleEncounter({
         {
           input: {
             actionId,
+            targetEnemyId,
             expectedVersion: battle.version,
             idempotencyKey: crypto.randomUUID(),
           },
         },
       )
       setBattle(data.submitCombatCommand)
+      setTargetEnemyId(
+        data.submitCombatCommand.enemies.find((enemy) => enemy.activeTarget)
+          ?.id ?? null,
+      )
     } catch {
       setError('Хід не виконано. Стан бою міг змінитися.')
     } finally {
@@ -377,7 +405,8 @@ export function BattleEncounter({
         <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
           <div>
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
-              Порожня дорога · хід {battle.turn}
+              {region === 'DRYAD_FOREST' ? 'Ліс дріад' : 'Порожня дорога'} · хід{' '}
+              {battle.turn}
             </p>
             <h1 className="mt-1 text-xl font-semibold">{battle.enemyName}</h1>
           </div>
@@ -411,37 +440,31 @@ export function BattleEncounter({
             max={battle.hero.maxHealth}
             secondary={`${battle.hero.resource}/${battle.hero.maxResource} ресурсу`}
           />
-          <HealthPanel
-            portrait={
-              battle.summonedBoss
-                ? battle.summonedBossId === 'FALLEN_ELF'
-                  ? 'С'
-                  : 'П'
-                : battle.rareEncounter
-                  ? 'З'
-                  : battle.encounterTier > 1
-                    ? 'Р'
-                    : 'М'
-            }
-            title={
-              battle.summonedBoss
-                ? battle.summonedBossId === 'FALLEN_ELF'
-                  ? 'Павший ельф'
-                  : 'Проклятий лицар'
-                : battle.rareEncounter
-                  ? 'Носій печаті'
-                  : battle.encounterTier > 1
-                    ? 'Розоритель'
-                    : 'Мародер'
-            }
-            value={battle.enemy.health}
-            max={battle.enemy.maxHealth}
-            secondary={
-              battle.summonedBossId === 'FALLEN_ELF'
-                ? 'осквернений лук'
-                : 'важкий тесак'
-            }
-          />
+          <div className="grid gap-px bg-border/60">
+            {battle.enemies.map((enemy) => (
+              <button
+                key={enemy.id}
+                type="button"
+                disabled={enemy.health === 0 || actionsLocked}
+                onClick={() => setTargetEnemyId(enemy.id)}
+                className={`text-left ${targetEnemyId === enemy.id ? 'ring-1 ring-inset ring-ember' : ''}`}
+              >
+                <HealthPanel
+                  portrait={enemy.name.slice(0, 1)}
+                  title={enemy.name}
+                  value={enemy.health}
+                  max={enemy.maxHealth}
+                  secondary={
+                    enemy.health === 0
+                      ? 'переможений'
+                      : targetEnemyId === enemy.id
+                        ? 'обрана ціль'
+                        : 'натисніть, щоб обрати'
+                  }
+                />
+              </button>
+            ))}
+          </div>
         </section>
         <section className="grid md:grid-cols-[1fr_18rem]">
           <div className="p-5 sm:p-6">

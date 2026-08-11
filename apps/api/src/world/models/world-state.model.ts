@@ -33,6 +33,9 @@ export class WorldStateModel {
   @Field(() => Int)
   cinderhavenUnlockTier!: number;
 
+  @Field(() => Int)
+  dryadHighestClearedTier!: number;
+
   @Field()
   cinderhavenUnlocked!: boolean;
 

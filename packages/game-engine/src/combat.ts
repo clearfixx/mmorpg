@@ -56,6 +56,7 @@ export interface BattleState {
   summonedBoss?: boolean
   summonedBossId?: 'CURSED_KNIGHT' | 'FALLEN_ELF'
   returnLocation?: 'BROKEN_WATCHPOST' | 'CINDERHAVEN_GATE'
+  region?: 'HOLLOW_ROAD' | 'DRYAD_FOREST'
   enemyLabel: string
   enemyDamageBonus: number
   hero: {
@@ -65,6 +66,8 @@ export interface BattleState {
     maxResource: number
   }
   enemy: { health: number; maxHealth: number }
+  enemies?: BattleEnemy[]
+  targetEnemyId?: string
   intentIndex: number
   guardedReduction: number
   bleedingTurns: number
@@ -72,6 +75,14 @@ export interface BattleState {
   exposed: boolean
   regeneratingTurns: number
   log: CombatLogEntry[]
+}
+
+export interface BattleEnemy {
+  id: string
+  name: string
+  health: number
+  maxHealth: number
+  damageBonus: number
 }
 
 export const INTENTS = [
@@ -262,9 +273,64 @@ export function createBattle(
   }
 }
 
+export function createDryadForestBattle(
+  archetype: CombatArchetype,
+  weaponDamageBonus = 0,
+  encounterTier = 1,
+  heroLevel = 1,
+  talents = { health: 0, damage: 0, armor: 0 },
+): BattleState {
+  const state = createBattle(
+    archetype,
+    'REST_BRAZIER',
+    weaponDamageBonus,
+    encounterTier,
+    heroLevel,
+    talents,
+  )
+  state.region = 'DRYAD_FOREST'
+  state.returnLocation = 'CINDERHAVEN_GATE'
+  if (encounterTier < 35) {
+    state.enemyLabel =
+      encounterTier > 1 ? 'Охоронець коріння' : 'Збожеволіла дріада'
+    state.log[0] = {
+      turn: 0,
+      kind: 'SYSTEM',
+      message: `${state.enemyLabel} виходить із живої хащі.`,
+    }
+    return state
+  }
+
+  const baseHealth = 90 + encounterTier * 18
+  state.enemyLabel = 'Варта Кореневого форпосту'
+  // Group pressure comes from several actions, so each defender uses a lower
+  // personal scaling curve than a solo road enemy of the same tier.
+  state.enemyDamageBonus = 18 + Math.floor(encounterTier * 1.5)
+  state.enemies = [
+    enemy('dryad-sentinel', 'Дріада-страж', baseHealth, 4),
+    enemy(
+      'thorn-archer',
+      'Терновий стрілець',
+      Math.floor(baseHealth * 0.72),
+      0,
+    ),
+    enemy('root-caller', 'Заклинач коріння', Math.floor(baseHealth * 0.82), 2),
+  ]
+  state.targetEnemyId = state.enemies[0]!.id
+  state.enemy = combatantFor(state.enemies[0]!)
+  state.log[0] = {
+    turn: 0,
+    kind: 'SYSTEM',
+    message:
+      'Варта Кореневого форпосту оточує героя. Усі живі захисники відповідатимуть на кожен хід.',
+  }
+  return state
+}
+
 export function resolveTurn(
   state: BattleState,
   actionId: ActionId,
+  targetEnemyId?: string,
 ): BattleState {
   if (state.status !== 'ACTIVE') throw new Error('BATTLE_COMPLETE')
   const action = actionsFor(state.archetype).find(
@@ -275,6 +341,20 @@ export function resolveTurn(
     throw new Error('INSUFFICIENT_RESOURCE')
 
   const next: BattleState = structuredClone(state)
+  const enemies = next.enemies
+  const target = enemies
+    ? (enemies.find(
+        (enemy) =>
+          enemy.id === (targetEnemyId ?? next.targetEnemyId) &&
+          enemy.health > 0,
+      ) ?? enemies.find((enemy) => enemy.health > 0))
+    : null
+  if (enemies && !target) throw new Error('TARGET_UNAVAILABLE')
+  if (target) {
+    next.targetEnemyId = target.id
+    next.enemyLabel = target.name
+    next.enemy = combatantFor(target)
+  }
   next.log = normalizeLog(next.log)
   next.hero.resource -= action.cost
   let damage = 0
@@ -331,6 +411,7 @@ export function resolveTurn(
 
   if (state.exposed && damage > 0) damage = Math.ceil(damage * 1.5)
   next.enemy.health = Math.max(0, next.enemy.health - damage)
+  if (target) target.health = next.enemy.health
   if (damage > 0)
     next.log.push({
       turn: state.turn,
@@ -348,6 +429,7 @@ export function resolveTurn(
 
   if (next.bleedingTurns > 0) {
     next.enemy.health = Math.max(0, next.enemy.health - 5)
+    if (target) target.health = next.enemy.health
     next.bleedingTurns -= 1
     next.log.push({
       turn: state.turn,
@@ -356,7 +438,8 @@ export function resolveTurn(
       amount: 5,
     })
   }
-  if (next.enemy.health === 0) {
+  const groupDefeated = next.enemies?.every((enemy) => enemy.health === 0)
+  if (next.enemy.health === 0 && (!next.enemies || groupDefeated)) {
     next.status = 'WON'
     next.version += 1
     next.log.push({
@@ -365,6 +448,14 @@ export function resolveTurn(
       message: `${next.enemyLabel ?? 'Ворог'} падає. Перемога.`,
     })
     return next
+  }
+  if (target && target.health === 0 && next.enemies) {
+    const nextTarget = next.enemies.find((enemy) => enemy.health > 0)
+    if (nextTarget) {
+      next.targetEnemyId = nextTarget.id
+      next.enemyLabel = nextTarget.name
+      next.enemy = combatantFor(nextTarget)
+    }
   }
 
   const intent = INTENTS[state.intentIndex] ?? INTENTS[0]!
@@ -380,20 +471,29 @@ export function resolveTurn(
       (state.preparation === 'SEARCH_ARMORY' ? 4 : 0) +
       (state.levelArmorBonus ?? 0) +
       (state.talentArmorBonus ?? 0)
-    const raw = intent.damage + (state.enemyDamageBonus ?? 0)
-    const { received, blocked } = mitigateEnemyDamage(
-      raw,
-      armor,
-      next.guardedReduction,
-    )
-    next.hero.health = Math.max(0, next.hero.health - received)
-    next.log.push({
-      turn: state.turn,
-      kind: 'ENEMY_DAMAGE',
-      message: `${next.enemyLabel ?? 'Ворог'} застосовує «${intent.name}».`,
-      amount: received,
-      ...(blocked > 0 ? { detail: `Заблоковано ${blocked} шкоди.` } : {}),
-    })
+    const attackers = next.enemies?.filter((enemy) => enemy.health > 0) ?? [
+      null,
+    ]
+    for (const attacker of attackers) {
+      const raw =
+        intent.damage +
+        (state.enemyDamageBonus ?? 0) +
+        (attacker?.damageBonus ?? 0)
+      const { received, blocked } = mitigateEnemyDamage(
+        raw,
+        armor,
+        next.guardedReduction,
+      )
+      next.hero.health = Math.max(0, next.hero.health - received)
+      next.log.push({
+        turn: state.turn,
+        kind: 'ENEMY_DAMAGE',
+        message: `${attacker?.name ?? next.enemyLabel ?? 'Ворог'} застосовує «${intent.name}».`,
+        amount: received,
+        ...(blocked > 0 ? { detail: `Заблоковано ${blocked} шкоди.` } : {}),
+      })
+      if (next.hero.health === 0) break
+    }
   } else {
     next.log.push({
       turn: state.turn,
@@ -427,6 +527,19 @@ export function resolveTurn(
     })
   }
   return next
+}
+
+function enemy(
+  id: string,
+  name: string,
+  maxHealth: number,
+  damageBonus: number,
+): BattleEnemy {
+  return { id, name, health: maxHealth, maxHealth, damageBonus }
+}
+
+function combatantFor(enemy: BattleEnemy) {
+  return { health: enemy.health, maxHealth: enemy.maxHealth }
 }
 
 function normalizeLog(log: BattleState['log'] | string[]): CombatLogEntry[] {

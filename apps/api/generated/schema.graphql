@@ -58,10 +58,21 @@ enum AvatarMode {
   STATIC
 }
 
+type BattleEnemyModel {
+  activeTarget: Boolean!
+  health: Int!
+  id: String!
+  maxHealth: Int!
+  maxResource: Int
+  name: String!
+  resource: Int
+}
+
 type BattleModel {
   actions: [CombatActionModel!]!
   currentIntent: EnemyIntentModel!
   encounterTier: Int!
+  enemies: [BattleEnemyModel!]!
   enemy: CombatantModel!
   enemyName: String!
   hero: CombatantModel!
@@ -643,6 +654,7 @@ input SubmitCombatCommandInput {
   actionId: String!
   expectedVersion: Int!
   idempotencyKey: String!
+  targetEnemyId: String
 }
 
 input SummonClanBossInput {
@@ -729,6 +741,7 @@ enum WorldFaction {
 enum WorldLocation {
   BROKEN_WATCHPOST
   CINDERHAVEN_GATE
+  DRYAD_FOREST
   HOLLOW_ROAD
 }
 
@@ -755,6 +768,7 @@ type WorldStateModel {
   cinderhavenUnlockTier: Int!
   cinderhavenUnlocked: Boolean!
   currentLocation: WorldLocation!
+  dryadHighestClearedTier: Int!
   highestClearedTier: Int!
   preparationChoice: PreparationChoice
   routes: [WorldRouteModel!]!

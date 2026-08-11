@@ -9,6 +9,7 @@ import {
 import {
   actionsFor,
   createBattle,
+  createDryadForestBattle,
   INTENTS,
   resolveTurn,
   sumEquipmentStats,
@@ -120,8 +121,14 @@ export class CombatService {
       where: { id: characterId },
       select: { gold: true, worldState: true },
     });
-    const highestClearedTier = character.worldState?.highestClearedTier ?? 0;
-    const checkpointTier = character.worldState?.guideCheckpointTier ?? 1;
+    const dryadForest =
+      character.worldState?.currentLocation === 'DRYAD_FOREST';
+    const highestClearedTier = dryadForest
+      ? (character.worldState?.dryadHighestClearedTier ?? 0)
+      : (character.worldState?.highestClearedTier ?? 0);
+    const checkpointTier = dryadForest
+      ? (character.worldState?.dryadGuideCheckpointTier ?? 1)
+      : (character.worldState?.guideCheckpointTier ?? 1);
     const saveableTier =
       highestClearedTier > checkpointTier ? highestClearedTier : null;
     const saveCost =
@@ -164,11 +171,18 @@ export class CombatService {
       const state = await tx.characterWorldState.findUniqueOrThrow({
         where: { characterId },
       });
-      if (input.checkpointTier !== state.highestClearedTier)
+      const dryadForest = state.currentLocation === 'DRYAD_FOREST';
+      const highestClearedTier = dryadForest
+        ? state.dryadHighestClearedTier
+        : state.highestClearedTier;
+      const guideCheckpointTier = dryadForest
+        ? state.dryadGuideCheckpointTier
+        : state.guideCheckpointTier;
+      if (input.checkpointTier !== highestClearedTier)
         throw new BadRequestException(
           'Only the highest cleared tier can be secured',
         );
-      if (input.checkpointTier <= state.guideCheckpointTier)
+      if (input.checkpointTier <= guideCheckpointTier)
         throw new BadRequestException('Checkpoint is already secured');
       const latestVictory = await tx.battle.findFirst({
         where: {
@@ -191,15 +205,26 @@ export class CombatService {
           'A new personal-best victory is required to secure the route',
         );
       const secured = await tx.characterWorldState.updateMany({
-        where: {
-          characterId,
-          highestClearedTier: input.checkpointTier,
-          guideCheckpointTier: { lt: input.checkpointTier },
-        },
-        data: {
-          guideCheckpointTier: input.checkpointTier,
-          version: { increment: 1 },
-        },
+        where: dryadForest
+          ? {
+              characterId,
+              dryadHighestClearedTier: input.checkpointTier,
+              dryadGuideCheckpointTier: { lt: input.checkpointTier },
+            }
+          : {
+              characterId,
+              highestClearedTier: input.checkpointTier,
+              guideCheckpointTier: { lt: input.checkpointTier },
+            },
+        data: dryadForest
+          ? {
+              dryadGuideCheckpointTier: input.checkpointTier,
+              version: { increment: 1 },
+            }
+          : {
+              guideCheckpointTier: input.checkpointTier,
+              version: { increment: 1 },
+            },
       });
       if (secured.count !== 1)
         throw new ConflictException('Checkpoint state changed; refresh');
@@ -251,27 +276,42 @@ export class CombatService {
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
-    const rareEncounter = await this.reserveRareEncounter(
-      context.characterId,
-      character.level,
-      context.checkpointTier,
-    );
-    const state = createBattle(
-      character.archetype,
-      context.preparation,
-      equipment.damage,
-      context.checkpointTier,
-      character.level,
-      bonuses,
-      rareEncounter,
-    );
+    const rareEncounter =
+      context.region === 'DRYAD_FOREST'
+        ? false
+        : await this.reserveRareEncounter(
+            context.characterId,
+            character.level,
+            context.checkpointTier,
+          );
+    const state =
+      context.region === 'DRYAD_FOREST'
+        ? createDryadForestBattle(
+            character.archetype,
+            equipment.damage,
+            context.checkpointTier,
+            character.level,
+            bonuses,
+          )
+        : createBattle(
+            character.archetype,
+            context.preparation,
+            equipment.damage,
+            context.checkpointTier,
+            character.level,
+            bonuses,
+            rareEncounter,
+          );
     const battle = await this.prisma.client.battle.create({
       data: {
         characterId: context.characterId,
         activeCharacterId: context.characterId,
-        encounterId: rareEncounter
-          ? 'rare-seal-warden'
-          : `hollow-road-tier-${context.checkpointTier}`,
+        encounterId:
+          context.region === 'DRYAD_FOREST'
+            ? `dryad-forest-tier-${context.checkpointTier}`
+            : rareEncounter
+              ? 'rare-seal-warden'
+              : `hollow-road-tier-${context.checkpointTier}`,
         seed: 1701 + context.checkpointTier,
         state: state as unknown as Prisma.InputJsonValue,
       },
@@ -468,7 +508,10 @@ export class CombatService {
       },
     });
     if (existing) {
-      if (existing.actionId !== input.actionId)
+      if (
+        existing.actionId !== input.actionId ||
+        existing.targetEnemyId !== (input.targetEnemyId ?? null)
+      )
         throw new ConflictException('Command key already used');
       const current = await this.prisma.client.battle.findUniqueOrThrow({
         where: { id: battle.id },
@@ -489,6 +532,7 @@ export class CombatService {
       next = resolveTurn(
         battle.state as unknown as BattleState,
         input.actionId as ActionId,
+        input.targetEnemyId,
       );
     } catch (error) {
       throw new BadRequestException(
@@ -520,6 +564,7 @@ export class CombatService {
             idempotencyKey: input.idempotencyKey,
             expectedVersion: input.expectedVersion,
             actionId: input.actionId,
+            targetEnemyId: input.targetEnemyId,
             resultingVersion: next.version,
           },
         });
@@ -553,6 +598,7 @@ export class CombatService {
           idempotencyKey: input.idempotencyKey,
           expectedVersion: input.expectedVersion,
           actionId: input.actionId,
+          targetEnemyId: input.targetEnemyId,
           resultingVersion: next.version,
         },
       });
@@ -569,9 +615,14 @@ export class CombatService {
       }
       if (status === BattleStatus.WON && !next.summonedBoss) {
         const clearedTier = next.encounterTier ?? 1;
+        const dryadForest = next.region === 'DRYAD_FOREST';
         const record = await tx.characterWorldState.updateMany({
-          where: { characterId, highestClearedTier: { lt: clearedTier } },
-          data: { highestClearedTier: clearedTier },
+          where: dryadForest
+            ? { characterId, dryadHighestClearedTier: { lt: clearedTier } }
+            : { characterId, highestClearedTier: { lt: clearedTier } },
+          data: dryadForest
+            ? { dryadHighestClearedTier: clearedTier }
+            : { highestClearedTier: clearedTier },
         });
         next.personalBest = record.count === 1;
         await tx.battle.update({
@@ -639,20 +690,27 @@ export class CombatService {
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
     const tier = (previousState.encounterTier ?? 1) + 1;
-    const rareEncounter = await this.reserveRareEncounter(
-      characterId,
-      character.level,
-      tier,
-    );
-    const next = createBattle(
-      character.archetype,
-      previousState.preparation,
-      equipment.damage,
-      tier,
-      character.level,
-      bonuses,
-      rareEncounter,
-    );
+    const dryadForest = previousState.region === 'DRYAD_FOREST';
+    const rareEncounter = dryadForest
+      ? false
+      : await this.reserveRareEncounter(characterId, character.level, tier);
+    const next = dryadForest
+      ? createDryadForestBattle(
+          character.archetype,
+          equipment.damage,
+          tier,
+          character.level,
+          bonuses,
+        )
+      : createBattle(
+          character.archetype,
+          previousState.preparation,
+          equipment.damage,
+          tier,
+          character.level,
+          bonuses,
+          rareEncounter,
+        );
     const battle = await this.prisma.client.$transaction(async (tx) => {
       const acknowledged = await tx.battle.updateMany({
         where: { id: previous.id, resultAcknowledgedAt: null },
@@ -673,9 +731,11 @@ export class CombatService {
         data: {
           characterId,
           activeCharacterId: characterId,
-          encounterId: rareEncounter
-            ? 'rare-seal-warden'
-            : `hollow-road-tier-${tier}`,
+          encounterId: dryadForest
+            ? `dryad-forest-tier-${tier}`
+            : rareEncounter
+              ? 'rare-seal-warden'
+              : `hollow-road-tier-${tier}`,
           seed: 1701 + tier,
           state: next as unknown as Prisma.InputJsonValue,
         },
@@ -825,9 +885,14 @@ export class CombatService {
         !next.summonedBoss
       ) {
         const clearedTier = next.encounterTier ?? 1;
+        const dryadForest = next.region === 'DRYAD_FOREST';
         const record = await tx.characterWorldState.updateMany({
-          where: { characterId, highestClearedTier: { lt: clearedTier } },
-          data: { highestClearedTier: clearedTier },
+          where: dryadForest
+            ? { characterId, dryadHighestClearedTier: { lt: clearedTier } }
+            : { characterId, highestClearedTier: { lt: clearedTier } },
+          data: dryadForest
+            ? { dryadHighestClearedTier: clearedTier }
+            : { highestClearedTier: clearedTier },
         });
         next.personalBest = record.count === 1;
         await tx.battle.update({
@@ -934,6 +999,21 @@ export class CombatService {
       turn: state.turn,
       hero: state.hero,
       enemy: state.enemy,
+      enemies: state.enemies?.map((enemy) => ({
+        id: enemy.id,
+        name: enemy.name,
+        health: enemy.health,
+        maxHealth: enemy.maxHealth,
+        activeTarget: enemy.id === state.targetEnemyId,
+      })) ?? [
+        {
+          id: 'primary-enemy',
+          name: state.enemyLabel,
+          health: state.enemy.health,
+          maxHealth: state.enemy.maxHealth,
+          activeTarget: true,
+        },
+      ],
       currentIntent: intent,
       visibleIntents: Array.from(
         { length: visibleCount },

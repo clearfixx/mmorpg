@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest'
 
-import { createBattle, mitigateEnemyDamage, resolveTurn } from './combat'
+import {
+  createBattle,
+  createDryadForestBattle,
+  mitigateEnemyDamage,
+  resolveTurn,
+} from './combat'
 
 describe('deterministic first battle', () => {
+  it('runs the Coren outpost against three simultaneous defenders', () => {
+    const state = createDryadForestBattle('VANGUARD', 0, 35, 35)
+    expect(state.enemies).toHaveLength(3)
+
+    const afterTurn = resolveTurn(state, 'STRIKE', 'thorn-archer')
+    const archer = afterTurn.enemies?.find(
+      (enemy) => enemy.id === 'thorn-archer',
+    )
+    expect(afterTurn.targetEnemyId).toBe('thorn-archer')
+    expect(archer?.health).toBeLessThan(archer?.maxHealth ?? 0)
+    expect(
+      afterTurn.log.filter((entry) => entry.kind === 'ENEMY_DAMAGE'),
+    ).toHaveLength(3)
+  })
   it('replays identical commands to an identical state', () => {
     const play = () =>
       ['STRIKE', 'GUARD', 'SHIELD_BASH', 'STRIKE'].reduce(

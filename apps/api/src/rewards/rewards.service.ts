@@ -10,6 +10,7 @@ import {
   itemDamageRange,
   itemLevelForReward,
   canUnlockCinderhaven,
+  dryadForestResourceDrops,
   hollowRoadResourceDrops,
   maxRarityForEncounterTier,
   progressionForExperience,
@@ -116,7 +117,10 @@ export class RewardsService {
               amount: invocationSealRewardAmount(),
             },
           ]
-        : this.resourceRewards(battle.id);
+        : this.resourceRewards(
+            battle.id,
+            (battle.state as unknown as { region?: string }).region,
+          );
     const legacyResource = resources[0] ?? {
       type: ResourceType.IRON,
       amount: 0,
@@ -282,16 +286,22 @@ export class RewardsService {
 
   private resourceRewards(
     battleId: string,
+    region?: string,
   ): Array<{ type: ResourceType; amount: number }> {
     const digest = createHash('sha256')
       .update(`hollow-road-resources:${battleId}`)
       .digest();
-    return hollowRoadResourceDrops([
+    const rolls = [
       digest[0] % 100,
       digest[1] % 100,
       digest[2] % 100,
       digest[3] % 100,
-    ]).map((resource) => ({
+    ];
+    const drops =
+      region === 'DRYAD_FOREST'
+        ? dryadForestResourceDrops(rolls)
+        : hollowRoadResourceDrops(rolls);
+    return drops.map((resource) => ({
       type: resource.type,
       amount: resource.amount,
     }));

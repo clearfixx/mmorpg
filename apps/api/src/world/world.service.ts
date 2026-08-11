@@ -74,7 +74,16 @@ export class WorldService {
             ? 'Шлях відкрито'
             : `Відкривається після етапу ${CINDERHAVEN_UNLOCK_TIER}`,
         ),
-        node('DRYAD_FOREST', 'Ліс дріад', 'Майбутній PvE-регіон', 'FUTURE', 70),
+        node(
+          'DRYAD_FOREST',
+          'Ліс дріад',
+          'PvE-регіон',
+          cinderhaven ? 'AVAILABLE' : 'LOCKED',
+          70,
+          cinderhaven
+            ? `Пройдено ${state.dryadHighestClearedTier}/70`
+            : 'Спочатку дістаньтеся Попелястого Прихистку',
+        ),
         node(
           'DAWN_WATCHTOWER',
           'Вежа спостерігачів',
@@ -142,14 +151,24 @@ export class WorldService {
     });
     if (
       !state ||
-      state.currentLocation !== WorldLocation.HOLLOW_ROAD ||
-      !state.preparationChoice
+      (state.currentLocation !== WorldLocation.HOLLOW_ROAD &&
+        state.currentLocation !== WorldLocation.DRYAD_FOREST) ||
+      (state.currentLocation === WorldLocation.HOLLOW_ROAD &&
+        !state.preparationChoice)
     )
       throw new BadRequestException('Travel to the encounter first');
+    const dryadForest = state.currentLocation === WorldLocation.DRYAD_FOREST;
     return {
       characterId,
-      preparation: state.preparationChoice,
-      checkpointTier: state.guideCheckpointTier,
+      preparation: dryadForest
+        ? PreparationChoice.REST_BRAZIER
+        : state.preparationChoice!,
+      checkpointTier: dryadForest
+        ? state.dryadGuideCheckpointTier
+        : state.guideCheckpointTier,
+      region: dryadForest
+        ? ('DRYAD_FOREST' as const)
+        : ('HOLLOW_ROAD' as const),
     };
   }
 
@@ -186,7 +205,8 @@ export class WorldService {
     if (
       input.destination !== WorldLocation.HOLLOW_ROAD &&
       input.destination !== WorldLocation.CINDERHAVEN_GATE &&
-      input.destination !== WorldLocation.BROKEN_WATCHPOST
+      input.destination !== WorldLocation.BROKEN_WATCHPOST &&
+      input.destination !== WorldLocation.DRYAD_FOREST
     )
       throw new BadRequestException('Destination is currently locked');
 
@@ -202,13 +222,17 @@ export class WorldService {
           input.destination === WorldLocation.HOLLOW_ROAD;
         const returningFromCinderhaven =
           input.destination === WorldLocation.BROKEN_WATCHPOST;
+        const enteringDryadForest =
+          input.destination === WorldLocation.DRYAD_FOREST;
         const updated = await tx.characterWorldState.updateMany({
           where: {
             characterId,
             version: input.expectedVersion,
-            currentLocation: returningFromCinderhaven
+            currentLocation: enteringDryadForest
               ? WorldLocation.CINDERHAVEN_GATE
-              : WorldLocation.BROKEN_WATCHPOST,
+              : returningFromCinderhaven
+                ? WorldLocation.CINDERHAVEN_GATE
+                : WorldLocation.BROKEN_WATCHPOST,
             ...(returningFromCinderhaven
               ? {}
               : requiresPreparation
@@ -300,6 +324,7 @@ export class WorldService {
     version: number;
     cinderhavenUnlocked: boolean;
     highestClearedTier: number;
+    dryadHighestClearedTier: number;
   }): WorldStateModel {
     return {
       ...state,
@@ -331,14 +356,28 @@ export class WorldService {
                   locked: false,
                   lockReason: null,
                 },
-              ]
-            : [
                 {
-                  destination: WorldLocation.BROKEN_WATCHPOST,
-                  locked: true,
-                  lockReason: 'Повернення відкриється разом із сутичкою',
+                  destination: WorldLocation.DRYAD_FOREST,
+                  locked: false,
+                  lockReason: null,
                 },
-              ],
+              ]
+            : state.currentLocation === WorldLocation.DRYAD_FOREST
+              ? [
+                  {
+                    destination: WorldLocation.CINDERHAVEN_GATE,
+                    locked: true,
+                    lockReason:
+                      'Повернення відкриється після завершення сутички',
+                  },
+                ]
+              : [
+                  {
+                    destination: WorldLocation.BROKEN_WATCHPOST,
+                    locked: true,
+                    lockReason: 'Повернення відкриється разом із сутичкою',
+                  },
+                ],
     };
   }
 

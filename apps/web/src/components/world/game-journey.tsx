@@ -29,16 +29,18 @@ import { BattleEncounter } from '@/components/world/battle-encounter'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const worldStateFields =
-  'currentLocation preparationChoice version highestClearedTier cinderhavenUnlockTier cinderhavenUnlocked watchpostVoices { id name role line } routes { destination locked lockReason }'
+  'currentLocation preparationChoice version highestClearedTier dryadHighestClearedTier cinderhavenUnlockTier cinderhavenUnlocked watchpostVoices { id name role line } routes { destination locked lockReason }'
 
 type Preparation = 'SEARCH_ARMORY' | 'INSPECT_TRACKS' | 'REST_BRAZIER'
-type Location = 'BROKEN_WATCHPOST' | 'HOLLOW_ROAD' | 'CINDERHAVEN_GATE'
+type Location =
+  'BROKEN_WATCHPOST' | 'HOLLOW_ROAD' | 'CINDERHAVEN_GATE' | 'DRYAD_FOREST'
 
 interface WorldState {
   currentLocation: Location
   preparationChoice: Preparation | null
   version: number
   highestClearedTier: number
+  dryadHighestClearedTier: number
   cinderhavenUnlockTier: number
   cinderhavenUnlocked: boolean
   watchpostVoices: Array<{
@@ -300,6 +302,7 @@ type JourneyView =
 type CityDistrictKey = 'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN'
 
 function locationName(location: Location) {
+  if (location === 'DRYAD_FOREST') return 'Ліс дріад'
   if (location === 'CINDERHAVEN_GATE') return 'Попелястий Прихисток'
   if (location === 'HOLLOW_ROAD') return 'Порожня дорога'
   return 'Зламана застава'
@@ -528,6 +531,25 @@ export function GameJourney() {
       </JourneyShell>
     )
 
+  if (world.currentLocation === 'DRYAD_FOREST' && view === 'LOBBY')
+    return (
+      <JourneyShell
+        hero={hero}
+        inventory={inventory}
+        talents={talents}
+        clan={clan}
+        activeSection="LOBBY"
+        location={world.currentLocation}
+        onNavigate={navigate}
+      >
+        <HollowRoad
+          hero={hero}
+          preparation="REST_BRAZIER"
+          region="DRYAD_FOREST"
+        />
+      </JourneyShell>
+    )
+
   if (
     world.currentLocation === 'CINDERHAVEN_GATE' ||
     view === 'CRAFTING' ||
@@ -554,6 +576,10 @@ export function GameJourney() {
         }
         onReturn={async () => {
           await travel('BROKEN_WATCHPOST')
+          setView('LOBBY')
+        }}
+        onEnterDryadForest={async () => {
+          await travel('DRYAD_FOREST')
           setView('LOBBY')
         }}
         onOpenProfile={() => setView('PROFILE')}
@@ -1434,6 +1460,7 @@ function CinderhavenGate({
   error,
   initialDistrict,
   onReturn,
+  onEnterDryadForest,
   onOpenProfile,
   onOpenEquipment,
   onCreateClan,
@@ -1456,6 +1483,7 @@ function CinderhavenGate({
   error: string | null
   initialDistrict: CityDistrictKey
   onReturn: () => void
+  onEnterDryadForest: () => void
   onOpenProfile: () => void
   onOpenEquipment: () => void
   onCreateClan: (name: string) => Promise<void>
@@ -1585,6 +1613,13 @@ function CinderhavenGate({
                   description="Місце формування кланів, спільних походів і боротьби з лігвами."
                   action={clan ? 'Відкрити клан' : 'Знайти союзників'}
                   onClick={() => setDistrict('CLAN')}
+                />
+                <CityDistrict
+                  icon={Compass}
+                  title="Брама до Лісу дріад"
+                  description="Новий похід на 70 етапів. На 35-му рубежі Кореневий форпост захищає група ворогів."
+                  action="Вирушити до лісу"
+                  onClick={onEnterDryadForest}
                 />
                 <CityDistrict
                   icon={Compass}
@@ -2317,14 +2352,17 @@ function ClanHall({
 function HollowRoad({
   hero,
   preparation,
+  region = 'HOLLOW_ROAD',
 }: {
   hero: Hero
   preparation: Preparation | null
+  region?: 'HOLLOW_ROAD' | 'DRYAD_FOREST'
 }) {
   return (
     <BattleEncounter
       heroName={hero.name}
       preparation={preparationName(preparation)}
+      region={region}
     />
   )
 }

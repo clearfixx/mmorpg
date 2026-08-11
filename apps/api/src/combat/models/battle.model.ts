@@ -9,6 +9,13 @@ export class CombatantModel {
 }
 
 @ObjectType()
+export class BattleEnemyModel extends CombatantModel {
+  @Field() id!: string;
+  @Field() name!: string;
+  @Field() activeTarget!: boolean;
+}
+
+@ObjectType()
 export class CombatActionModel {
   @Field() id!: string;
   @Field() name!: string;
@@ -47,6 +54,7 @@ export class BattleModel {
   @Field(() => Int) turn!: number;
   @Field(() => CombatantModel) hero!: CombatantModel;
   @Field(() => CombatantModel) enemy!: CombatantModel;
+  @Field(() => [BattleEnemyModel]) enemies!: BattleEnemyModel[];
   @Field(() => EnemyIntentModel) currentIntent!: EnemyIntentModel;
   @Field(() => [EnemyIntentModel]) visibleIntents!: EnemyIntentModel[];
   @Field(() => [CombatActionModel]) actions!: CombatActionModel[];

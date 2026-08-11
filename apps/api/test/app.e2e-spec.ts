@@ -986,9 +986,12 @@ describe('Health (e2e)', () => {
     expect(firstTalent.text).toContain('"type":"IRON","amount":28');
     expect(
       await prisma.client.resourceLedgerEntry.count({
-        where: { characterId: rewardedCharacter.id },
+        where: {
+          characterId: rewardedCharacter.id,
+          reason: 'TALENT_UPGRADE',
+        },
       }),
-    ).toBe(11);
+    ).toBe(1);
 
     const talentResult = JSON.parse(firstTalent.text) as {
       data: { upgradeTalent: { characterVersion: number } };

@@ -43,6 +43,7 @@ enum WorldLocation {
   BROKEN_WATCHPOST
   HOLLOW_ROAD
   CINDERHAVEN_GATE
+  DRYAD_FOREST
 }
 
 enum PreparationChoice {
@@ -519,6 +520,7 @@ model BattleCommand {
   idempotencyKey   String   @map("idempotency_key") @db.VarChar(64)
   expectedVersion  Int      @map("expected_version")
   actionId         String   @map("action_id") @db.VarChar(64)
+  targetEnemyId    String?  @map("target_enemy_id") @db.VarChar(64)
   resultingVersion Int      @map("resulting_version")
   createdAt        DateTime @default(now()) @map("created_at")
   battle           Battle   @relation(fields: [battleId], references: [id], onDelete: Cascade)
@@ -549,6 +551,8 @@ model CharacterWorldState {
   cinderhavenUnlocked Boolean            @default(false) @map("cinderhaven_unlocked")
   highestClearedTier  Int                @default(0) @map("highest_cleared_tier")
   guideCheckpointTier Int                @default(1) @map("guide_checkpoint_tier")
+  dryadHighestClearedTier Int            @default(0) @map("dryad_highest_cleared_tier")
+  dryadGuideCheckpointTier Int           @default(1) @map("dryad_guide_checkpoint_tier")
   rareEncounterWeek   String?            @map("rare_encounter_week") @db.VarChar(10)
   rareEncounterChecks Int                @default(0) @map("rare_encounter_checks")
   rareEncounterCount  Int                @default(0) @map("rare_encounter_count")
