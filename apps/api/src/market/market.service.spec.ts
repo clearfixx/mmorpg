@@ -31,6 +31,10 @@ describe('MarketService', () => {
     jest.spyOn(testable, 'read').mockResolvedValue({
       balance: 0,
       listingDeposit: 1,
+      saleFeePercent: 5,
+      page: 1,
+      totalPages: 1,
+      totalListings: 0,
       listings: [],
       myListings: [],
       history: [],
@@ -98,7 +102,7 @@ describe('MarketService', () => {
         create: jest.fn().mockResolvedValue({ id: listingId }),
       },
       resourceLedgerEntry: {
-        createMany: jest.fn().mockResolvedValue({ count: 2 }),
+        createMany: jest.fn().mockResolvedValue({ count: 3 }),
       },
       marketCommand: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -155,6 +159,14 @@ describe('MarketService', () => {
 
     await service.buyListing('user', { listingId, idempotencyKey });
 
+    expect(tx.marketListing.updateMany).toHaveBeenCalledWith({
+      where: { id: listingId, status: 'ACTIVE' },
+      data: expect.objectContaining({
+        status: 'SOLD',
+        buyerCharacterId: characterId,
+        saleFee: 1,
+      }),
+    });
     expect(tx.characterResource.updateMany).toHaveBeenCalledWith({
       where: {
         characterId,
@@ -173,13 +185,23 @@ describe('MarketService', () => {
       create: {
         characterId: sellerId,
         type: ResourceType.VEIL_ECHO,
-        balance: 10,
+        balance: 9,
       },
-      update: { balance: { increment: 10 } },
+      update: { balance: { increment: 9 } },
     });
     expect(tx.itemInstance.update).toHaveBeenCalledWith({
       where: { id: itemId },
       data: { ownerId: characterId, location: ItemLocation.CHEST },
     });
+    expect(tx.resourceLedgerEntry.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            amount: -1,
+            reason: 'MARKET_SALE_FEE',
+          }),
+        ]),
+      }),
+    );
   });
 });

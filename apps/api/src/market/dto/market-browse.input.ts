@@ -1,5 +1,13 @@
-import { Field, InputType } from '@nestjs/graphql';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Field, InputType, Int } from '@nestjs/graphql';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export const MARKET_KINDS = ['ALL', 'EQUIPMENT', 'RESOURCE'] as const;
 export const MARKET_SORTS = [
@@ -29,4 +37,11 @@ export class MarketBrowseInput {
   @IsOptional()
   @IsIn(MARKET_SORTS)
   sort?: MarketSort;
+
+  @Field(() => Int, { nullable: true, defaultValue: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  page?: number;
 }

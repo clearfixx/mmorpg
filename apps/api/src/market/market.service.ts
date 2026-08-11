@@ -8,6 +8,10 @@ import {
 } from '@veilfall/database';
 import {
   itemDamageRange,
+  MARKET_SALE_FEE_PERCENT,
+  marketSaleFee,
+  marketSellerProceeds,
+  medianMarketPrice,
   minimumEquipmentMarketPrice,
   minimumResourceMarketPrice,
   resourceDefinition,
@@ -38,6 +42,7 @@ import type {
 const LISTING_DEPOSIT = 1;
 const LISTING_DURATION_MS = 24 * 60 * 60 * 1_000;
 const MAX_ACTIVE_LISTINGS = 20;
+const MARKET_PAGE_SIZE = 20;
 
 type ListingWithItem = Prisma.MarketListingGetPayload<{
   include: { item: true };
@@ -321,11 +326,14 @@ export class MarketService {
         },
       });
       if (!listing) throw new BadRequestException('Listing is unavailable');
+      const saleFee = marketSaleFee(listing.price);
+      const sellerProceeds = marketSellerProceeds(listing.price);
       const claimed = await tx.marketListing.updateMany({
         where: { id: listing.id, status: MarketListingStatus.ACTIVE },
         data: {
           status: MarketListingStatus.SOLD,
           buyerCharacterId: characterId,
+          saleFee,
           completedAt: new Date(),
         },
       });
@@ -351,9 +359,9 @@ export class MarketService {
         create: {
           characterId: listing.sellerCharacterId,
           type: ResourceType.VEIL_ECHO,
-          balance: listing.price + listing.deposit,
+          balance: sellerProceeds + listing.deposit,
         },
-        update: { balance: { increment: listing.price + listing.deposit } },
+        update: { balance: { increment: sellerProceeds + listing.deposit } },
       });
       if (listing.itemId) {
         await tx.itemInstance.update({
@@ -395,6 +403,13 @@ export class MarketService {
             type: ResourceType.VEIL_ECHO,
             amount: listing.price + listing.deposit,
             reason: 'MARKET_SALE',
+            referenceId: listing.id,
+          },
+          {
+            characterId: listing.sellerCharacterId,
+            type: ResourceType.VEIL_ECHO,
+            amount: -saleFee,
+            reason: 'MARKET_SALE_FEE',
             referenceId: listing.id,
           },
           ...(listing.resourceType && listing.resourceAmount
@@ -487,7 +502,7 @@ export class MarketService {
     characterId: string,
     input?: MarketBrowseInput,
   ): Promise<MarketplaceModel> {
-    const [balance, active, mine, history] = await Promise.all([
+    const [balance, active, mine, history, recentSales] = await Promise.all([
       this.prisma.client.characterResource.findUnique({
         where: {
           characterId_type: { characterId, type: ResourceType.VEIL_ECHO },
@@ -523,27 +538,58 @@ export class MarketService {
         orderBy: { completedAt: 'desc' },
         take: 30,
       }),
+      this.prisma.client.marketListing.findMany({
+        where: { status: MarketListingStatus.SOLD },
+        include: { item: true },
+        orderBy: { completedAt: 'desc' },
+        take: 500,
+      }),
     ]);
-    const visible = active
-      .map((listing) => this.listing(listing, false))
+    const priceGuide = buildPriceGuide(recentSales);
+    const filtered = active
+      .map((listing) => this.listing(listing, false, priceGuide))
       .filter((listing) => matchesBrowse(listing, input))
-      .sort((left, right) => compareListings(left, right, input?.sort))
-      .slice(0, 50);
+      .sort((left, right) => compareListings(left, right, input?.sort));
+    const totalListings = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalListings / MARKET_PAGE_SIZE));
+    const page = Math.min(Math.max(1, input?.page ?? 1), totalPages);
+    const visible = filtered.slice(
+      (page - 1) * MARKET_PAGE_SIZE,
+      page * MARKET_PAGE_SIZE,
+    );
     return {
       balance: balance?.balance ?? 0,
       listingDeposit: LISTING_DEPOSIT,
+      saleFeePercent: MARKET_SALE_FEE_PERCENT,
+      page,
+      totalPages,
+      totalListings,
       listings: visible,
-      myListings: mine.map((listing) => this.listing(listing, true)),
+      myListings: mine.map((listing) =>
+        this.listing(listing, true, priceGuide),
+      ),
       history: history.map((listing) => this.history(listing, characterId)),
     };
   }
 
-  private listing(listing: ListingWithItem, own: boolean): MarketListingModel {
+  private listing(
+    listing: ListingWithItem,
+    own: boolean,
+    priceGuide: Map<string, number[]> = new Map(),
+  ): MarketListingModel {
     const item = listing.item ? marketItem(listing.item) : null;
     const resource =
       listing.resourceType && listing.resourceAmount
         ? resourceBalance(listing.resourceType, listing.resourceAmount)
         : null;
+    const comparablePrices = priceGuide.get(comparableKey(listing)) ?? [];
+    const unitMedian = medianMarketPrice(comparablePrices);
+    const referencePrice =
+      unitMedian === null
+        ? null
+        : listing.resourceAmount
+          ? unitMedian * listing.resourceAmount
+          : unitMedian;
     return {
       id: listing.id,
       item,
@@ -555,6 +601,8 @@ export class MarketService {
         : resource
           ? minimumResourceMarketPrice(resource.type, resource.amount)
           : 1,
+      referencePrice,
+      comparableSales: comparablePrices.length,
       status: listing.status,
       expiresAt: listing.expiresAt,
       createdAt: listing.createdAt,
@@ -574,6 +622,8 @@ export class MarketService {
           ? resourceBalance(listing.resourceType, listing.resourceAmount)
           : null,
       price: listing.price,
+      saleFee: listing.saleFee,
+      sellerProceeds: listing.price - listing.saleFee,
       status: listing.status,
       role: listing.sellerCharacterId === characterId ? 'SELLER' : 'BUYER',
       completedAt: listing.completedAt ?? listing.expiresAt,
@@ -659,6 +709,27 @@ function marketItem(item: {
     name: definition.name,
     setName: definition.setName,
   };
+}
+
+function comparableKey(listing: ListingWithItem): string {
+  if (listing.item)
+    return `ITEM:${listing.item.definitionId}:${listing.item.rarity}`;
+  if (listing.resourceType) return `RESOURCE:${listing.resourceType}`;
+  return `MISSING:${listing.id}`;
+}
+
+function buildPriceGuide(listings: ListingWithItem[]): Map<string, number[]> {
+  const guide = new Map<string, number[]>();
+  for (const listing of listings) {
+    const key = comparableKey(listing);
+    const normalizedPrice = listing.resourceAmount
+      ? Math.max(1, Math.ceil(listing.price / listing.resourceAmount))
+      : listing.price;
+    const prices = guide.get(key) ?? [];
+    prices.push(normalizedPrice);
+    guide.set(key, prices);
+  }
+  return guide;
 }
 
 function hash(value: string): string {

@@ -1,0 +1,1 @@
+ALTER TABLE "market_listings" ADD COLUMN "sale_fee" INTEGER NOT NULL DEFAULT 0;

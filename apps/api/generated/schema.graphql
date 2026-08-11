@@ -504,6 +504,7 @@ input LoginInput {
 
 input MarketBrowseInput {
   kind: String
+  page: Int = 1
   search: String
   sort: String
 }
@@ -515,6 +516,8 @@ type MarketHistoryEntryModel {
   price: Int!
   resource: ResourceBalanceModel
   role: String!
+  saleFee: Int!
+  sellerProceeds: Int!
   status: String!
 }
 
@@ -524,6 +527,7 @@ input MarketListingCommandInput {
 }
 
 type MarketListingModel {
+  comparableSales: Int!
   createdAt: DateTime!
   deposit: Int!
   expiresAt: DateTime!
@@ -532,6 +536,7 @@ type MarketListingModel {
   minimumPrice: Int!
   own: Boolean!
   price: Int!
+  referencePrice: Int
   resource: ResourceBalanceModel
   status: String!
 }
@@ -542,6 +547,10 @@ type MarketplaceModel {
   listingDeposit: Int!
   listings: [MarketListingModel!]!
   myListings: [MarketListingModel!]!
+  page: Int!
+  saleFeePercent: Int!
+  totalListings: Int!
+  totalPages: Int!
 }
 
 type Mutation {

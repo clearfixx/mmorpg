@@ -656,6 +656,7 @@ model MarketListing {
   resourceAmount    Int?                @map("resource_amount")
   price             Int
   deposit           Int                 @default(1)
+  saleFee           Int                 @default(0) @map("sale_fee")
   status            MarketListingStatus @default(ACTIVE)
   expiresAt         DateTime            @map("expires_at")
   createdAt         DateTime            @default(now()) @map("created_at")

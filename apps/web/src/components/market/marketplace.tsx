@@ -29,6 +29,8 @@ interface Listing {
   price: number
   deposit: number
   minimumPrice: number
+  referencePrice: number | null
+  comparableSales: number
   status: string
   expiresAt: string
   createdAt: string
@@ -40,6 +42,8 @@ interface HistoryEntry {
   item: MarketItem | null
   resource: MarketResource | null
   price: number
+  saleFee: number
+  sellerProceeds: number
   status: string
   role: string
   completedAt: string
@@ -55,6 +59,10 @@ interface MarketResource {
 interface MarketplaceState {
   balance: number
   listingDeposit: number
+  saleFeePercent: number
+  page: number
+  totalPages: number
+  totalListings: number
   listings: Listing[]
   myListings: Listing[]
   history: HistoryEntry[]
@@ -66,7 +74,7 @@ interface InventoryLike {
 }
 
 const marketFields =
-  'balance listingDeposit listings { id price deposit minimumPrice status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } myListings { id price deposit minimumPrice status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } history { id price status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } }'
+  'balance listingDeposit saleFeePercent page totalPages totalListings listings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } myListings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } history { id price saleFee sellerProceeds status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } }'
 
 export function Marketplace({
   inventory,
@@ -79,12 +87,14 @@ export function Marketplace({
 }) {
   const [market, setMarket] = useState<MarketplaceState | null>(null)
   const [selectedItemId, setSelectedItemId] = useState('')
-  const [price, setPrice] = useState('1')
+  const [itemPrice, setItemPrice] = useState('1')
+  const [resourcePrice, setResourcePrice] = useState('1')
   const [selectedResource, setSelectedResource] = useState('')
   const [resourceAmount, setResourceAmount] = useState('1')
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState('ALL')
   const [sort, setSort] = useState('NEWEST')
+  const [page, setPage] = useState(1)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const tradeableItems = useMemo(() => {
@@ -101,16 +111,16 @@ export function Marketplace({
   const load = useCallback(async () => {
     const data = await graphQl<{ marketplace: MarketplaceState }>(
       `query Market($input: MarketBrowseInput) { marketplace(input: $input) { ${marketFields} } }`,
-      { input: { search: search || undefined, kind, sort } },
+      { input: { search: search || undefined, kind, sort, page } },
     )
     setMarket(data.marketplace)
-  }, [kind, search, sort])
+  }, [kind, page, search, sort])
 
   useEffect(() => {
     let cancelled = false
     void graphQl<{ marketplace: MarketplaceState }>(
       `query Market($input: MarketBrowseInput) { marketplace(input: $input) { ${marketFields} } }`,
-      { input: { search: search || undefined, kind, sort } },
+      { input: { search: search || undefined, kind, sort, page } },
     )
       .then((data) => {
         if (!cancelled) setMarket(data.marketplace)
@@ -121,7 +131,7 @@ export function Marketplace({
     return () => {
       cancelled = true
     }
-  }, [kind, search, sort])
+  }, [kind, page, search, sort])
 
   async function mutate(field: string, input: Record<string, unknown>) {
     if (pending) return
@@ -192,6 +202,9 @@ export function Marketplace({
             <p className="mt-2 text-xs text-muted-foreground">
               Застава за оголошення: {market?.listingDeposit ?? 1}
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Комісія з успішного продажу: {market?.saleFeePercent ?? 5}%
+            </p>
           </section>
 
           <section className="border border-border/70 bg-background/55 p-4">
@@ -214,20 +227,20 @@ export function Marketplace({
               type="number"
               min={1}
               max={1_000_000}
-              value={price}
-              onChange={(event) => setPrice(event.target.value)}
+              value={itemPrice}
+              onChange={(event) => setItemPrice(event.target.value)}
               className="mt-2 rounded-sm"
               aria-label="Ціна у Відгомонах Завіси"
             />
             <Button
               type="button"
               disabled={
-                pending || !selectedItemId || Number(price) < 1 || !market
+                pending || !selectedItemId || Number(itemPrice) < 1 || !market
               }
               onClick={() =>
                 mutate('createMarketListing', {
                   itemId: selectedItemId,
-                  price: Number(price),
+                  price: Number(itemPrice),
                 })
               }
               className="mt-3 w-full rounded-sm bg-ember text-ink"
@@ -270,8 +283,8 @@ export function Marketplace({
                 type="number"
                 min={1}
                 max={1_000_000}
-                value={price}
-                onChange={(event) => setPrice(event.target.value)}
+                value={resourcePrice}
+                onChange={(event) => setResourcePrice(event.target.value)}
                 className="rounded-sm"
                 aria-label="Ціна ресурсного лота"
               />
@@ -283,14 +296,14 @@ export function Marketplace({
                 pending ||
                 !selectedResource ||
                 Number(resourceAmount) < 1 ||
-                Number(price) < 1 ||
+                Number(resourcePrice) < 1 ||
                 !market
               }
               onClick={() =>
                 mutate('createMarketResourceListing', {
                   resourceType: selectedResource,
                   amount: Number(resourceAmount),
-                  price: Number(price),
+                  price: Number(resourcePrice),
                 })
               }
               className="mt-3 w-full rounded-sm"
@@ -345,19 +358,25 @@ export function Marketplace({
                 </h2>
               </div>
               <span className="font-mono text-xs text-muted-foreground">
-                {market?.listings.length ?? 0} пропозицій
+                {market?.totalListings ?? 0} пропозицій
               </span>
             </div>
             <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_10rem_10rem]">
               <Input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPage(1)
+                }}
                 placeholder="Пошук предмета або ресурсу…"
                 className="rounded-sm"
               />
               <select
                 value={kind}
-                onChange={(event) => setKind(event.target.value)}
+                onChange={(event) => {
+                  setKind(event.target.value)
+                  setPage(1)
+                }}
                 className="h-10 border border-border bg-panel px-3 text-sm"
               >
                 <option value="ALL">Усі товари</option>
@@ -366,7 +385,10 @@ export function Marketplace({
               </select>
               <select
                 value={sort}
-                onChange={(event) => setSort(event.target.value)}
+                onChange={(event) => {
+                  setSort(event.target.value)
+                  setPage(1)
+                }}
                 className="h-10 border border-border bg-panel px-3 text-sm"
               >
                 <option value="NEWEST">Спершу нові</option>
@@ -393,6 +415,33 @@ export function Marketplace({
                 Торгові столи порожні. Перші продавці ще не прибули.
               </div>
             ) : null}
+            {(market?.totalPages ?? 1) > 1 ? (
+              <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending || (market?.page ?? 1) <= 1}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  className="h-8 rounded-sm"
+                >
+                  Попередня
+                </Button>
+                <span className="font-mono text-xs text-muted-foreground">
+                  Сторінка {market?.page ?? 1} / {market?.totalPages ?? 1}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    pending || (market?.page ?? 1) >= (market?.totalPages ?? 1)
+                  }
+                  onClick={() => setPage((value) => value + 1)}
+                  className="h-8 rounded-sm"
+                >
+                  Наступна
+                </Button>
+              </div>
+            ) : null}
           </section>
 
           <section className="border border-border/70 bg-background/45 p-4">
@@ -411,6 +460,9 @@ export function Marketplace({
                   </span>
                   <span className="font-mono text-xs text-muted-foreground">
                     {entry.status} · {entry.price}
+                    {entry.role === 'SELLER' && entry.status === 'SOLD'
+                      ? ` · отримано ${entry.sellerProceeds}`
+                      : ''}
                   </span>
                 </div>
               )) ?? null}
@@ -473,6 +525,16 @@ function MarketCard({
           <p className="mt-1 text-[0.62rem] text-muted-foreground">
             Мінімум: {listing.minimumPrice}
           </p>
+          {listing.referencePrice !== null ? (
+            <p className="mt-1 text-[0.62rem] text-moss">
+              Орієнтир: {listing.referencePrice} · угод:{' '}
+              {listing.comparableSales}
+            </p>
+          ) : (
+            <p className="mt-1 text-[0.62rem] text-muted-foreground">
+              Історії продажів ще немає
+            </p>
+          )}
         </div>
         <Button
           type="button"
