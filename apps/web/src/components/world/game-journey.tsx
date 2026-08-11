@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { CraftingWorkshop } from '@/components/crafting/crafting-workshop'
 import { FactionFront } from '@/components/factions/faction-front'
 import { GameShell, type GameSection } from '@/components/layout/game-shell'
+import { Marketplace } from '@/components/market/marketplace'
 import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
@@ -303,7 +304,8 @@ type JourneyView =
   | 'CLAN'
   | 'FRONT'
 
-type CityDistrictKey = 'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN'
+type CityDistrictKey =
+  'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN' | 'MARKET'
 
 function locationName(location: Location) {
   if (location === 'DRYAD_FOREST') return 'Ліс дріад'
@@ -1545,6 +1547,7 @@ function CinderhavenGate({
     CRAFTING: 'CRAFTING',
     FRONT: 'MAP',
     CLAN: 'CLAN',
+    MARKET: 'LOBBY',
   }[district] as GameSection
 
   function navigate(section: GameSection) {
@@ -1653,9 +1656,9 @@ function CinderhavenGate({
                 <CityDistrict
                   icon={Compass}
                   title="Торгові ряди"
-                  description="Безпечні угоди, вітрини гравців і майбутня ресурсна економіка."
-                  action="Ще зачинено"
-                  locked
+                  description="Анонімні 24-годинні оголошення, продаж спорядження та розрахунки Відгомоном Завіси."
+                  action="Відкрити майданчик"
+                  onClick={() => setDistrict('MARKET')}
                 />
                 <CityDistrict
                   icon={Sparkles}
@@ -1754,6 +1757,11 @@ function CinderhavenGate({
           </>
         ) : district === 'CRAFTING' ? (
           <CraftingWorkshop onBack={() => setDistrict('HUB')} />
+        ) : district === 'MARKET' ? (
+          <Marketplace
+            inventory={inventory}
+            onBack={() => setDistrict('HUB')}
+          />
         ) : district === 'FRONT' ? (
           <FactionFront onBack={() => setDistrict('HUB')} />
         ) : district === 'TRAINING' && talents ? (

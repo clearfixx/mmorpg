@@ -18,6 +18,7 @@ export {
   ItemLineageType,
   ItemLocation,
   ItemRarity,
+  MarketListingStatus,
   PreparationChoice,
   ResourceType,
   TalentType,

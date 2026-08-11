@@ -79,7 +79,15 @@ enum ItemLocation {
   CHEST
   BACKPACK
   EQUIPPED
+  MARKET
   LOST
+}
+
+enum MarketListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+  EXPIRED
 }
 
 enum ItemLineageType {
@@ -633,9 +641,43 @@ model ItemInstance {
   rewardClaim         RewardClaim          @relation(fields: [rewardClaimId], references: [id], onDelete: Restrict)
   lineage             ItemLineageEvent[]
   equipmentAssignment EquipmentAssignment?
+  marketListings      MarketListing[]
 
   @@index([ownerId, location])
   @@map("item_instances")
+}
+
+model MarketListing {
+  id                String              @id @default(uuid()) @db.Uuid
+  sellerCharacterId String              @map("seller_character_id") @db.Uuid
+  buyerCharacterId  String?             @map("buyer_character_id") @db.Uuid
+  itemId            String              @map("item_id") @db.Uuid
+  price             Int
+  deposit           Int                 @default(1)
+  status            MarketListingStatus @default(ACTIVE)
+  expiresAt         DateTime            @map("expires_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  completedAt       DateTime?           @map("completed_at")
+  item              ItemInstance        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([status, expiresAt])
+  @@index([itemId, createdAt])
+  @@index([sellerCharacterId, createdAt])
+  @@index([buyerCharacterId, completedAt])
+  @@map("market_listings")
+}
+
+model MarketCommand {
+  id             String   @id @default(uuid()) @db.Uuid
+  characterId    String   @map("character_id") @db.Uuid
+  listingId      String?  @map("listing_id") @db.Uuid
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(64)
+  commandType    String   @map("command_type") @db.VarChar(32)
+  payloadHash    String   @map("payload_hash") @db.Char(64)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([characterId, idempotencyKey])
+  @@map("market_commands")
 }
 
 model EquipmentAssignment {

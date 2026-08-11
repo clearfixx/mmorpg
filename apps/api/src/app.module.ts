@@ -16,6 +16,7 @@ import { HealthController } from './health/health.controller';
 import { IdentityModule } from './identity/identity.module';
 import type { GraphqlContext } from './identity/identity.types';
 import { InventoryModule } from './inventory/inventory.module';
+import { MarketModule } from './market/market.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { ResourcesModule } from './resources/resources.module';
 import { TalentsModule } from './talents/talents.module';
@@ -37,6 +38,7 @@ import { WorldModule } from './world/world.module';
     AdminModule,
     IdentityModule,
     InventoryModule,
+    MarketModule,
     CharactersModule,
     ClansModule,
     CombatModule,
