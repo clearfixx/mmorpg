@@ -537,6 +537,7 @@ type Query {
   """API readiness probe for the foundation milestone."""
   status: String!
   viewer: Viewer
+  worldMap: WorldMapModel!
 }
 
 type RecipeIngredientModel {
@@ -594,6 +595,7 @@ enum ResourceType {
   TIMBER
   VEIL_ECHO
   VEIL_STEEL
+  WEAPON_FRAGMENT
 }
 
 input RetreatInput {
@@ -712,6 +714,13 @@ type Viewer {
   role: UserRole!
 }
 
+type WatchpostVoiceModel {
+  id: String!
+  line: String!
+  name: String!
+  role: String!
+}
+
 enum WorldFaction {
   ASHEN_HOST
   DAWN_COVENANT
@@ -723,6 +732,19 @@ enum WorldLocation {
   HOLLOW_ROAD
 }
 
+type WorldMapModel {
+  nodes: [WorldMapNodeModel!]!
+}
+
+type WorldMapNodeModel {
+  id: String!
+  kind: String!
+  name: String!
+  note: String
+  stages: Int
+  status: String!
+}
+
 type WorldRouteModel {
   destination: WorldLocation!
   lockReason: String
@@ -730,8 +752,12 @@ type WorldRouteModel {
 }
 
 type WorldStateModel {
+  cinderhavenUnlockTier: Int!
+  cinderhavenUnlocked: Boolean!
   currentLocation: WorldLocation!
+  highestClearedTier: Int!
   preparationChoice: PreparationChoice
   routes: [WorldRouteModel!]!
   version: Int!
+  watchpostVoices: [WatchpostVoiceModel!]!
 }

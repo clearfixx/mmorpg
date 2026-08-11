@@ -9,12 +9,13 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { CINDERHAVEN_UNLOCK_TIER } from '@veilfall/game-engine';
 
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { PrepareLocationInput } from './dto/prepare-location.input';
 import { TravelInput } from './dto/travel.input';
-import { WorldStateModel } from './models/world-state.model';
+import { WorldMapModel, WorldStateModel } from './models/world-state.model';
 
 type TransactionClient = Parameters<
   Parameters<VeilfallPrismaClient['$transaction']>[0]
@@ -35,6 +36,103 @@ export class WorldService {
       update: {},
     });
     return this.toModel(state);
+  }
+
+  async mapForUser(userId: string): Promise<WorldMapModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const state = await this.prisma.client.characterWorldState.upsert({
+      where: { characterId },
+      create: { characterId },
+      update: {},
+    });
+    const cinderhaven = state.cinderhavenUnlocked;
+    return {
+      nodes: [
+        node('DAWN_LANDS', 'Землі Світанку', 'Лобі', 'CURRENT', null),
+        node(
+          'BROKEN_WATCHPOST',
+          'Зламана застава',
+          'Передбойовий рубіж',
+          'AVAILABLE',
+          null,
+        ),
+        node(
+          'HOLLOW_ROAD',
+          'Порожня дорога',
+          'PvE-маршрут',
+          'AVAILABLE',
+          50,
+          `Пройдено ${Math.min(state.highestClearedTier, CINDERHAVEN_UNLOCK_TIER)}/${CINDERHAVEN_UNLOCK_TIER}`,
+        ),
+        node(
+          'CINDERHAVEN',
+          'Попелястий Прихисток',
+          'Нейтральний міський хаб',
+          cinderhaven ? 'AVAILABLE' : 'LOCKED',
+          null,
+          cinderhaven
+            ? 'Шлях відкрито'
+            : `Відкривається після етапу ${CINDERHAVEN_UNLOCK_TIER}`,
+        ),
+        node('DRYAD_FOREST', 'Ліс дріад', 'Майбутній PvE-регіон', 'FUTURE', 70),
+        node(
+          'DAWN_WATCHTOWER',
+          'Вежа спостерігачів',
+          'Майбутній форпост',
+          'FUTURE',
+          null,
+        ),
+        node(
+          'CONTESTED_FORTRESS',
+          'Фортеця Спірних земель',
+          'Центральний фронт',
+          'FUTURE',
+          null,
+        ),
+        node(
+          'TWILIGHT_WATCHTOWER',
+          'Сутінкова вежа',
+          'Майбутній форпост',
+          'FUTURE',
+          null,
+        ),
+        node(
+          'DARK_DRYAD_FOREST',
+          'Ліс темних дріад',
+          'Майбутній PvE-регіон',
+          'FUTURE',
+          70,
+        ),
+        node(
+          'ASHEN_REFUGE',
+          'Прихисток Присмерку',
+          'Майбутній міський хаб',
+          'FUTURE',
+          null,
+        ),
+        node(
+          'FADING_ROAD',
+          'Згасаюча дорога',
+          'Майбутній PvE-маршрут',
+          'FUTURE',
+          50,
+        ),
+        node(
+          'TWILIGHT_WATCHPOST',
+          'Сутінкова застава',
+          'Майбутній рубіж',
+          'FUTURE',
+          null,
+        ),
+        node(
+          'ASHEN_LANDS',
+          'Землі Присмерку',
+          'Майбутнє лобі сторони',
+          'FUTURE',
+          null,
+        ),
+      ],
+    };
   }
 
   async encounterContext(userId: string) {
@@ -196,13 +294,17 @@ export class WorldService {
   }
 
   private toModel(state: {
+    characterId: string;
     currentLocation: WorldLocation;
     preparationChoice: PreparationChoice | null;
     version: number;
     cinderhavenUnlocked: boolean;
+    highestClearedTier: number;
   }): WorldStateModel {
     return {
       ...state,
+      cinderhavenUnlockTier: CINDERHAVEN_UNLOCK_TIER,
+      watchpostVoices: watchpostVoices(state.characterId),
       routes:
         state.currentLocation === WorldLocation.BROKEN_WATCHPOST
           ? [
@@ -219,7 +321,7 @@ export class WorldService {
                 locked: !state.cinderhavenUnlocked,
                 lockReason: state.cinderhavenUnlocked
                   ? null
-                  : 'Шлях відкриється після першої перемоги',
+                  : `Подолайте ${CINDERHAVEN_UNLOCK_TIER}-й етап Порожньої дороги`,
               },
             ]
           : state.currentLocation === WorldLocation.CINDERHAVEN_GATE
@@ -243,4 +345,53 @@ export class WorldService {
   private hash(command: string, value: string): string {
     return createHash('sha256').update(`${command}:${value}`).digest('hex');
   }
+}
+
+function node(
+  id: string,
+  name: string,
+  kind: string,
+  status: string,
+  stages: number | null,
+  note: string | null = null,
+) {
+  return { id, name, kind, status, stages, note };
+}
+
+const WATCHPOST_VOICES = [
+  [
+    'Вартова Мейра',
+    'часова',
+    'Ворожих розвідників бачили коло Лісу дріад. Або то знову дерева навчилися ходити.',
+  ],
+  [
+    'Старий Горн',
+    'ветеран',
+    'Колись і мене кликала дорога пригод. Тепер моє коліно сперечається навіть із погодою.',
+  ],
+  [
+    'Спостерігач Руно',
+    'спостерігач',
+    'На Порожній дорозі надто тихо. Така тиша зазвичай має зуби.',
+  ],
+  [
+    'Кухар Брам',
+    'вартовий кухні',
+    'Якщо казан почне шепотіти — не відповідай. Минулого разу ми втратили ополоник.',
+  ],
+  [
+    'Писарка Ельда',
+    'літописиця',
+    'Застава пам’ятає кожного, хто повернувся. І особливо тих, хто не повернув борг.',
+  ],
+] as const;
+
+function watchpostVoices(characterId: string) {
+  const day = new Date().toISOString().slice(0, 10);
+  const seed = createHash('sha256').update(`${characterId}:${day}`).digest();
+  return [0, 1, 2].map((offset) => {
+    const [name, role, line] =
+      WATCHPOST_VOICES[seed[offset] % WATCHPOST_VOICES.length];
+    return { id: `${day}-${offset}`, name, role, line };
+  });
 }

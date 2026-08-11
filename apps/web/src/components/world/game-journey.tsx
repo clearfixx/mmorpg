@@ -28,6 +28,8 @@ import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
+const worldStateFields =
+  'currentLocation preparationChoice version highestClearedTier cinderhavenUnlockTier cinderhavenUnlocked watchpostVoices { id name role line } routes { destination locked lockReason }'
 
 type Preparation = 'SEARCH_ARMORY' | 'INSPECT_TRACKS' | 'REST_BRAZIER'
 type Location = 'BROKEN_WATCHPOST' | 'HOLLOW_ROAD' | 'CINDERHAVEN_GATE'
@@ -36,10 +38,30 @@ interface WorldState {
   currentLocation: Location
   preparationChoice: Preparation | null
   version: number
+  highestClearedTier: number
+  cinderhavenUnlockTier: number
+  cinderhavenUnlocked: boolean
+  watchpostVoices: Array<{
+    id: string
+    name: string
+    role: string
+    line: string
+  }>
   routes: Array<{
     destination: Location
     locked: boolean
     lockReason: string | null
+  }>
+}
+
+interface WorldMap {
+  nodes: Array<{
+    id: string
+    name: string
+    kind: string
+    status: 'CURRENT' | 'AVAILABLE' | 'LOCKED' | 'FUTURE'
+    stages: number | null
+    note: string | null
   }>
 }
 
@@ -132,6 +154,7 @@ type ResourceType =
   | 'COAL'
   | 'TIMBER'
   | 'LEATHER'
+  | 'WEAPON_FRAGMENT'
   | 'HERBS'
   | 'OBSIDIAN_SHARD'
   | 'VEIL_STEEL'
@@ -339,6 +362,7 @@ function JourneyShell({
 export function GameJourney() {
   const [hero, setHero] = useState<Hero | null>(null)
   const [world, setWorld] = useState<WorldState | null>(null)
+  const [worldMap, setWorldMap] = useState<WorldMap | null>(null)
   const [inventory, setInventory] = useState<Inventory | null>(null)
   const [talents, setTalents] = useState<TalentTree | null>(null)
   const [clan, setClan] = useState<Clan | null>(null)
@@ -353,6 +377,7 @@ export function GameJourney() {
       else {
         setHero(result.hero)
         setWorld(result.world)
+        setWorldMap(result.worldMap)
         setInventory(result.inventory)
         setTalents(result.talents)
         setClan(result.clan)
@@ -367,7 +392,7 @@ export function GameJourney() {
     setError(null)
     try {
       const next = await executeWorldMutation(
-        'mutation Prepare($input: PrepareLocationInput!) { performLocationAction(input: $input) { currentLocation preparationChoice version routes { destination locked lockReason } } }',
+        `mutation Prepare($input: PrepareLocationInput!) { performLocationAction(input: $input) { ${worldStateFields} } }`,
         {
           choice,
           expectedVersion: world.version,
@@ -389,7 +414,7 @@ export function GameJourney() {
     setError(null)
     try {
       const next = await executeWorldMutation(
-        'mutation Travel($input: TravelInput!) { travel(input: $input) { currentLocation preparationChoice version routes { destination locked lockReason } } }',
+        `mutation Travel($input: TravelInput!) { travel(input: $input) { ${worldStateFields} } }`,
         {
           destination,
           expectedVersion: world.version,
@@ -809,6 +834,8 @@ export function GameJourney() {
           hero={hero}
           inventory={inventory}
           clan={clan}
+          world={world}
+          worldMap={worldMap}
           cinderhaven={cinderhaven}
           pending={pending}
           onOpenWatchpost={() => setView('WATCHPOST')}
@@ -910,6 +937,20 @@ export function GameJourney() {
               одну підготовку.
             </p>
 
+            <div className="mt-7 grid gap-px bg-border/60 sm:grid-cols-3">
+              {world.watchpostVoices.map((voice) => (
+                <article key={voice.id} className="bg-panel/85 p-4">
+                  <p className="font-mono text-[0.6rem] uppercase tracking-wider text-moss">
+                    {voice.role}
+                  </p>
+                  <h3 className="mt-2 text-sm font-medium">{voice.name}</h3>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    «{voice.line}»
+                  </p>
+                </article>
+              ))}
+            </div>
+
             <div className="mt-10">
               <div className="flex items-end justify-between gap-6 border-b border-border/70 pb-4">
                 <div>
@@ -996,6 +1037,8 @@ function LobbyDashboard({
   hero,
   inventory,
   clan,
+  world,
+  worldMap,
   cinderhaven,
   pending,
   onOpenWatchpost,
@@ -1008,6 +1051,8 @@ function LobbyDashboard({
   hero: Hero
   inventory: Inventory | null
   clan: Clan | null
+  world: WorldState
+  worldMap: WorldMap | null
   cinderhaven:
     | { destination: Location; locked: boolean; lockReason: string | null }
     | undefined
@@ -1096,6 +1141,45 @@ function LobbyDashboard({
           subtitle="Фракції та території"
           onClick={onOpenFront}
         />
+      </section>
+
+      <section className="border border-border/70 bg-background/75 p-4 sm:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="font-mono text-[0.6rem] uppercase tracking-wider text-ember">
+              Наскрізний шлях світу
+            </p>
+            <h2 className="mt-1 font-serif text-xl">
+              Від Світанку до Присмерку
+            </h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Порожня дорога:{' '}
+            {Math.min(world.highestClearedTier, world.cinderhavenUnlockTier)}/
+            {world.cinderhavenUnlockTier}
+          </p>
+        </div>
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+          {worldMap?.nodes.map((node) => (
+            <article
+              key={node.id}
+              className={`min-w-44 border p-3 ${node.status === 'AVAILABLE' || node.status === 'CURRENT' ? 'border-ember/60 bg-ember/5' : 'border-border/70 bg-panel/55 opacity-70'}`}
+            >
+              <p className="font-mono text-[0.55rem] uppercase tracking-wider text-muted-foreground">
+                {node.kind}
+              </p>
+              <h3 className="mt-2 text-sm font-medium">{node.name}</h3>
+              <p className="mt-2 text-[0.7rem] text-muted-foreground">
+                {node.note ??
+                  (node.status === 'FUTURE'
+                    ? 'Майбутній регіон'
+                    : node.stages
+                      ? `${node.stages} етапів`
+                      : 'Доступно')}
+              </p>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-3 xl:grid-cols-[1.05fr_1fr_1fr]">
@@ -2809,6 +2893,7 @@ async function executeInventoryMutation(
 async function loadJourney(): Promise<{
   hero: Hero | null
   world: WorldState | null
+  worldMap: WorldMap | null
   inventory: Inventory | null
   talents: TalentTree | null
   clan: Clan | null
@@ -2821,8 +2906,7 @@ async function loadJourney(): Promise<{
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        query:
-          '{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { currentLocation preparationChoice version routes { destination locked lockReason } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
+        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
       }),
     })
     const payload = (await response.json()) as {
@@ -2830,6 +2914,7 @@ async function loadJourney(): Promise<{
         viewer?: unknown
         myCharacter?: Hero
         currentLocation?: WorldState
+        worldMap?: WorldMap
         myInventory?: Inventory
         myTalents?: TalentTree
         myClan?: Clan | null
@@ -2841,6 +2926,7 @@ async function loadJourney(): Promise<{
       return {
         hero: null,
         world: null,
+        worldMap: null,
         inventory: null,
         talents: null,
         clan: null,
@@ -2851,6 +2937,7 @@ async function loadJourney(): Promise<{
       return {
         hero: null,
         world: null,
+        worldMap: null,
         inventory: null,
         talents: null,
         clan: null,
@@ -2860,6 +2947,7 @@ async function loadJourney(): Promise<{
     return {
       hero: payload.data.myCharacter,
       world: payload.data.currentLocation ?? null,
+      worldMap: payload.data.worldMap ?? null,
       inventory: payload.data.myInventory ?? null,
       talents: payload.data.myTalents ?? null,
       clan: payload.data.myClan ?? null,
@@ -2870,6 +2958,7 @@ async function loadJourney(): Promise<{
     return {
       hero: null,
       world: null,
+      worldMap: null,
       inventory: null,
       talents: null,
       clan: null,
@@ -3105,6 +3194,7 @@ function resourceName(value: ResourceType): string {
     COAL: 'вугілля',
     TIMBER: 'деревина',
     LEATHER: 'шкіра',
+    WEAPON_FRAGMENT: 'уламок зброї',
     HERBS: 'лікувальні трави',
     OBSIDIAN_SHARD: 'уламок обсидіану',
     VEIL_STEEL: 'сталь Завіси',

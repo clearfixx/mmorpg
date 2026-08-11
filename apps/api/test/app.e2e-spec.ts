@@ -323,7 +323,7 @@ describe('Health (e2e)', () => {
         .set('Cookie', cookie)
         .send({
           query:
-            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold item { id definitionId name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId location } } }',
+            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold resources { type amount } item { id definitionId name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId location } } }',
           variables: {
             input: { battleId, idempotencyKey: rewardKey },
           },
@@ -337,16 +337,13 @@ describe('Health (e2e)', () => {
     expect(firstReward.text).toContain('"location":"CHEST"');
     expect(firstReward.text).toContain('"experience":40');
     expect(firstReward.text).toContain('"gold":18');
-    expect(
-      await prisma.client.characterResource.findUnique({
-        where: {
-          characterId_type: {
-            characterId: combatUser.character!.id,
-            type: 'IRON',
-          },
-        },
-      }),
-    ).toMatchObject({ balance: 20 });
+    const claimedMaterials = await prisma.client.rewardClaimResource.findMany({
+      where: { rewardClaim: { battleId } },
+    });
+    expect(claimedMaterials.length).toBeLessThanOrEqual(4);
+    expect(claimedMaterials.every((material) => material.amount === 1)).toBe(
+      true,
+    );
 
     expect(await prisma.client.rewardClaim.count({ where: { battleId } })).toBe(
       1,
@@ -367,7 +364,7 @@ describe('Health (e2e)', () => {
     });
     expect(rewardedCharacter.experience).toBe(40);
     expect(rewardedCharacter.gold).toBe(18);
-    expect(rewardedCharacter.worldState?.cinderhavenUnlocked).toBe(true);
+    expect(rewardedCharacter.worldState?.cinderhavenUnlocked).toBe(false);
 
     const rewardedItem = await prisma.client.itemInstance.findUniqueOrThrow({
       where: { sourceBattleId: battleId },
@@ -652,6 +649,11 @@ describe('Health (e2e)', () => {
       .expect(200)
       .expect({ data: { latestBattle: null } });
 
+    await prisma.client.characterWorldState.update({
+      where: { characterId: combatUser.character!.id },
+      data: { highestClearedTier: 50, cinderhavenUnlocked: true },
+    });
+
     const watchpostState = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
@@ -693,6 +695,21 @@ describe('Health (e2e)', () => {
     };
     expect(gatePayload.data.travel.currentLocation).toBe('CINDERHAVEN_GATE');
     expect(gatePayload.data.travel.version).toBe(gateVersion + 1);
+
+    await prisma.client.characterResource.upsert({
+      where: {
+        characterId_type: {
+          characterId: combatUser.character!.id,
+          type: 'IRON',
+        },
+      },
+      create: {
+        characterId: combatUser.character!.id,
+        type: 'IRON',
+        balance: 50,
+      },
+      update: { balance: 50 },
+    });
 
     const talentState = await request(server)
       .post('/graphql')

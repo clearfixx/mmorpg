@@ -4,7 +4,7 @@ import { SessionService } from '../identity/session.service';
 import type { GraphqlContext } from '../identity/identity.types';
 import { PrepareLocationInput } from './dto/prepare-location.input';
 import { TravelInput } from './dto/travel.input';
-import { WorldStateModel } from './models/world-state.model';
+import { WorldMapModel, WorldStateModel } from './models/world-state.model';
 import { WorldService } from './world.service';
 
 @Resolver(() => WorldStateModel)
@@ -20,6 +20,12 @@ export class WorldResolver {
   ): Promise<WorldStateModel> {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.world.currentForUser(viewer.id);
+  }
+
+  @Query(() => WorldMapModel)
+  async worldMap(@Context() context: GraphqlContext): Promise<WorldMapModel> {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.world.mapForUser(viewer.id);
   }
 
   @Mutation(() => WorldStateModel)

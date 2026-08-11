@@ -25,6 +25,7 @@ export const RESOURCE_TYPES = [
   'COAL',
   'TIMBER',
   'LEATHER',
+  'WEAPON_FRAGMENT',
   'HERBS',
   'OBSIDIAN_SHARD',
   'VEIL_STEEL',
@@ -76,6 +77,13 @@ export const RESOURCE_DEFINITIONS: Readonly<
     'LEATHER',
     'Шкіра',
     'Матеріал для легкої броні, ременів і піхов.',
+  ),
+  WEAPON_FRAGMENT: dropped(
+    'WEAPON_FRAGMENT',
+    'Уламок зброї',
+    'Пошкоджена частина клинка або обладунку, придатна для переплавлення й ранніх рецептів.',
+    2,
+    'UNCOMMON',
   ),
   HERBS: dropped(
     'HERBS',

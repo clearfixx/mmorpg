@@ -121,6 +121,7 @@ enum ResourceType {
   COAL
   TIMBER
   LEATHER
+  WEAPON_FRAGMENT
   HERBS
   OBSIDIAN_SHARD
   VEIL_STEEL
@@ -585,9 +586,21 @@ model RewardClaim {
   battle         Battle        @relation(fields: [battleId], references: [id], onDelete: Restrict)
   character      Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
   item           ItemInstance?
+  resources      RewardClaimResource[]
 
   @@unique([characterId, idempotencyKey])
   @@map("reward_claims")
+}
+
+model RewardClaimResource {
+  id            String       @id @default(uuid()) @db.Uuid
+  rewardClaimId String       @map("reward_claim_id") @db.Uuid
+  type          ResourceType
+  amount        Int
+  rewardClaim   RewardClaim  @relation(fields: [rewardClaimId], references: [id], onDelete: Cascade)
+
+  @@unique([rewardClaimId, type])
+  @@map("reward_claim_resources")
 }
 
 model ItemInstance {

@@ -9,6 +9,8 @@ import {
 import {
   itemDamageRange,
   itemLevelForReward,
+  canUnlockCinderhaven,
+  hollowRoadResourceDrops,
   maxRarityForEncounterTier,
   progressionForExperience,
   rarityForRoll,
@@ -60,7 +62,7 @@ export class RewardsService {
     const characterId = await this.characters.requireIdForUser(userId);
     const existing = await this.prisma.client.rewardClaim.findUnique({
       where: { battleId: input.battleId },
-      include: { item: true },
+      include: { item: true, resources: true },
     });
     if (existing) {
       if (existing.characterId !== characterId)
@@ -103,16 +105,22 @@ export class RewardsService {
     const summonedBoss =
       (battle.state as unknown as { summonedBoss?: boolean }).summonedBoss ===
       true;
-    const resource = summonedBoss
+    const resources = summonedBoss
       ? summonedBossId === 'FALLEN_ELF'
-        ? { type: ResourceType.FALLEN_ELF_EYE, amount: 1 }
-        : { type: ResourceType.CURSED_HEART, amount: 1 }
+        ? [{ type: ResourceType.FALLEN_ELF_EYE, amount: 1 }]
+        : [{ type: ResourceType.CURSED_HEART, amount: 1 }]
       : rareEncounter
-        ? {
-            type: ResourceType.BOSS_INVOCATION_SEAL,
-            amount: invocationSealRewardAmount(),
-          }
-        : this.resourceReward(tier);
+        ? [
+            {
+              type: ResourceType.BOSS_INVOCATION_SEAL,
+              amount: invocationSealRewardAmount(),
+            },
+          ]
+        : this.resourceRewards(battle.id);
+    const legacyResource = resources[0] ?? {
+      type: ResourceType.IRON,
+      amount: 0,
+    };
 
     try {
       const claim = await this.prisma.client.$transaction(async (tx) => {
@@ -123,8 +131,11 @@ export class RewardsService {
             idempotencyKey: input.idempotencyKey,
             experience,
             gold,
-            resourceType: resource.type,
-            resourceAmount: resource.amount,
+            resourceType: legacyResource.type,
+            resourceAmount: legacyResource.amount,
+            resources: resources.length
+              ? { createMany: { data: resources } }
+              : undefined,
           },
         });
         if (dropsItem) {
@@ -181,36 +192,40 @@ export class RewardsService {
           where: { id: characterId, level: { lt: progression.level } },
           data: { level: progression.level },
         });
-        await tx.characterResource.upsert({
-          where: {
-            characterId_type: { characterId, type: resource.type },
-          },
-          create: {
-            characterId,
-            type: resource.type,
-            balance: resource.amount,
-          },
-          update: { balance: { increment: resource.amount } },
-        });
-        await tx.resourceLedgerEntry.create({
-          data: {
-            characterId,
-            type: resource.type,
-            amount: resource.amount,
-            reason: 'BATTLE_REWARD',
-            referenceId: createdClaim.id,
-          },
-        });
-        await tx.characterWorldState.update({
-          where: { characterId },
-          data: {
-            cinderhavenUnlocked: true,
-            version: { increment: 1 },
-          },
-        });
+        for (const resource of resources) {
+          await tx.characterResource.upsert({
+            where: {
+              characterId_type: { characterId, type: resource.type },
+            },
+            create: {
+              characterId,
+              type: resource.type,
+              balance: resource.amount,
+            },
+            update: { balance: { increment: resource.amount } },
+          });
+          await tx.resourceLedgerEntry.create({
+            data: {
+              characterId,
+              type: resource.type,
+              amount: resource.amount,
+              reason: 'BATTLE_REWARD',
+              referenceId: createdClaim.id,
+            },
+          });
+        }
+        if (!summonedBoss && canUnlockCinderhaven(tier)) {
+          await tx.characterWorldState.update({
+            where: { characterId },
+            data: {
+              cinderhavenUnlocked: true,
+              version: { increment: 1 },
+            },
+          });
+        }
         return tx.rewardClaim.findUniqueOrThrow({
           where: { id: createdClaim.id },
-          include: { item: true },
+          include: { item: true, resources: true },
         });
       });
       return this.toModel(claim);
@@ -218,7 +233,7 @@ export class RewardsService {
       if (!this.isUniqueConstraintError(error)) throw error;
       const raced = await this.prisma.client.rewardClaim.findUnique({
         where: { battleId: battle.id },
-        include: { item: true },
+        include: { item: true, resources: true },
       });
       if (!raced || raced.characterId !== characterId)
         throw new ConflictException('Reward claim conflicted; retry');
@@ -265,13 +280,21 @@ export class RewardsService {
     };
   }
 
-  private resourceReward(tier: number): {
-    type: ResourceType;
-    amount: number;
-  } {
-    if (tier >= 5) return { type: ResourceType.BRONZE, amount: 8 + tier * 2 };
-    if (tier >= 3) return { type: ResourceType.COPPER, amount: 12 + tier * 3 };
-    return { type: ResourceType.IRON, amount: 10 + tier * 10 };
+  private resourceRewards(
+    battleId: string,
+  ): Array<{ type: ResourceType; amount: number }> {
+    const digest = createHash('sha256')
+      .update(`hollow-road-resources:${battleId}`)
+      .digest();
+    return hollowRoadResourceDrops([
+      digest[0] % 100,
+      digest[1] % 100,
+      digest[2] % 100,
+      digest[3] % 100,
+    ]).map((resource) => ({
+      type: resource.type,
+      amount: resource.amount,
+    }));
   }
 
   private toModel(claim: {
@@ -281,6 +304,7 @@ export class RewardsService {
     gold: number;
     resourceType: ResourceType;
     resourceAmount: number;
+    resources: Array<{ type: ResourceType; amount: number }>;
     item: {
       id: string;
       definitionId: string;
@@ -296,13 +320,21 @@ export class RewardsService {
       visualAssetId: string;
     } | null;
   }): BattleRewardModel {
+    const resources =
+      claim.resources.length > 0
+        ? claim.resources.map((resource) =>
+            resourceBalance(resource.type, resource.amount),
+          )
+        : claim.resourceAmount > 0
+          ? [resourceBalance(claim.resourceType, claim.resourceAmount)]
+          : [];
     if (!claim.item)
       return {
         claimId: claim.id,
         battleId: claim.battleId,
         experience: claim.experience,
         gold: claim.gold,
-        resources: [resourceBalance(claim.resourceType, claim.resourceAmount)],
+        resources,
         item: null,
       };
     const definition = itemDefinition(claim.item.definitionId);
@@ -317,7 +349,7 @@ export class RewardsService {
       battleId: claim.battleId,
       experience: claim.experience,
       gold: claim.gold,
-      resources: [resourceBalance(claim.resourceType, claim.resourceAmount)],
+      resources,
       item: {
         ...claim.item,
         damageMin: damageRange.min,

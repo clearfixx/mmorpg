@@ -55,6 +55,9 @@ interface BattleReward {
       | 'IRON'
       | 'COPPER'
       | 'BRONZE'
+      | 'COAL'
+      | 'LEATHER'
+      | 'WEAPON_FRAGMENT'
       | 'BOSS_INVOCATION_SEAL'
       | 'CURSED_HEART'
       | 'FALLEN_ELF_EYE'
@@ -805,10 +808,17 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
             ) : null}
             <RewardStat label="EXP" value={`+${reward.experience}`} />
             <RewardStat label="Золото" value={`+${reward.gold}`} />
-            <RewardStat
-              label={resourceName(reward.resources[0]?.type)}
-              value={`+${reward.resources[0]?.amount ?? 0}`}
-            />
+            {reward.resources.length ? (
+              reward.resources.map((resource) => (
+                <RewardStat
+                  key={resource.type}
+                  label={resourceName(resource.type)}
+                  value={`+${resource.amount}`}
+                />
+              ))
+            ) : (
+              <RewardStat label="Матеріали" value="нічого" />
+            )}
           </dl>
           {item ? (
             <p
@@ -841,6 +851,9 @@ function resourceName(
     | 'IRON'
     | 'COPPER'
     | 'BRONZE'
+    | 'COAL'
+    | 'LEATHER'
+    | 'WEAPON_FRAGMENT'
     | 'BOSS_INVOCATION_SEAL'
     | 'CURSED_HEART'
     | 'FALLEN_ELF_EYE',
@@ -849,6 +862,9 @@ function resourceName(
     IRON: 'Залізо',
     COPPER: 'Мідь',
     BRONZE: 'Бронза',
+    COAL: 'Вугілля',
+    LEATHER: 'Шкіра',
+    WEAPON_FRAGMENT: 'Уламок зброї',
     BOSS_INVOCATION_SEAL: 'Печатка виклику',
     CURSED_HEART: 'Серце лицаря',
     FALLEN_ELF_EYE: 'Око Павшого ельфа',
