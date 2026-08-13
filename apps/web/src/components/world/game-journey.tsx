@@ -531,6 +531,7 @@ export function GameJourney() {
           pending={pending}
           error={error}
           onBack={() => setView('LOBBY')}
+          onOpenInventory={() => setView('INVENTORY')}
           onEquip={async (itemId, slot) => {
             setPending(true)
             setError(null)
@@ -2541,6 +2542,7 @@ function EquipmentScreen({
   pending,
   error,
   onBack,
+  onOpenInventory,
   onEquip,
 }: {
   mode: 'PROFILE' | 'INVENTORY'
@@ -2552,6 +2554,7 @@ function EquipmentScreen({
   pending: boolean
   error: string | null
   onBack: () => void
+  onOpenInventory: () => void
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
   const weapon = inventory.equipped.find(
@@ -2560,6 +2563,31 @@ function EquipmentScreen({
   const equippedBySlot = new Map(
     inventory.equipped.map((entry) => [entry.slot, entry.item]),
   )
+  const equippedItems = inventory.equipped.map((entry) => entry.item)
+  const equipmentPower = equippedItems.reduce(
+    (sum, item) => sum + inventoryItemPower(item),
+    0,
+  )
+  const averageQuality = equippedItems.length
+    ? Math.round(
+        equippedItems.reduce((sum, item) => sum + item.rollQuality, 0) /
+          equippedItems.length,
+      )
+    : 0
+  const experienceProgress = Math.min(
+    100,
+    Math.round(
+      (hero.experienceIntoLevel / Math.max(hero.experienceForNextLevel, 1)) *
+        100,
+    ),
+  )
+  const setProgress = Array.from(
+    equippedItems.reduce((sets, item) => {
+      if (!item.setName) return sets
+      sets.set(item.setName, (sets.get(item.setName) ?? 0) + 1)
+      return sets
+    }, new Map<string, number>()),
+  ).sort((left, right) => right[1] - left[1])
 
   if (mode === 'INVENTORY')
     return (
@@ -2575,7 +2603,7 @@ function EquipmentScreen({
     )
 
   return (
-    <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
+    <section className="mx-auto w-full max-w-[96rem] border border-border/70 bg-panel/60">
       <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
         <div>
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
@@ -2592,6 +2620,33 @@ function EquipmentScreen({
           <ArrowLeft aria-hidden="true" /> Повернутися
         </Button>
       </header>
+      <dl className="grid border-b border-border/70 bg-background/30 sm:grid-cols-2 xl:grid-cols-5">
+        <ProfileMetric
+          label="Рівень"
+          value={hero.level}
+          detail={`${experienceProgress}% до наступного`}
+        />
+        <ProfileMetric
+          label="Сила спорядження"
+          value={equipmentPower}
+          detail={`${inventory.equipped.length}/14 слотів`}
+        />
+        <ProfileMetric
+          label="Загальний DMG"
+          value={inventory.totalDamage}
+          detail={`база ${inventory.baseDamage}`}
+        />
+        <ProfileMetric
+          label="Захист"
+          value={inventory.totalArmor}
+          detail={`база ${inventory.baseArmor}`}
+        />
+        <ProfileMetric
+          label="Якість спорядження"
+          value={`${averageQuality}%`}
+          detail={setProgress[0]?.[0] ?? 'Без активного сету'}
+        />
+      </dl>
       <div className="grid lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section className="relative min-h-[34rem] overflow-hidden border-b border-border/70 p-5 sm:p-6 lg:border-r lg:border-b-0">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,oklch(0.52_0.1_55/20%),transparent_40%)]" />
@@ -2665,6 +2720,20 @@ function EquipmentScreen({
           <p className="relative mt-5 text-center text-xs text-muted-foreground">
             {inventory.mainHandVisualAssetId ?? 'Базовий вигляд без зброї'}
           </p>
+          <div className="relative mx-auto mt-5 max-w-xl border border-border/70 bg-background/45 p-3">
+            <div className="flex items-center justify-between gap-4 text-xs">
+              <span className="text-muted-foreground">Досвід героя</span>
+              <span className="font-mono">
+                {hero.experienceIntoLevel}/{hero.experienceForNextLevel} XP
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden bg-border/70">
+              <div
+                className="h-full bg-ember"
+                style={{ width: `${experienceProgress}%` }}
+              />
+            </div>
+          </div>
         </section>
         <aside className="p-5">
           <ProfileSummary
@@ -2673,6 +2742,9 @@ function EquipmentScreen({
             talents={talents}
             clan={clan}
             weapon={weapon}
+            averageQuality={averageQuality}
+            setProgress={setProgress}
+            onOpenInventory={onOpenInventory}
           />
         </aside>
       </div>
@@ -3857,13 +3929,33 @@ function ProfileSummary({
   talents,
   clan,
   weapon,
+  averageQuality,
+  setProgress,
+  onOpenInventory,
 }: {
   hero: Hero
   inventory: Inventory
   talents: TalentTree | null
   clan: Clan | null
   weapon: InventoryItem | undefined
+  averageQuality: number
+  setProgress: Array<[string, number]>
+  onOpenInventory: () => void
 }) {
+  const developedTalents =
+    talents?.talents.filter((talent) => talent.rank > 0) ?? []
+  const rarityBreakdown = inventory.equipped.reduce((rarities, entry) => {
+    rarities.set(entry.item.rarity, (rarities.get(entry.item.rarity) ?? 0) + 1)
+    return rarities
+  }, new Map<string, number>())
+  const emptySlots = Math.max(0, 14 - inventory.equipped.length)
+  const maximumAttribute = Math.max(
+    inventory.totalDamage,
+    inventory.totalArmor,
+    inventory.totalHealth,
+    1,
+  )
+
   return (
     <>
       <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-ember">
@@ -3900,6 +3992,134 @@ function ProfileSummary({
         <ProfileStat label="Клан" value={clan?.name ?? '—'} />
       </dl>
 
+      <section className="mt-5 border-t border-border/70 pt-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-ember">
+            Спорядження
+          </p>
+          <span className="font-mono text-[0.62rem] text-muted-foreground">
+            {inventory.equipped.length}/14
+          </span>
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden bg-border/70">
+          <div
+            className="h-full bg-ember"
+            style={{ width: `${(inventory.equipped.length / 14) * 100}%` }}
+          />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-px bg-border/60">
+          <ProfileMiniMetric
+            label="Середня якість"
+            value={`${averageQuality}%`}
+          />
+          <ProfileMiniMetric label="Порожні слоти" value={emptySlots} />
+        </div>
+        {rarityBreakdown.size ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {Array.from(rarityBreakdown.entries())
+              .sort(
+                (left, right) =>
+                  (INVENTORY_RARITY_ORDER[right[0]] ?? -1) -
+                  (INVENTORY_RARITY_ORDER[left[0]] ?? -1),
+              )
+              .map(([rarity, count]) => (
+                <span
+                  key={rarity}
+                  className="border border-border/70 bg-background/40 px-2 py-1 font-mono text-[0.58rem] uppercase tracking-wider text-muted-foreground"
+                >
+                  {itemRarityName(rarity)} · {count}
+                </span>
+              ))}
+          </div>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onOpenInventory}
+          className="mt-3 h-9 w-full rounded-sm"
+        >
+          <Package aria-hidden="true" /> Відкрити інвентар
+        </Button>
+      </section>
+
+      <section className="mt-5 border-t border-border/70 pt-5">
+        <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
+          Розподіл сили
+        </p>
+        <div className="mt-3 space-y-3">
+          <AttributeBar
+            label="Здоров’я"
+            value={inventory.totalHealth}
+            maximum={maximumAttribute}
+          />
+          <AttributeBar
+            label="Атака"
+            value={inventory.totalDamage}
+            maximum={maximumAttribute}
+          />
+          <AttributeBar
+            label="Захист"
+            value={inventory.totalArmor}
+            maximum={maximumAttribute}
+          />
+        </div>
+      </section>
+
+      <section className="mt-5 border-t border-border/70 pt-5">
+        <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-ember">
+          Комплекти
+        </p>
+        {setProgress.length ? (
+          <div className="mt-3 space-y-2">
+            {setProgress.slice(0, 3).map(([name, count]) => (
+              <div
+                key={name}
+                className="flex items-center justify-between gap-3 border border-border/70 bg-background/35 px-3 py-2"
+              >
+                <span className="truncate text-xs">{name}</span>
+                <span className="font-mono text-xs text-ember">
+                  {count} реч.
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            Частини комплектів ще не екіпіровані.
+          </p>
+        )}
+      </section>
+
+      <section className="mt-5 border-t border-border/70 pt-5">
+        <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
+          Розвинені таланти
+        </p>
+        {developedTalents.length ? (
+          <div className="mt-3 space-y-2">
+            {developedTalents.slice(0, 4).map((talent) => (
+              <div
+                key={talent.type}
+                className="border border-border/70 bg-background/35 px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-xs font-medium">{talent.name}</p>
+                  <span className="font-mono text-[0.62rem] text-moss">
+                    {talent.rank}/{talent.maxRank}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-[0.68rem] leading-4 text-muted-foreground">
+                  {talent.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            Вкладіть перші очки, щоб відкрити постійні ефекти героя.
+          </p>
+        )}
+      </section>
+
       <div className="mt-6 border-t border-border/70 pt-5">
         <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
           Нагороди й відзнаки
@@ -3929,6 +4149,72 @@ function ProfileSummary({
         </div>
       </div>
     </>
+  )
+}
+
+function ProfileMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string | number
+  detail: string
+}) {
+  return (
+    <div className="min-w-0 border-b border-border/60 px-4 py-3 sm:border-r xl:border-b-0 last:border-r-0">
+      <dt className="font-mono text-[0.55rem] uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 truncate font-mono text-lg text-foreground">
+        {value}
+      </dd>
+      <p className="mt-0.5 truncate text-[0.65rem] text-muted-foreground">
+        {detail}
+      </p>
+    </div>
+  )
+}
+
+function ProfileMiniMetric({
+  label,
+  value,
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div className="bg-background/60 px-3 py-2.5">
+      <dt className="font-mono text-[0.52rem] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 font-mono text-sm text-foreground">{value}</dd>
+    </div>
+  )
+}
+
+function AttributeBar({
+  label,
+  value,
+  maximum,
+}: {
+  label: string
+  value: number
+  maximum: number
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-mono">{value}</span>
+      </div>
+      <div className="mt-1.5 h-1 overflow-hidden bg-border/70">
+        <div
+          className="h-full bg-moss"
+          style={{ width: `${Math.max(3, (value / maximum) * 100)}%` }}
+        />
+      </div>
+    </div>
   )
 }
 
