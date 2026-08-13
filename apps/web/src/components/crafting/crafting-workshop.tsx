@@ -5,6 +5,7 @@ import {
   FlaskConical,
   Hammer,
   PackageCheck,
+  RefreshCw,
   Search,
   Star,
 } from 'lucide-react'
@@ -24,6 +25,12 @@ const endpoint =
 const favoriteRecipesKey = 'veilfall.favorite-recipes'
 const craftingViewKey = 'veilfall.crafting-view'
 const recipesPerPage = 12
+const craftingStations: CraftingStation[] = [
+  'FORGE',
+  'ALCHEMY_TABLE',
+  'WORKSHOP',
+  'RITUAL_CIRCLE',
+]
 
 type CraftingStation = 'WORKSHOP' | 'ALCHEMY_TABLE' | 'FORGE' | 'RITUAL_CIRCLE'
 type RecipeAvailability = 'ALL' | 'AVAILABLE' | 'MISSING' | 'DISCOVERED'
@@ -100,6 +107,7 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [claimingAll, setClaimingAll] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     void executeCraftingQuery(`{ myCrafting { ${craftingFields} } }`).then(
@@ -150,6 +158,21 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
     return () => window.clearInterval(timer)
   }, [hasActiveJobs])
+
+  async function refreshCrafting() {
+    setRefreshing(true)
+    setError(null)
+    try {
+      const data = await executeCraftingQuery(
+        `{ myCrafting { ${craftingFields} } }`,
+      )
+      setCrafting(data.myCrafting)
+    } catch {
+      setError('Не вдалося оновити стан майстерні.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     if (!hasActiveJobs) return
@@ -265,6 +288,10 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
   const readyJobs = visibleJobs.filter(
     (job) => job.status === 'ACTIVE' && Date.parse(job.completesAt) <= now,
   )
+  const activeJobs = crafting.jobs.filter((job) => job.status === 'ACTIVE')
+  const completedJobs = crafting.jobs
+    .filter((job) => job.status === 'CLAIMED')
+    .slice(0, 8)
   const selectedRecipe =
     crafting.recipes.find((recipe) => recipe.id === selectedRecipeId) ??
     crafting.recipes[0]
@@ -284,6 +311,18 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
       (ingredient) =>
         ingredient.available >= ingredient.amount * selectedQuantity,
     ) ?? false
+  const missingIngredients = selectedRecipe
+    ? selectedRecipe.ingredients
+        .map((ingredient) => ({
+          ...ingredient,
+          required: ingredient.amount * selectedQuantity,
+          missing: Math.max(
+            0,
+            ingredient.amount * selectedQuantity - ingredient.available,
+          ),
+        }))
+        .filter((ingredient) => ingredient.missing > 0)
+    : []
   const query = recipeSearch.trim().toLocaleLowerCase('uk')
   const filteredRecipes = crafting.recipes.filter(
     (recipe) =>
@@ -412,6 +451,62 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
         }
       />
 
+      <GamePanel
+        eyebrow="Робочі місця"
+        title="Стан ремісничих станцій"
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => void refreshCrafting()}
+            className="h-8 rounded-sm text-xs"
+          >
+            <RefreshCw
+              className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`}
+            />
+            {refreshing ? 'Оновлюємо…' : 'Оновити'}
+          </Button>
+        }
+      >
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {craftingStations.map((station) => {
+            const job = activeJobs.find((entry) => entry.station === station)
+            const remaining = job
+              ? Math.max(
+                  0,
+                  Math.ceil((Date.parse(job.completesAt) - now) / 1_000),
+                )
+              : 0
+            return (
+              <article
+                key={station}
+                className="border border-border/70 bg-background/55 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-serif text-sm">{stationName(station)}</p>
+                  <span
+                    className={`font-mono text-[0.58rem] uppercase ${job ? 'text-ember' : 'text-moss'}`}
+                  >
+                    {job ? 'Зайнята' : 'Вільна'}
+                  </span>
+                </div>
+                <p className="mt-2 truncate text-xs text-muted-foreground">
+                  {job ? job.recipeName : 'Готова прийняти нову формулу'}
+                </p>
+                <p className="mt-2 font-mono text-[0.62rem]">
+                  {job
+                    ? remaining === 0
+                      ? 'Результат готовий'
+                      : formatDuration(remaining)
+                    : 'Без черги'}
+                </p>
+              </article>
+            )
+          })}
+        </div>
+      </GamePanel>
+
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_19rem]">
         <GamePanel
           id="crafting-workbench"
@@ -519,6 +614,26 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                           : 'Почати створення'}
                   </Button>
                 </div>
+                {missingIngredients.length > 0 ? (
+                  <div className="mt-3 border-l-2 border-destructive bg-destructive/5 px-3 py-2">
+                    <p className="font-mono text-[0.58rem] uppercase text-destructive">
+                      Не вистачає для партії
+                    </p>
+                    <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                      {missingIngredients.map((ingredient) => (
+                        <li
+                          key={ingredient.resourceType}
+                          className="flex justify-between gap-3"
+                        >
+                          <span>{ingredient.name}</span>
+                          <span className="font-mono text-destructive">
+                            −{ingredient.missing}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-col border border-ember/35 bg-background/55 p-3 text-center">
                 <div className="grid aspect-square place-items-center bg-[radial-gradient(circle,oklch(0.5_0.1_45/20%),transparent_65%)]">
@@ -655,6 +770,47 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
             />
           ))}
         </div>
+      </GamePanel>
+
+      <GamePanel eyebrow="Журнал майстерні" title="Завершені роботи">
+        {completedJobs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[42rem] text-left text-xs">
+              <thead className="font-mono text-[0.58rem] uppercase text-muted-foreground">
+                <tr className="border-b border-border/70">
+                  <th className="px-2 py-2 font-normal">Формула</th>
+                  <th className="px-2 py-2 font-normal">Станція</th>
+                  <th className="px-2 py-2 font-normal">Результат</th>
+                  <th className="px-2 py-2 font-normal">Партія</th>
+                  <th className="px-2 py-2 text-right font-normal">
+                    Завершено
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {completedJobs.map((job) => (
+                  <tr key={job.id} className="bg-background/35">
+                    <td className="px-2 py-2 font-medium">{job.recipeName}</td>
+                    <td className="px-2 py-2 text-muted-foreground">
+                      {stationName(job.station)}
+                    </td>
+                    <td className="px-2 py-2 text-ember">
+                      {job.outputAmount} × {job.outputName}
+                    </td>
+                    <td className="px-2 py-2 font-mono">{job.quantity}</td>
+                    <td className="px-2 py-2 text-right text-muted-foreground">
+                      {formatCraftDate(job.completesAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="border border-dashed border-border/70 p-5 text-center text-xs text-muted-foreground">
+            Завершені й отримані роботи з’являться у цьому журналі.
+          </p>
+        )}
       </GamePanel>
 
       <GamePanel
@@ -938,6 +1094,15 @@ function formatDuration(seconds: number): string {
   if (hours > 0) return `${hours}г ${minutes}хв`
   if (minutes > 0) return `${minutes}хв ${remainingSeconds}с`
   return `${remainingSeconds}с`
+}
+
+function formatCraftDate(value: string): string {
+  return new Intl.DateTimeFormat('uk-UA', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
 }
 
 async function executeCraftingQuery(
