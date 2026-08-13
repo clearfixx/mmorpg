@@ -194,13 +194,15 @@ describe('MarketService', () => {
 
     await service.buyListing('user', { listingId, idempotencyKey });
 
+    expect(tx.marketListing.updateMany).toHaveBeenCalledTimes(1);
     expect(tx.marketListing.updateMany).toHaveBeenCalledWith({
       where: { id: listingId, status: 'ACTIVE' },
-      data: expect.objectContaining({
+      data: {
         status: 'SOLD',
         buyerCharacterId: characterId,
         saleFee: 1,
-      }),
+        completedAt: expect.any(Date) as Date,
+      },
     });
     expect(tx.characterResource.updateMany).toHaveBeenCalledWith({
       where: {
@@ -228,15 +230,31 @@ describe('MarketService', () => {
       where: { id: itemId },
       data: { ownerId: characterId, location: ItemLocation.CHEST },
     });
-    expect(tx.resourceLedgerEntry.createMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.arrayContaining([
-          expect.objectContaining({
-            amount: -1,
-            reason: 'MARKET_SALE_FEE',
-          }),
-        ]),
-      }),
-    );
+    expect(tx.resourceLedgerEntry.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.resourceLedgerEntry.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          characterId,
+          type: ResourceType.VEIL_ECHO,
+          amount: -9,
+          reason: 'MARKET_PURCHASE',
+          referenceId: listingId,
+        },
+        {
+          characterId: sellerId,
+          type: ResourceType.VEIL_ECHO,
+          amount: 10,
+          reason: 'MARKET_SALE',
+          referenceId: listingId,
+        },
+        {
+          characterId: sellerId,
+          type: ResourceType.VEIL_ECHO,
+          amount: -1,
+          reason: 'MARKET_SALE_FEE',
+          referenceId: listingId,
+        },
+      ],
+    });
   });
 });
