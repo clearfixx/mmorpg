@@ -123,6 +123,11 @@ type EquipmentSlotKey =
 
 type InventoryCategory = 'ALL' | 'WEAPON' | 'ARMOR' | 'ACCESSORY'
 type InventorySort = 'POWER' | 'LEVEL' | 'RARITY' | 'NAME'
+type InventoryScope = 'ALL' | 'CHEST' | 'BACKPACK'
+type InventoryUsability = 'ALL' | 'USABLE' | 'LOCKED'
+
+const inventoryViewKey = 'veilfall.inventory-view'
+const inventoryItemsPerPage = 20
 
 const INVENTORY_RARITY_ORDER: Record<string, number> = {
   COMMON: 0,
@@ -2729,8 +2734,20 @@ function InventoryVault({
     useState<InventoryCategory>('ALL')
   const [inventoryRarity, setInventoryRarity] = useState('ALL')
   const [inventorySort, setInventorySort] = useState<InventorySort>('POWER')
+  const [inventoryScope, setInventoryScope] = useState<InventoryScope>('ALL')
+  const [inventoryUsability, setInventoryUsability] =
+    useState<InventoryUsability>('ALL')
+  const [inventoryPage, setInventoryPage] = useState(1)
+  const chestItemIds = new Set(inventory.chest.map((item) => item.id))
+  const backpackItemIds = new Set(inventory.backpack.map((item) => item.id))
   const search = inventorySearch.trim().toLocaleLowerCase('uk')
   const filteredLoot = loot
+    .filter(
+      (item) =>
+        inventoryScope === 'ALL' ||
+        (inventoryScope === 'CHEST' && chestItemIds.has(item.id)) ||
+        (inventoryScope === 'BACKPACK' && backpackItemIds.has(item.id)),
+    )
     .filter(
       (item) =>
         inventoryCategory === 'ALL' ||
@@ -2741,15 +2758,75 @@ function InventoryVault({
     )
     .filter(
       (item) =>
+        inventoryUsability === 'ALL' ||
+        (inventoryUsability === 'USABLE' && item.itemLevel <= hero.level) ||
+        (inventoryUsability === 'LOCKED' && item.itemLevel > hero.level),
+    )
+    .filter(
+      (item) =>
         !search ||
         item.name.toLocaleLowerCase('uk').includes(search) ||
         item.setName.toLocaleLowerCase('uk').includes(search),
     )
     .sort((left, right) => compareInventoryItems(left, right, inventorySort))
+  const inventoryPageCount = Math.max(
+    1,
+    Math.ceil(filteredLoot.length / inventoryItemsPerPage),
+  )
+  const currentInventoryPage = Math.min(inventoryPage, inventoryPageCount)
+  const pagedLoot = filteredLoot.slice(
+    (currentInventoryPage - 1) * inventoryItemsPerPage,
+    currentInventoryPage * inventoryItemsPerPage,
+  )
   const selectedItem =
     filteredLoot.find((item) => item.id === selectedItemId) ??
     filteredLoot[0] ??
     null
+
+  useEffect(() => {
+    const restore = window.setTimeout(() => {
+      try {
+        const stored = window.localStorage.getItem(inventoryViewKey)
+        if (!stored) return
+        const view = JSON.parse(stored) as {
+          category?: InventoryCategory
+          rarity?: string
+          sort?: InventorySort
+          scope?: InventoryScope
+          usability?: InventoryUsability
+        }
+        setInventoryCategory(view.category ?? 'ALL')
+        setInventoryRarity(view.rarity ?? 'ALL')
+        setInventorySort(view.sort ?? 'POWER')
+        setInventoryScope(view.scope ?? 'ALL')
+        setInventoryUsability(view.usability ?? 'ALL')
+      } catch {
+        window.localStorage.removeItem(inventoryViewKey)
+      }
+    }, 0)
+    return () => window.clearTimeout(restore)
+  }, [])
+
+  function updateInventoryView(next: {
+    category?: InventoryCategory
+    rarity?: string
+    sort?: InventorySort
+    scope?: InventoryScope
+    usability?: InventoryUsability
+  }) {
+    const current = {
+      category: inventoryCategory,
+      rarity: inventoryRarity,
+      sort: inventorySort,
+      scope: inventoryScope,
+      usability: inventoryUsability,
+    }
+    window.localStorage.setItem(
+      inventoryViewKey,
+      JSON.stringify({ ...current, ...next }),
+    )
+    setInventoryPage(1)
+  }
 
   return (
     <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
@@ -2798,14 +2875,20 @@ function InventoryVault({
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={inventorySearch}
-              onChange={(event) => setInventorySearch(event.target.value)}
+              onChange={(event) => {
+                setInventorySearch(event.target.value)
+                setInventoryPage(1)
+              }}
               placeholder="Пошук предмета або комплекту…"
               className="h-9 rounded-sm pl-9"
             />
           </label>
           <select
             value={inventoryRarity}
-            onChange={(event) => setInventoryRarity(event.target.value)}
+            onChange={(event) => {
+              setInventoryRarity(event.target.value)
+              updateInventoryView({ rarity: event.target.value })
+            }}
             aria-label="Рідкість предметів"
             className="h-9 border border-border/70 bg-background px-3 text-xs outline-none"
           >
@@ -2818,9 +2901,11 @@ function InventoryVault({
           </select>
           <select
             value={inventorySort}
-            onChange={(event) =>
-              setInventorySort(event.target.value as InventorySort)
-            }
+            onChange={(event) => {
+              const next = event.target.value as InventorySort
+              setInventorySort(next)
+              updateInventoryView({ sort: next })
+            }}
             aria-label="Сортування інвентарю"
             className="h-9 border border-border/70 bg-background px-3 text-xs outline-none"
           >
@@ -2829,6 +2914,54 @@ function InventoryVault({
             <option value="RARITY">За рідкістю</option>
             <option value="NAME">За назвою</option>
           </select>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-y border-border/60 py-2">
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ['ALL', `Усе · ${loot.length}`],
+                ['CHEST', `Сундук · ${inventory.chest.length}`],
+                ['BACKPACK', `Рюкзак · ${inventory.backpack.length}`],
+              ] as const
+            ).map(([scope, label]) => (
+              <Button
+                key={scope}
+                type="button"
+                variant={inventoryScope === scope ? 'secondary' : 'ghost'}
+                onClick={() => {
+                  setInventoryScope(scope)
+                  updateInventoryView({ scope })
+                }}
+                className="h-7 rounded-sm px-2 text-[0.65rem]"
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex gap-1">
+            {(
+              [
+                ['ALL', 'Усі рівні'],
+                ['USABLE', 'Можна вдягнути'],
+                ['LOCKED', 'Вище рівня'],
+              ] as const
+            ).map(([usability, label]) => (
+              <Button
+                key={usability}
+                type="button"
+                variant={
+                  inventoryUsability === usability ? 'secondary' : 'ghost'
+                }
+                onClick={() => {
+                  setInventoryUsability(usability)
+                  updateInventoryView({ usability })
+                }}
+                className="h-7 rounded-sm px-2 text-[0.65rem]"
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-1">
           {(
@@ -2843,7 +2976,10 @@ function InventoryVault({
               key={category}
               type="button"
               variant={inventoryCategory === category ? 'secondary' : 'outline'}
-              onClick={() => setInventoryCategory(category)}
+              onClick={() => {
+                setInventoryCategory(category)
+                updateInventoryView({ category })
+              }}
               className="h-8 rounded-none px-3 text-xs"
             >
               {label}
@@ -2875,7 +3011,7 @@ function InventoryVault({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-              {filteredLoot.map((item) => (
+              {pagedLoot.map((item) => (
                 <InventoryItemCard
                   key={item.id}
                   item={item}
@@ -2886,6 +3022,48 @@ function InventoryVault({
               ))}
             </div>
           )}
+          {filteredLoot.length > 0 ? (
+            <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
+              <span className="text-muted-foreground">
+                Показано{' '}
+                {(currentInventoryPage - 1) * inventoryItemsPerPage + 1}–
+                {Math.min(
+                  currentInventoryPage * inventoryItemsPerPage,
+                  filteredLoot.length,
+                )}{' '}
+                із {filteredLoot.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={currentInventoryPage === 1}
+                  onClick={() =>
+                    setInventoryPage((page) => Math.max(1, page - 1))
+                  }
+                  className="h-7 rounded-sm"
+                >
+                  Назад
+                </Button>
+                <span className="font-mono">
+                  {currentInventoryPage}/{inventoryPageCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={currentInventoryPage === inventoryPageCount}
+                  onClick={() =>
+                    setInventoryPage((page) =>
+                      Math.min(inventoryPageCount, page + 1),
+                    )
+                  }
+                  className="h-7 rounded-sm"
+                >
+                  Далі
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {error ? (
             <p
               role="alert"
@@ -2897,6 +3075,7 @@ function InventoryVault({
         </div>
         <aside className="border-t border-border/70 bg-background/35 p-4 lg:border-t-0 lg:border-l">
           <InventoryItemDetails
+            key={selectedItem?.id ?? 'empty'}
             hero={hero}
             item={selectedItem}
             equippedBySlot={equippedBySlot}
@@ -3004,6 +3183,12 @@ function InventoryItemDetails({
   pending: boolean
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
+  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlotKey | null>(
+    item?.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
+      item?.compatibleSlots[0] ??
+      null,
+  )
+
   if (!item)
     return (
       <div className="grid min-h-64 place-items-center text-center text-sm text-muted-foreground">
@@ -3011,9 +3196,7 @@ function InventoryItemDetails({
       </div>
     )
 
-  const targetSlot =
-    item.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
-    item.compatibleSlots[0]
+  const targetSlot = selectedSlot ?? item.compatibleSlots[0]
   const current = targetSlot ? equippedBySlot.get(targetSlot) : undefined
   const comparison = [
     ['Шкода', item.damage, current?.damage ?? 0],
@@ -3035,6 +3218,25 @@ function InventoryItemDetails({
       </p>
       <h2 className="mt-1 font-serif text-xl">{item.name}</h2>
       <p className="mt-1 text-xs text-muted-foreground">{item.setName}</p>
+      {item.compatibleSlots.length > 1 ? (
+        <label className="mt-3 block text-xs text-muted-foreground">
+          Слот екіпірування
+          <select
+            value={targetSlot ?? ''}
+            onChange={(event) =>
+              setSelectedSlot(event.target.value as EquipmentSlotKey)
+            }
+            className="mt-1 h-9 w-full border border-border/70 bg-background px-2 text-foreground outline-none"
+          >
+            {item.compatibleSlots.map((slot) => (
+              <option key={slot} value={slot}>
+                {EQUIPMENT_SLOT_NAMES[slot]}
+                {equippedBySlot.has(slot) ? ' · замінити' : ' · вільно'}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <dl className="mt-4 divide-y divide-border/60 border-y border-border/60 text-xs">
         {[
           ['Шкода', item.damage],
