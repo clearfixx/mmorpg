@@ -91,10 +91,17 @@ export function temperingAffordability(
   const stones = wallet.stones[quote.stoneGrade] ?? 0
   if (stones < quote.stoneAmount)
     missing.push(`${quote.stoneGrade}_STONE:${quote.stoneAmount - stones}`)
+  const resources = new Map<ResourceType, number>()
   for (const cost of [...quote.resources, ...quote.accelerationResources]) {
-    const available = wallet.resources[cost.resourceType] ?? 0
-    if (available < cost.amount)
-      missing.push(`${cost.resourceType}:${cost.amount - available}`)
+    resources.set(
+      cost.resourceType,
+      (resources.get(cost.resourceType) ?? 0) + cost.amount,
+    )
+  }
+  for (const [resourceType, amount] of resources) {
+    const available = wallet.resources[resourceType] ?? 0
+    if (available < amount)
+      missing.push(`${resourceType}:${amount - available}`)
   }
   return { affordable: missing.length === 0, missing }
 }
