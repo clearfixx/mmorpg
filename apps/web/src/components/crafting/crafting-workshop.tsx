@@ -22,8 +22,12 @@ import {
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const favoriteRecipesKey = 'veilfall.favorite-recipes'
+const craftingViewKey = 'veilfall.crafting-view'
+const recipesPerPage = 12
 
 type CraftingStation = 'WORKSHOP' | 'ALCHEMY_TABLE' | 'FORGE' | 'RITUAL_CIRCLE'
+type RecipeAvailability = 'ALL' | 'AVAILABLE' | 'MISSING' | 'DISCOVERED'
+type RecipeSort = 'NAME' | 'DURATION' | 'CRAFTABLE'
 
 interface CraftingRecipe {
   id: string
@@ -88,15 +92,11 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
   const [stationFilter, setStationFilter] = useState<CraftingStation | 'ALL'>(
     'ALL',
   )
-  const [favoriteRecipeIds, setFavoriteRecipeIds] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const stored = window.localStorage.getItem(favoriteRecipesKey)
-      return stored ? (JSON.parse(stored) as string[]) : []
-    } catch {
-      return []
-    }
-  })
+  const [availabilityFilter, setAvailabilityFilter] =
+    useState<RecipeAvailability>('ALL')
+  const [recipeSort, setRecipeSort] = useState<RecipeSort>('CRAFTABLE')
+  const [recipePage, setRecipePage] = useState(1)
+  const [favoriteRecipeIds, setFavoriteRecipeIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [claimingAll, setClaimingAll] = useState(false)
@@ -106,6 +106,40 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
       (data) => setCrafting(data.myCrafting),
       () => setError('Не вдалося відкрити майстерню.'),
     )
+  }, [])
+
+  useEffect(() => {
+    const restore = window.setTimeout(() => {
+      try {
+        const stored = window.localStorage.getItem(favoriteRecipesKey)
+        if (stored) setFavoriteRecipeIds(JSON.parse(stored) as string[])
+      } catch {
+        window.localStorage.removeItem(favoriteRecipesKey)
+      }
+    }, 0)
+    return () => window.clearTimeout(restore)
+  }, [])
+
+  useEffect(() => {
+    const restore = window.setTimeout(() => {
+      try {
+        const stored = window.localStorage.getItem(craftingViewKey)
+        if (!stored) return
+        const view = JSON.parse(stored) as {
+          selectedRecipeId?: string
+          stationFilter?: CraftingStation | 'ALL'
+          availabilityFilter?: RecipeAvailability
+          recipeSort?: RecipeSort
+        }
+        setSelectedRecipeId(view.selectedRecipeId ?? null)
+        setStationFilter(view.stationFilter ?? 'ALL')
+        setAvailabilityFilter(view.availabilityFilter ?? 'ALL')
+        setRecipeSort(view.recipeSort ?? 'CRAFTABLE')
+      } catch {
+        window.localStorage.removeItem(craftingViewKey)
+      }
+    }, 0)
+    return () => window.clearTimeout(restore)
   }, [])
 
   const hasActiveJobs =
@@ -254,12 +288,37 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
   const filteredRecipes = crafting.recipes.filter(
     (recipe) =>
       (stationFilter === 'ALL' || recipe.station === stationFilter) &&
+      (availabilityFilter === 'ALL' ||
+        (availabilityFilter === 'AVAILABLE' &&
+          recipe.affordable &&
+          recipe.stationAvailable) ||
+        (availabilityFilter === 'MISSING' && !recipe.affordable) ||
+        (availabilityFilter === 'DISCOVERED' && recipe.discovered)) &&
       (!query ||
         recipe.name.toLocaleLowerCase('uk').includes(query) ||
         recipe.description.toLocaleLowerCase('uk').includes(query) ||
         recipe.ingredients.some((ingredient) =>
           ingredient.name.toLocaleLowerCase('uk').includes(query),
         )),
+  )
+  const sortedRecipes = [...filteredRecipes].sort((left, right) => {
+    if (recipeSort === 'DURATION')
+      return left.durationSeconds - right.durationSeconds
+    if (recipeSort === 'CRAFTABLE') {
+      const leftScore = Number(left.affordable && left.stationAvailable)
+      const rightScore = Number(right.affordable && right.stationAvailable)
+      if (leftScore !== rightScore) return rightScore - leftScore
+    }
+    return left.name.localeCompare(right.name, 'uk')
+  })
+  const recipePageCount = Math.max(
+    1,
+    Math.ceil(sortedRecipes.length / recipesPerPage),
+  )
+  const currentRecipePage = Math.min(recipePage, recipePageCount)
+  const pagedRecipes = sortedRecipes.slice(
+    (currentRecipePage - 1) * recipesPerPage,
+    currentRecipePage * recipesPerPage,
   )
   const favoriteRecipes = favoriteRecipeIds
     .map((id) => crafting.recipes.find((recipe) => recipe.id === id))
@@ -279,6 +338,32 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
       window.localStorage.setItem(favoriteRecipesKey, JSON.stringify(next))
       return next
     })
+  }
+
+  function persistView(next: {
+    selectedRecipeId?: string | null
+    stationFilter?: CraftingStation | 'ALL'
+    availabilityFilter?: RecipeAvailability
+    recipeSort?: RecipeSort
+  }) {
+    const current = {
+      selectedRecipeId,
+      stationFilter,
+      availabilityFilter,
+      recipeSort,
+    }
+    window.localStorage.setItem(
+      craftingViewKey,
+      JSON.stringify({ ...current, ...next }),
+    )
+  }
+
+  function selectRecipe(recipeId: string) {
+    setSelectedRecipeId(recipeId)
+    persistView({ selectedRecipeId: recipeId })
+    document
+      .getElementById('crafting-workbench')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   return (
@@ -328,7 +413,11 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
       />
 
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_19rem]">
-        <GamePanel eyebrow="Робоче місце" title="Кузня формул">
+        <GamePanel
+          id="crafting-workbench"
+          eyebrow="Робоче місце"
+          title="Кузня формул"
+        >
           {selectedRecipe ? (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem]">
               <div>
@@ -560,7 +649,7 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
               recipe={recipe}
               compact
               selected={recipe.id === selectedRecipe?.id}
-              onSelect={() => setSelectedRecipeId(recipe.id)}
+              onSelect={() => selectRecipe(recipe.id)}
               favorite={favoriteRecipeIds.includes(recipe.id)}
               onToggleFavorite={() => toggleFavorite(recipe.id)}
             />
@@ -578,7 +667,10 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={recipeSearch}
-              onChange={(event) => setRecipeSearch(event.target.value)}
+              onChange={(event) => {
+                setRecipeSearch(event.target.value)
+                setRecipePage(1)
+              }}
               placeholder="Пошук за назвою, описом або інгредієнтом…"
               className="h-9 rounded-sm pl-9"
             />
@@ -597,7 +689,11 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                 key={station}
                 type="button"
                 variant={stationFilter === station ? 'secondary' : 'outline'}
-                onClick={() => setStationFilter(station)}
+                onClick={() => {
+                  setStationFilter(station)
+                  setRecipePage(1)
+                  persistView({ stationFilter: station })
+                }}
                 className="h-9 rounded-sm px-3 text-[0.65rem]"
               >
                 {station === 'ALL' ? 'Усі' : stationName(station)}
@@ -605,22 +701,102 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
             ))}
           </div>
         </div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-y border-border/60 py-2">
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ['ALL', 'Усі формули'],
+                ['AVAILABLE', 'Можна створити'],
+                ['MISSING', 'Бракує ресурсів'],
+                ['DISCOVERED', 'Особисті відкриття'],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                variant={availabilityFilter === value ? 'secondary' : 'ghost'}
+                onClick={() => {
+                  setAvailabilityFilter(value)
+                  setRecipePage(1)
+                  persistView({ availabilityFilter: value })
+                }}
+                className="h-7 rounded-sm px-2 text-[0.62rem]"
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-[0.65rem] text-muted-foreground">
+            Сортування
+            <select
+              value={recipeSort}
+              onChange={(event) => {
+                const next = event.target.value as RecipeSort
+                setRecipeSort(next)
+                setRecipePage(1)
+                persistView({ recipeSort: next })
+              }}
+              className="h-8 border border-border/70 bg-background px-2 text-foreground outline-none"
+            >
+              <option value="CRAFTABLE">Спочатку доступні</option>
+              <option value="NAME">За назвою</option>
+              <option value="DURATION">За часом</option>
+            </select>
+          </label>
+        </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {filteredRecipes.map((recipe) => (
+          {pagedRecipes.map((recipe) => (
             <RecipeChoiceCard
               key={recipe.id}
               recipe={recipe}
               selected={recipe.id === selectedRecipe?.id}
-              onSelect={() => setSelectedRecipeId(recipe.id)}
+              onSelect={() => selectRecipe(recipe.id)}
               favorite={favoriteRecipeIds.includes(recipe.id)}
               onToggleFavorite={() => toggleFavorite(recipe.id)}
             />
           ))}
         </div>
-        {filteredRecipes.length === 0 ? (
+        {sortedRecipes.length === 0 ? (
           <p className="border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
             Серед відомих формул нічого не знайдено.
           </p>
+        ) : null}
+        {sortedRecipes.length > 0 ? (
+          <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
+            <span className="text-muted-foreground">
+              Показано {(currentRecipePage - 1) * recipesPerPage + 1}–
+              {Math.min(
+                currentRecipePage * recipesPerPage,
+                sortedRecipes.length,
+              )}{' '}
+              із {sortedRecipes.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={currentRecipePage === 1}
+                onClick={() => setRecipePage((page) => Math.max(1, page - 1))}
+                className="h-7 rounded-sm"
+              >
+                Назад
+              </Button>
+              <span className="font-mono">
+                {currentRecipePage}/{recipePageCount}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={currentRecipePage === recipePageCount}
+                onClick={() =>
+                  setRecipePage((page) => Math.min(recipePageCount, page + 1))
+                }
+                className="h-7 rounded-sm"
+              >
+                Далі
+              </Button>
+            </div>
+          </div>
         ) : null}
       </GamePanel>
 
