@@ -2662,6 +2662,7 @@ function EquipmentScreen({
         error={error}
         onBack={onBack}
         onEquip={onEquip}
+        onUnequip={onUnequip}
       />
     )
 
@@ -2922,6 +2923,7 @@ function InventoryVault({
   error,
   onBack,
   onEquip,
+  onUnequip,
 }: {
   hero: Hero
   inventory: Inventory
@@ -2930,6 +2932,7 @@ function InventoryVault({
   error: string | null
   onBack: () => void
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
+  onUnequip: (slot: EquipmentSlotKey) => void
 }) {
   const equippedBySlot = new Map(
     inventory.equipped.map((entry) => [entry.slot, entry.item]),
@@ -3569,6 +3572,44 @@ function InventoryVault({
         />
       </div>
 
+      <details className="border-b border-border/70 bg-background/25" open>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 hover:bg-background/40 sm:px-5">
+          <span>
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-ember">
+              Споряджено на герої
+            </span>
+            <span className="ml-3 text-xs text-muted-foreground">
+              {inventory.equipped.length}/14 слотів
+            </span>
+          </span>
+          <span className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+            Керування слотами
+          </span>
+        </summary>
+        <div className="grid gap-px border-t border-border/60 bg-border/60 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+          {(Object.keys(EQUIPMENT_SLOT_NAMES) as EquipmentSlotKey[]).map(
+            (slot) => {
+              const item = equippedBySlot.get(slot)
+              const activeBonuses = item
+                ? inventory.activeSetBonuses.filter(
+                    (bonus) => bonus.setId === item.setId,
+                  ).length
+                : 0
+              return (
+                <EquippedInventorySlot
+                  key={slot}
+                  slot={slot}
+                  item={item}
+                  activeBonuses={activeBonuses}
+                  pending={pending}
+                  onUnequip={onUnequip}
+                />
+              )
+            },
+          )}
+        </div>
+      </details>
+
       <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 p-4 sm:p-5">
           {filteredLoot.length === 0 ? (
@@ -3698,6 +3739,59 @@ function InventoryVault({
         </aside>
       </div>
     </section>
+  )
+}
+
+function EquippedInventorySlot({
+  slot,
+  item,
+  activeBonuses,
+  pending,
+  onUnequip,
+}: {
+  slot: EquipmentSlotKey
+  item?: InventoryItem
+  activeBonuses: number
+  pending: boolean
+  onUnequip: (slot: EquipmentSlotKey) => void
+}) {
+  return (
+    <article className="min-w-0 bg-panel/85 p-2.5">
+      <p className="font-mono text-[0.5rem] uppercase tracking-wider text-muted-foreground">
+        {EQUIPMENT_SLOT_NAMES[slot]}
+      </p>
+      {item ? (
+        <>
+          <p className="mt-1 truncate text-xs" title={item.name}>
+            {item.name}
+          </p>
+          <div className="mt-1 flex items-center justify-between gap-2 font-mono text-[0.52rem]">
+            <span className="text-ember">{itemRarityName(item.rarity)}</span>
+            <span className="text-muted-foreground">
+              {inventoryItemPower(item)} сили
+            </span>
+          </div>
+          {activeBonuses > 0 ? (
+            <p className="mt-1 text-[0.55rem] text-moss">
+              Активних бонусів сету: {activeBonuses}
+            </p>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() => onUnequip(slot)}
+            className="mt-2 h-7 w-full rounded-sm text-[0.58rem] text-muted-foreground hover:text-destructive"
+          >
+            Зняти в сундук
+          </Button>
+        </>
+      ) : (
+        <div className="mt-2 grid min-h-16 place-items-center border border-dashed border-border/60 text-[0.58rem] text-muted-foreground">
+          Порожньо
+        </div>
+      )}
+    </article>
   )
 }
 
