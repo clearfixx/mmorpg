@@ -132,6 +132,7 @@ type InventoryDensity = 'COMFORTABLE' | 'COMPACT'
 const inventoryViewKey = 'veilfall.inventory-view'
 const favoriteItemsKey = 'veilfall.favorite-items'
 const inventoryItemsPerPage = 20
+const inventoryPageSizes = [12, 20, 40] as const
 
 const INVENTORY_RARITY_ORDER: Record<string, number> = {
   COMMON: 0,
@@ -2752,6 +2753,9 @@ function InventoryVault({
   const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [favoriteItemIds, setFavoriteItemIds] = useState<string[]>([])
   const [inventoryPage, setInventoryPage] = useState(1)
+  const [inventoryPageSize, setInventoryPageSize] = useState<number>(
+    inventoryItemsPerPage,
+  )
   const chestItemIds = new Set(inventory.chest.map((item) => item.id))
   const backpackItemIds = new Set(inventory.backpack.map((item) => item.id))
   const availableSets = [
@@ -2800,12 +2804,12 @@ function InventoryVault({
     })
   const inventoryPageCount = Math.max(
     1,
-    Math.ceil(filteredLoot.length / inventoryItemsPerPage),
+    Math.ceil(filteredLoot.length / inventoryPageSize),
   )
   const currentInventoryPage = Math.min(inventoryPage, inventoryPageCount)
   const pagedLoot = filteredLoot.slice(
-    (currentInventoryPage - 1) * inventoryItemsPerPage,
-    currentInventoryPage * inventoryItemsPerPage,
+    (currentInventoryPage - 1) * inventoryPageSize,
+    currentInventoryPage * inventoryPageSize,
   )
   const selectedItem =
     filteredLoot.find((item) => item.id === selectedItemId) ??
@@ -2817,6 +2821,45 @@ function InventoryVault({
       count: filteredLoot.filter((item) => item.rarity === rarity).length,
     }))
     .filter((entry) => entry.count > 0)
+  const activeFilterLabels = [
+    inventorySearch ? `Пошук: ${inventorySearch}` : null,
+    inventoryScope !== 'ALL'
+      ? inventoryScope === 'CHEST'
+        ? 'Сундук'
+        : 'Рюкзак'
+      : null,
+    inventoryCategory !== 'ALL'
+      ? inventoryCategory === 'WEAPON'
+        ? 'Зброя'
+        : inventoryCategory === 'ARMOR'
+          ? 'Броня'
+          : 'Аксесуари'
+      : null,
+    inventoryRarity !== 'ALL' ? itemRarityName(inventoryRarity) : null,
+    inventoryUsability !== 'ALL'
+      ? inventoryUsability === 'USABLE'
+        ? 'Доступні за рівнем'
+        : 'Вище рівня'
+      : null,
+    inventorySet !== 'ALL' ? inventorySet : null,
+    minimumLevel > 1 || maximumLevel < 99
+      ? `Рівні ${minimumLevel}–${maximumLevel}`
+      : null,
+    minimumQuality > 0 ? `Якість від ${minimumQuality}%` : null,
+    favoriteOnly ? 'Лише обрані' : null,
+  ].filter((label): label is string => Boolean(label))
+  const favoriteCount = loot.filter((item) =>
+    favoriteItemIds.includes(item.id),
+  ).length
+  const selectedSetProgress = selectedItem?.setName
+    ? {
+        owned: loot.filter((item) => item.setName === selectedItem.setName)
+          .length,
+        equipped: inventory.equipped.filter(
+          (entry) => entry.item.setName === selectedItem.setName,
+        ).length,
+      }
+    : null
 
   useEffect(() => {
     const restore = window.setTimeout(() => {
@@ -2837,6 +2880,7 @@ function InventoryVault({
           minimumQuality?: number
           favoriteOnly?: boolean
           selectedItemId?: string
+          pageSize?: number
         }
         setInventoryCategory(view.category ?? 'ALL')
         setInventoryRarity(view.rarity ?? 'ALL')
@@ -2851,6 +2895,13 @@ function InventoryVault({
         setMinimumQuality(view.minimumQuality ?? 0)
         setFavoriteOnly(view.favoriteOnly ?? false)
         setSelectedItemId(view.selectedItemId ?? null)
+        setInventoryPageSize(
+          inventoryPageSizes.includes(
+            view.pageSize as (typeof inventoryPageSizes)[number],
+          )
+            ? (view.pageSize as number)
+            : inventoryItemsPerPage,
+        )
       } catch {
         window.localStorage.removeItem(inventoryViewKey)
       }
@@ -2884,6 +2935,7 @@ function InventoryVault({
     minimumQuality?: number
     favoriteOnly?: boolean
     selectedItemId?: string | null
+    pageSize?: number
   }) {
     const current = {
       category: inventoryCategory,
@@ -2899,6 +2951,7 @@ function InventoryVault({
       minimumQuality,
       favoriteOnly,
       selectedItemId,
+      pageSize: inventoryPageSize,
     }
     window.localStorage.setItem(
       inventoryViewKey,
@@ -2944,6 +2997,17 @@ function InventoryVault({
       minimumQuality: 0,
       favoriteOnly: false,
     })
+  }
+
+  function selectRelativeItem(offset: number) {
+    if (!selectedItem || filteredLoot.length < 2) return
+    const currentIndex = filteredLoot.findIndex(
+      (item) => item.id === selectedItem.id,
+    )
+    const nextIndex =
+      (currentIndex + offset + filteredLoot.length) % filteredLoot.length
+    selectInventoryItem(filteredLoot[nextIndex]!.id)
+    setInventoryPage(Math.floor(nextIndex / inventoryPageSize) + 1)
   }
 
   return (
@@ -3000,6 +3064,19 @@ function InventoryVault({
               placeholder="Пошук предмета або комплекту…"
               className="h-9 rounded-sm pl-9"
             />
+            {inventorySearch ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setInventorySearch('')
+                  setInventoryPage(1)
+                }}
+                aria-label="Очистити пошук"
+                className="absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                ×
+              </button>
+            ) : null}
           </label>
           <select
             value={inventoryRarity}
@@ -3237,9 +3314,32 @@ function InventoryVault({
             </div>
           </div>
         </details>
+        {activeFilterLabels.length > 0 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1">
+            <span className="mr-1 font-mono text-[0.55rem] uppercase text-muted-foreground">
+              Активні:
+            </span>
+            {activeFilterLabels.map((label) => (
+              <span
+                key={label}
+                className="border border-ember/25 bg-ember/5 px-2 py-1 text-[0.62rem] text-ember"
+              >
+                {label}
+              </span>
+            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={resetInventoryFilters}
+              className="h-7 rounded-sm px-2 text-[0.62rem]"
+            >
+              Скинути все
+            </Button>
+          </div>
+        ) : null}
       </div>
 
-      <div className="grid gap-px border-b border-border/70 bg-border/60 sm:grid-cols-3">
+      <div className="grid gap-px border-b border-border/70 bg-border/60 sm:grid-cols-4">
         <InventoryInsight label="Знайдено" value={filteredLoot.length} />
         <InventoryInsight
           label="Сумарна сила"
@@ -3255,6 +3355,10 @@ function InventoryVault({
               .map((entry) => `${itemRarityName(entry.rarity)}: ${entry.count}`)
               .join(' · ') || '—'
           }
+        />
+        <InventoryInsight
+          label="Обрані"
+          value={`${favoriteCount}/${loot.length}`}
         />
       </div>
 
@@ -3296,6 +3400,7 @@ function InventoryVault({
                   scope={chestItemIds.has(item.id) ? 'CHEST' : 'BACKPACK'}
                   favorite={favoriteItemIds.includes(item.id)}
                   compact={inventoryDensity === 'COMPACT'}
+                  heroLevel={hero.level}
                   onSelect={() => selectInventoryItem(item.id)}
                   onToggleFavorite={() => toggleFavoriteItem(item.id)}
                 />
@@ -3305,15 +3410,31 @@ function InventoryVault({
           {filteredLoot.length > 0 ? (
             <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-xs">
               <span className="text-muted-foreground">
-                Показано{' '}
-                {(currentInventoryPage - 1) * inventoryItemsPerPage + 1}–
+                Показано {(currentInventoryPage - 1) * inventoryPageSize + 1}–
                 {Math.min(
-                  currentInventoryPage * inventoryItemsPerPage,
+                  currentInventoryPage * inventoryPageSize,
                   filteredLoot.length,
                 )}{' '}
                 із {filteredLoot.length}
               </span>
               <div className="flex items-center gap-2">
+                <select
+                  value={inventoryPageSize}
+                  onChange={(event) => {
+                    const next = Number(event.target.value)
+                    setInventoryPageSize(next)
+                    setInventoryPage(1)
+                    updateInventoryView({ pageSize: next })
+                  }}
+                  aria-label="Предметів на сторінці"
+                  className="h-7 border border-border/70 bg-background px-2 text-xs outline-none"
+                >
+                  {inventoryPageSizes.map((size) => (
+                    <option key={size} value={size}>
+                      {size} на сторінці
+                    </option>
+                  ))}
+                </select>
                 <Button
                   type="button"
                   variant="outline"
@@ -3361,6 +3482,9 @@ function InventoryVault({
             equippedBySlot={equippedBySlot}
             pending={pending}
             onEquip={onEquip}
+            setProgress={selectedSetProgress}
+            onPrevious={() => selectRelativeItem(-1)}
+            onNext={() => selectRelativeItem(1)}
           />
         </aside>
       </div>
@@ -3375,6 +3499,7 @@ function InventoryItemCard({
   scope,
   favorite,
   compact,
+  heroLevel,
   onSelect,
   onToggleFavorite,
 }: {
@@ -3384,6 +3509,7 @@ function InventoryItemCard({
   scope: Exclude<InventoryScope, 'ALL'>
   favorite: boolean
   compact: boolean
+  heroLevel: number
   onSelect: () => void
   onToggleFavorite: () => void
 }) {
@@ -3396,9 +3522,13 @@ function InventoryItemCard({
     ['ARM', item.armor - (current?.armor ?? 0)],
     ['HP', item.health - (current?.health ?? 0)],
   ] as const
+  const totalDelta = statDeltas.reduce((sum, [, delta]) => sum + delta, 0)
 
   return (
     <article
+      role="button"
+      aria-pressed={selected}
+      aria-label={`${item.name}, ${itemRarityName(item.rarity)}, ${item.itemLevel} рівень`}
       tabIndex={0}
       onMouseEnter={onSelect}
       onFocus={onSelect}
@@ -3433,6 +3563,24 @@ function InventoryItemCard({
             {item.setName}
           </p>
         </div>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[0.58rem]">
+        <span
+          className={
+            item.itemLevel <= heroLevel ? 'text-moss' : 'text-destructive'
+          }
+        >
+          {item.itemLevel <= heroLevel
+            ? 'Можна вдягнути'
+            : `Потрібен ${item.itemLevel} рівень`}
+        </span>
+        <span className={`font-mono ${deltaColor(totalDelta)}`}>
+          {totalDelta > 0
+            ? 'Покращення'
+            : totalDelta < 0
+              ? 'Слабше'
+              : 'Рівноцінне'}
+        </span>
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-[0.65rem]">
         {[
@@ -3498,12 +3646,18 @@ function InventoryItemDetails({
   equippedBySlot,
   pending,
   onEquip,
+  setProgress,
+  onPrevious,
+  onNext,
 }: {
   hero: Hero
   item: InventoryItem | null
   equippedBySlot: ReadonlyMap<EquipmentSlotKey, InventoryItem>
   pending: boolean
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
+  setProgress: { owned: number; equipped: number } | null
+  onPrevious: () => void
+  onNext: () => void
 }) {
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlotKey | null>(
     item?.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
@@ -3540,6 +3694,50 @@ function InventoryItemDetails({
       </p>
       <h2 className="mt-1 font-serif text-xl">{item.name}</h2>
       <p className="mt-1 text-xs text-muted-foreground">{item.setName}</p>
+      <div className="mt-3 flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onPrevious}
+          className="h-7 flex-1 rounded-sm text-[0.62rem]"
+        >
+          ← Попередній
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onNext}
+          className="h-7 flex-1 rounded-sm text-[0.62rem]"
+        >
+          Наступний →
+        </Button>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-[0.62rem]">
+        <div className="bg-background/70 p-2">
+          <dt className="text-muted-foreground">Прив’язка</dt>
+          <dd className="mt-1">{itemBindingName(item.binding)}</dd>
+        </div>
+        <div className="bg-background/70 p-2">
+          <dt className="text-muted-foreground">Сила</dt>
+          <dd className="mt-1 font-mono">{inventoryItemPower(item)}</dd>
+        </div>
+      </dl>
+      {setProgress ? (
+        <div className="mt-3 border border-border/60 bg-background/45 p-3 text-xs">
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Комплект</span>
+            <span>{item.setName}</span>
+          </div>
+          <div className="mt-2 flex justify-between gap-2">
+            <span className="text-muted-foreground">У сховищі</span>
+            <span className="font-mono">{setProgress.owned}</span>
+          </div>
+          <div className="mt-1 flex justify-between gap-2">
+            <span className="text-muted-foreground">Екіпіровано</span>
+            <span className="font-mono text-moss">{setProgress.equipped}</span>
+          </div>
+        </div>
+      ) : null}
       {item.compatibleSlots.length > 1 ? (
         <label className="mt-3 block text-xs text-muted-foreground">
           Слот екіпірування
@@ -3599,6 +3797,36 @@ function InventoryItemDetails({
               )
             })}
           </dl>
+        </div>
+      ) : null}
+      {item.compatibleSlots.length > 1 ? (
+        <div className="mt-3 border-t border-border/60 pt-3">
+          <p className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+            Порівняння сумісних слотів
+          </p>
+          <div className="mt-2 space-y-1">
+            {item.compatibleSlots.map((slot) => {
+              const equipped = equippedBySlot.get(slot)
+              const delta =
+                inventoryItemPower(item) -
+                (equipped ? inventoryItemPower(equipped) : 0)
+              return (
+                <button
+                  key={slot}
+                  type="button"
+                  onClick={() => setSelectedSlot(slot)}
+                  className={`grid w-full grid-cols-[1fr_auto] gap-2 border px-2 py-1.5 text-left text-xs ${targetSlot === slot ? 'border-ember/60 bg-ember/5' : 'border-border/50'}`}
+                >
+                  <span>
+                    {EQUIPMENT_SLOT_NAMES[slot]} · {equipped?.name ?? 'вільно'}
+                  </span>
+                  <span className={`font-mono ${deltaColor(delta)}`}>
+                    {formatDelta(delta)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       ) : null}
       <Button
@@ -4175,6 +4403,17 @@ function inventoryItemCategory(item: InventoryItem): InventoryCategory {
 
 function inventoryItemPower(item: InventoryItem): number {
   return item.damage + item.armor + item.health
+}
+
+function itemBindingName(value: string): string {
+  return (
+    {
+      UNBOUND: 'Не прив’язаний',
+      BIND_ON_EQUIP: 'Прив’яжеться при екіпіруванні',
+      BOUND: 'Прив’язаний до героя',
+      ACCOUNT_BOUND: 'Прив’язаний до облікового запису',
+    }[value] ?? value
+  )
 }
 
 function compareInventoryItems(
