@@ -1,6 +1,13 @@
 'use client'
 
-import { ArrowLeft, FlaskConical, Hammer, PackageCheck } from 'lucide-react'
+import {
+  ArrowLeft,
+  FlaskConical,
+  Hammer,
+  PackageCheck,
+  Search,
+  Star,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +21,7 @@ import {
 
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
+const favoriteRecipesKey = 'veilfall.favorite-recipes'
 
 type CraftingStation = 'WORKSHOP' | 'ALCHEMY_TABLE' | 'FORGE' | 'RITUAL_CIRCLE'
 
@@ -76,8 +84,22 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
+  const [recipeSearch, setRecipeSearch] = useState('')
+  const [stationFilter, setStationFilter] = useState<CraftingStation | 'ALL'>(
+    'ALL',
+  )
+  const [favoriteRecipeIds, setFavoriteRecipeIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = window.localStorage.getItem(favoriteRecipesKey)
+      return stored ? (JSON.parse(stored) as string[]) : []
+    } catch {
+      return []
+    }
+  })
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [claimingAll, setClaimingAll] = useState(false)
 
   useEffect(() => {
     void executeCraftingQuery(`{ myCrafting { ${craftingFields} } }`).then(
@@ -93,6 +115,16 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
     if (!hasActiveJobs) return
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
     return () => window.clearInterval(timer)
+  }, [hasActiveJobs])
+
+  useEffect(() => {
+    if (!hasActiveJobs) return
+    const refresh = window.setInterval(() => {
+      void executeCraftingQuery(`{ myCrafting { ${craftingFields} } }`).then(
+        (data) => setCrafting(data.myCrafting),
+      )
+    }, 15_000)
+    return () => window.clearInterval(refresh)
   }, [hasActiveJobs])
 
   async function startCraft(recipe: CraftingRecipe) {
@@ -143,6 +175,33 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
     }
   }
 
+  async function claimAllReady(jobs: CraftJob[]) {
+    setClaimingAll(true)
+    setError(null)
+    try {
+      let latest: CraftingState | null = null
+      for (const job of jobs) {
+        const data = await executeCraftingQuery(
+          `mutation Claim($input: ClaimCraftInput!) {
+            claimCraft(input: $input) { ${craftingFields} }
+          }`,
+          {
+            input: {
+              craftJobId: job.id,
+              idempotencyKey: crypto.randomUUID(),
+            },
+          },
+        )
+        latest = data.claimCraft
+      }
+      if (latest) setCrafting(latest)
+    } catch {
+      setError('Не всі готові результати вдалося забрати. Оновіть чергу.')
+    } finally {
+      setClaimingAll(false)
+    }
+  }
+
   if (!crafting)
     return (
       <section className="mt-8 border-t border-border/70 pt-7">
@@ -169,17 +228,58 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
     (job) =>
       job.status === 'ACTIVE' || now - Date.parse(job.startedAt) < 86_400_000,
   )
+  const readyJobs = visibleJobs.filter(
+    (job) => job.status === 'ACTIVE' && Date.parse(job.completesAt) <= now,
+  )
   const selectedRecipe =
     crafting.recipes.find((recipe) => recipe.id === selectedRecipeId) ??
     crafting.recipes[0]
   const selectedQuantity = selectedRecipe
     ? (quantities[selectedRecipe.id] ?? 1)
     : 1
+  const selectedMaxQuantity = selectedRecipe
+    ? Math.min(
+        100,
+        ...selectedRecipe.ingredients.map((ingredient) =>
+          Math.floor(ingredient.available / ingredient.amount),
+        ),
+      )
+    : 0
   const canCraftSelected =
     selectedRecipe?.ingredients.every(
       (ingredient) =>
         ingredient.available >= ingredient.amount * selectedQuantity,
     ) ?? false
+  const query = recipeSearch.trim().toLocaleLowerCase('uk')
+  const filteredRecipes = crafting.recipes.filter(
+    (recipe) =>
+      (stationFilter === 'ALL' || recipe.station === stationFilter) &&
+      (!query ||
+        recipe.name.toLocaleLowerCase('uk').includes(query) ||
+        recipe.description.toLocaleLowerCase('uk').includes(query) ||
+        recipe.ingredients.some((ingredient) =>
+          ingredient.name.toLocaleLowerCase('uk').includes(query),
+        )),
+  )
+  const favoriteRecipes = favoriteRecipeIds
+    .map((id) => crafting.recipes.find((recipe) => recipe.id === id))
+    .filter((recipe): recipe is CraftingRecipe => Boolean(recipe))
+  const quickRecipes = [
+    ...favoriteRecipes,
+    ...crafting.recipes.filter(
+      (recipe) => !favoriteRecipeIds.includes(recipe.id),
+    ),
+  ].slice(0, 4)
+
+  function toggleFavorite(recipeId: string) {
+    setFavoriteRecipeIds((current) => {
+      const next = current.includes(recipeId)
+        ? current.filter((id) => id !== recipeId)
+        : [...current, recipeId].slice(-4)
+      window.localStorage.setItem(favoriteRecipesKey, JSON.stringify(next))
+      return next
+    })
+  }
 
   return (
     <section className={`mt-3 ${gameUi.pageGap}`}>
@@ -279,7 +379,7 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                     )
                   })}
                 </div>
-                <div className="mt-4 grid grid-cols-[5rem_1fr] gap-2">
+                <div className="mt-4 grid grid-cols-[5rem_auto_1fr] gap-2">
                   <Input
                     type="number"
                     min={1}
@@ -297,6 +397,20 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                     aria-label={`Кількість для рецепта ${selectedRecipe.name}`}
                     className="h-9 rounded-sm font-mono"
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={selectedMaxQuantity < 1}
+                    onClick={() =>
+                      setQuantities((current) => ({
+                        ...current,
+                        [selectedRecipe.id]: selectedMaxQuantity,
+                      }))
+                    }
+                    className="h-9 rounded-sm text-xs"
+                  >
+                    Макс. {selectedMaxQuantity}
+                  </Button>
                   <Button
                     type="button"
                     disabled={
@@ -331,6 +445,9 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                 <p className="mt-1 font-mono text-[0.62rem] text-ember">
                   {selectedRecipe.outputAmount * selectedQuantity} шт.
                 </p>
+                <p className="mt-2 text-[0.62rem] text-muted-foreground">
+                  Доступно створити: {selectedMaxQuantity}
+                </p>
                 <p className="mt-auto pt-4 font-mono text-[0.62rem] text-muted-foreground">
                   {formatDuration(
                     selectedRecipe.durationSeconds * selectedQuantity,
@@ -345,6 +462,21 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
           <GamePanel
             eyebrow="Черга"
             title={`Створення · ${visibleJobs.length}/4`}
+            action={
+              readyJobs.length > 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={claimingAll}
+                  onClick={() => void claimAllReady(readyJobs)}
+                  className="h-7 rounded-sm text-[0.62rem]"
+                >
+                  {claimingAll
+                    ? 'Отримуємо…'
+                    : `Забрати всі · ${readyJobs.length}`}
+                </Button>
+              ) : null
+            }
           >
             <div className="space-y-2">
               {visibleJobs.length ? (
@@ -354,6 +486,17 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                     Math.ceil((Date.parse(job.completesAt) - now) / 1_000),
                   )
                   const ready = job.status === 'ACTIVE' && remaining === 0
+                  const totalDuration = Math.max(
+                    1,
+                    Date.parse(job.completesAt) - Date.parse(job.startedAt),
+                  )
+                  const progress = Math.min(
+                    100,
+                    Math.max(
+                      0,
+                      ((now - Date.parse(job.startedAt)) / totalDuration) * 100,
+                    ),
+                  )
                   return (
                     <article
                       key={job.id}
@@ -370,6 +513,12 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
                         >
                           {ready ? 'Готово' : formatDuration(remaining)}
                         </span>
+                      </div>
+                      <div className="mt-2 h-1 overflow-hidden bg-border/60">
+                        <div
+                          className={`h-full ${ready ? 'bg-moss' : 'bg-ember'}`}
+                          style={{ width: `${progress}%` }}
+                        />
                       </div>
                       <Button
                         type="button"
@@ -405,13 +554,15 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
 
       <GamePanel eyebrow="Швидкий доступ" title="Обрані формули">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {crafting.recipes.slice(0, 4).map((recipe) => (
+          {quickRecipes.map((recipe) => (
             <RecipeChoiceCard
               key={recipe.id}
               recipe={recipe}
               compact
               selected={recipe.id === selectedRecipe?.id}
               onSelect={() => setSelectedRecipeId(recipe.id)}
+              favorite={favoriteRecipeIds.includes(recipe.id)}
+              onToggleFavorite={() => toggleFavorite(recipe.id)}
             />
           ))}
         </div>
@@ -422,16 +573,55 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
         eyebrow="Відомі знання"
         title="Книга рецептів"
       >
+        <div className="mb-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={recipeSearch}
+              onChange={(event) => setRecipeSearch(event.target.value)}
+              placeholder="Пошук за назвою, описом або інгредієнтом…"
+              className="h-9 rounded-sm pl-9"
+            />
+          </label>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                'ALL',
+                'FORGE',
+                'ALCHEMY_TABLE',
+                'WORKSHOP',
+                'RITUAL_CIRCLE',
+              ] as const
+            ).map((station) => (
+              <Button
+                key={station}
+                type="button"
+                variant={stationFilter === station ? 'secondary' : 'outline'}
+                onClick={() => setStationFilter(station)}
+                className="h-9 rounded-sm px-3 text-[0.65rem]"
+              >
+                {station === 'ALL' ? 'Усі' : stationName(station)}
+              </Button>
+            ))}
+          </div>
+        </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {crafting.recipes.map((recipe) => (
+          {filteredRecipes.map((recipe) => (
             <RecipeChoiceCard
               key={recipe.id}
               recipe={recipe}
               selected={recipe.id === selectedRecipe?.id}
               onSelect={() => setSelectedRecipeId(recipe.id)}
+              favorite={favoriteRecipeIds.includes(recipe.id)}
+              onToggleFavorite={() => toggleFavorite(recipe.id)}
             />
           ))}
         </div>
+        {filteredRecipes.length === 0 ? (
+          <p className="border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
+            Серед відомих формул нічого не знайдено.
+          </p>
+        ) : null}
       </GamePanel>
 
       <div className="grid gap-2 md:grid-cols-3">
@@ -471,11 +661,15 @@ function RecipeChoiceCard({
   selected,
   compact = false,
   onSelect,
+  favorite,
+  onToggleFavorite,
 }: {
   recipe: CraftingRecipe
   selected: boolean
   compact?: boolean
   onSelect: () => void
+  favorite: boolean
+  onToggleFavorite: () => void
 }) {
   return (
     <article
@@ -489,9 +683,25 @@ function RecipeChoiceCard({
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col p-3">
-        <p className="font-mono text-[0.55rem] uppercase text-ember">
-          {stationName(recipe.station)}
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-mono text-[0.55rem] uppercase text-ember">
+            {stationName(recipe.station)}
+          </p>
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            aria-label={
+              favorite
+                ? 'Прибрати зі швидкого доступу'
+                : 'Додати до швидкого доступу'
+            }
+            className="text-muted-foreground transition hover:text-ember"
+          >
+            <Star
+              className={`size-4 ${favorite ? 'fill-ember text-ember' : ''}`}
+            />
+          </button>
+        </div>
         <h3 className="mt-1 font-serif text-sm">{recipe.name}</h3>
         {!compact ? (
           <p className="mt-1 line-clamp-2 text-[0.65rem] leading-4 text-muted-foreground">
