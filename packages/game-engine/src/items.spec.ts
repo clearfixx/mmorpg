@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ITEM_RARITIES,
+  activeEquipmentSetBonuses,
   equipmentDropChancePercent,
   itemDamageRange,
   itemLevelForReward,
@@ -9,6 +10,7 @@ import {
   rarityForRoll,
   rollItemPower,
   shouldDropEquipment,
+  sumEquipmentWithSetBonuses,
   sumEquipmentStats,
 } from './items'
 
@@ -66,6 +68,31 @@ describe('item power', () => {
         { damage: 3, armor: 2 },
       ]),
     ).toEqual({ damage: 15, armor: 10, health: 25 })
+  })
+
+  it('unlocks cumulative Veteran milestones without counting unknown sets', () => {
+    const items = Array.from({ length: 6 }, () => ({
+      setId: 'veteran',
+      damage: 2,
+      armor: 3,
+      health: 4,
+    }))
+    expect(activeEquipmentSetBonuses(items)).toMatchObject([
+      { setId: 'veteran', requiredPieces: 2, armor: 8 },
+      { setId: 'veteran', requiredPieces: 4, health: 45 },
+      { setId: 'veteran', requiredPieces: 6, damage: 10 },
+    ])
+    expect(
+      activeEquipmentSetBonuses([{ setId: 'unknown', damage: 999 }]),
+    ).toEqual([])
+  })
+
+  it('adds active set bonuses to equipped item statistics', () => {
+    expect(
+      sumEquipmentWithSetBonuses([
+        { setId: 'veil-warden', damage: 70, armor: 55, health: 220 },
+      ]),
+    ).toEqual({ damage: 82, armor: 65, health: 270 })
   })
 
   it('guarantees onboarding and milestone drops but rolls ordinary fights', () => {

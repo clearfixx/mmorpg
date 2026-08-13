@@ -29,6 +29,18 @@ export class EquippedItemModel {
 }
 
 @ObjectType()
+export class ActiveSetBonusModel {
+  @Field() setId!: string;
+  @Field() setName!: string;
+  @Field(() => Int) equippedPieces!: number;
+  @Field(() => Int) requiredPieces!: number;
+  @Field() name!: string;
+  @Field(() => Int) damage!: number;
+  @Field(() => Int) armor!: number;
+  @Field(() => Int) health!: number;
+}
+
+@ObjectType()
 export class InventoryModel {
   @Field(() => Int) characterVersion!: number;
   @Field(() => Int) baseDamage!: number;
@@ -40,6 +52,7 @@ export class InventoryModel {
   @Field(() => [InventoryItemModel]) chest!: InventoryItemModel[];
   @Field(() => [InventoryItemModel]) backpack!: InventoryItemModel[];
   @Field(() => [EquippedItemModel]) equipped!: EquippedItemModel[];
+  @Field(() => [ActiveSetBonusModel]) activeSetBonuses!: ActiveSetBonusModel[];
   @Field(() => String, { nullable: true }) mainHandVisualAssetId!:
     string | null;
 }

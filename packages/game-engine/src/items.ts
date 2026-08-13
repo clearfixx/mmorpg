@@ -55,6 +55,74 @@ export interface EquipmentStats {
   health: number
 }
 
+export interface EquipmentSetItem extends Partial<EquipmentStats> {
+  setId?: string | null
+}
+
+export interface ActiveSetBonus extends EquipmentStats {
+  setId: string
+  setName: string
+  equippedPieces: number
+  requiredPieces: number
+  name: string
+}
+
+interface SetBonusDefinition extends EquipmentStats {
+  requiredPieces: number
+  name: string
+}
+
+const EQUIPMENT_SET_BONUSES: Record<
+  string,
+  { name: string; bonuses: readonly SetBonusDefinition[] }
+> = {
+  veteran: {
+    name: 'Ветеран',
+    bonuses: [
+      {
+        requiredPieces: 2,
+        name: 'Загартована пара',
+        damage: 0,
+        armor: 8,
+        health: 0,
+      },
+      {
+        requiredPieces: 4,
+        name: 'Похідний стрій',
+        damage: 0,
+        armor: 0,
+        health: 45,
+      },
+      {
+        requiredPieces: 6,
+        name: 'Досвід фронту',
+        damage: 10,
+        armor: 0,
+        health: 0,
+      },
+      {
+        requiredPieces: 8,
+        name: 'Незламний ветеран',
+        damage: 8,
+        armor: 12,
+        health: 35,
+      },
+    ],
+  },
+  'veil-warden': {
+    name: 'Вартовий Завіси',
+    bonuses: [
+      {
+        requiredPieces: 1,
+        name: 'Відлуння розлому',
+        damage: 12,
+        armor: 10,
+        health: 50,
+      },
+    ],
+  },
+}
+
 export function sumEquipmentStats(
   items: ReadonlyArray<Partial<EquipmentStats>>,
 ): EquipmentStats {
@@ -66,6 +134,35 @@ export function sumEquipmentStats(
     }),
     { damage: 0, armor: 0, health: 0 },
   )
+}
+
+export function activeEquipmentSetBonuses(
+  items: ReadonlyArray<EquipmentSetItem>,
+): ActiveSetBonus[] {
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    if (!item.setId) continue
+    counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1)
+  }
+
+  return Array.from(counts.entries()).flatMap(([setId, equippedPieces]) => {
+    const definition = EQUIPMENT_SET_BONUSES[setId]
+    if (!definition) return []
+    return definition.bonuses
+      .filter((bonus) => equippedPieces >= bonus.requiredPieces)
+      .map((bonus) => ({
+        setId,
+        setName: definition.name,
+        equippedPieces,
+        ...bonus,
+      }))
+  })
+}
+
+export function sumEquipmentWithSetBonuses(
+  items: ReadonlyArray<EquipmentSetItem>,
+): EquipmentStats {
+  return sumEquipmentStats([...items, ...activeEquipmentSetBonuses(items)])
 }
 
 export function clampItemLevel(level: number): number {

@@ -12,7 +12,7 @@ import {
   createDryadForestBattle,
   INTENTS,
   resolveTurn,
-  sumEquipmentStats,
+  sumEquipmentWithSetBonuses,
   talentBonuses,
   type ActionId,
   type BattleState,
@@ -278,6 +278,7 @@ export class CombatService {
             item: {
               select: {
                 definitionId: true,
+                setId: true,
                 damage: true,
                 armor: true,
                 health: true,
@@ -295,7 +296,7 @@ export class CombatService {
         },
       },
     });
-    const equipment = sumEquipmentStats(
+    const equipment = sumEquipmentWithSetBonuses(
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
@@ -498,6 +499,7 @@ export class CombatService {
             item: {
               select: {
                 definitionId: true,
+                setId: true,
                 damage: true,
                 armor: true,
                 health: true,
@@ -519,7 +521,7 @@ export class CombatService {
       throw new BadRequestException('Level 30 is required for the ritual');
     if (character.worldState?.currentLocation !== 'CINDERHAVEN_GATE')
       throw new BadRequestException('The ritual circle is in Cinderhaven');
-    const equipment = sumEquipmentStats(
+    const equipment = sumEquipmentWithSetBonuses(
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
@@ -810,6 +812,7 @@ export class CombatService {
             item: {
               select: {
                 definitionId: true,
+                setId: true,
                 damage: true,
                 armor: true,
                 health: true,
@@ -827,7 +830,7 @@ export class CombatService {
         },
       },
     });
-    const equipment = sumEquipmentStats(
+    const equipment = sumEquipmentWithSetBonuses(
       character.equipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);

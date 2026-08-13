@@ -172,6 +172,16 @@ interface Inventory {
   chest: InventoryItem[]
   backpack: InventoryItem[]
   equipped: Array<{ slot: EquipmentSlotKey; item: InventoryItem }>
+  activeSetBonuses: Array<{
+    setId: string
+    setName: string
+    equippedPieces: number
+    requiredPieces: number
+    name: string
+    damage: number
+    armor: number
+    health: number
+  }>
   mainHandVisualAssetId: string | null
 }
 
@@ -4088,6 +4098,33 @@ function ProfileSummary({
             Частини комплектів ще не екіпіровані.
           </p>
         )}
+        {inventory.activeSetBonuses.length ? (
+          <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+            {inventory.activeSetBonuses.map((bonus) => (
+              <div
+                key={`${bonus.setId}-${bonus.requiredPieces}`}
+                className="border border-moss/40 bg-moss/5 px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-xs font-medium text-moss">
+                    {bonus.name}
+                  </p>
+                  <span className="font-mono text-[0.6rem] text-muted-foreground">
+                    {bonus.requiredPieces} реч.
+                  </span>
+                </div>
+                <p className="mt-1 font-mono text-[0.6rem] text-muted-foreground">
+                  {setBonusStatsText(bonus)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-[0.68rem] leading-5 text-muted-foreground">
+            Перший бонус комплекту відкривається після виконання його
+            мінімальної умови.
+          </p>
+        )}
       </section>
 
       <section className="mt-5 border-t border-border/70 pt-5">
@@ -4288,7 +4325,7 @@ async function executeInventoryMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } }',
+        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } }',
       variables: {
         input: {
           itemId,
@@ -4324,7 +4361,7 @@ async function loadJourney(): Promise<{
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
+        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
       }),
     })
     const payload = (await response.json()) as {
@@ -4669,6 +4706,20 @@ function itemRarityName(value: string): string {
       DIVINE: 'Божественний',
     }[value] ?? value
   )
+}
+
+function setBonusStatsText(bonus: {
+  damage: number
+  armor: number
+  health: number
+}): string {
+  return [
+    bonus.damage > 0 ? `+${bonus.damage} DMG` : null,
+    bonus.armor > 0 ? `+${bonus.armor} захист` : null,
+    bonus.health > 0 ? `+${bonus.health} HP` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function inventoryItemCategory(item: InventoryItem): InventoryCategory {

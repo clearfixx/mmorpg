@@ -9,7 +9,8 @@ import {
 import {
   itemDamageRange,
   levelBonuses,
-  sumEquipmentStats,
+  activeEquipmentSetBonuses,
+  sumEquipmentWithSetBonuses,
   talentBonuses,
   type ItemRarity as EngineItemRarity,
 } from '@veilfall/game-engine';
@@ -205,7 +206,10 @@ export class InventoryService {
       armor: (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
     };
     const level = levelBonuses(character.level);
-    const equipmentStats = sumEquipmentStats(
+    const equipmentStats = sumEquipmentWithSetBonuses(
+      character.equipment.map((assignment) => assignment.item),
+    );
+    const activeSetBonuses = activeEquipmentSetBonuses(
       character.equipment.map((assignment) => assignment.item),
     );
     const baseDamage =
@@ -238,6 +242,7 @@ export class InventoryService {
         .filter((item) => item.location === ItemLocation.BACKPACK)
         .map((item) => this.itemModel(item)),
       equipped,
+      activeSetBonuses,
       mainHandVisualAssetId: mainHand?.visualAssetId ?? null,
     };
   }
