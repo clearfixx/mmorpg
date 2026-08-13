@@ -807,6 +807,7 @@ function marketItem(item: {
     damageMax: range.max,
     compatibleSlots: equipmentSlotsForDefinition(item.definitionId),
     name: definition.name,
+    setId: definition.setId,
     setName: definition.setName,
   };
 }

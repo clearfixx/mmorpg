@@ -67,6 +67,10 @@ export interface ActiveSetBonus extends EquipmentStats {
   name: string
 }
 
+export interface EquipmentSetBonusProgress extends ActiveSetBonus {
+  active: boolean
+}
+
 interface SetBonusDefinition extends EquipmentStats {
   requiredPieces: number
   name: string
@@ -123,6 +127,32 @@ const EQUIPMENT_SET_BONUSES: Record<
   },
 }
 
+export function equipmentSetBonusProgress(
+  items: ReadonlyArray<EquipmentSetItem>,
+  additionalSetIds: ReadonlyArray<string> = [],
+): EquipmentSetBonusProgress[] {
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    if (!item.setId) continue
+    counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1)
+  }
+  for (const setId of additionalSetIds) {
+    if (!counts.has(setId)) counts.set(setId, 0)
+  }
+
+  return Array.from(counts.entries()).flatMap(([setId, equippedPieces]) => {
+    const definition = EQUIPMENT_SET_BONUSES[setId]
+    if (!definition) return []
+    return definition.bonuses.map((bonus) => ({
+      setId,
+      setName: definition.name,
+      equippedPieces,
+      active: equippedPieces >= bonus.requiredPieces,
+      ...bonus,
+    }))
+  })
+}
+
 export function sumEquipmentStats(
   items: ReadonlyArray<Partial<EquipmentStats>>,
 ): EquipmentStats {
@@ -139,24 +169,9 @@ export function sumEquipmentStats(
 export function activeEquipmentSetBonuses(
   items: ReadonlyArray<EquipmentSetItem>,
 ): ActiveSetBonus[] {
-  const counts = new Map<string, number>()
-  for (const item of items) {
-    if (!item.setId) continue
-    counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1)
-  }
-
-  return Array.from(counts.entries()).flatMap(([setId, equippedPieces]) => {
-    const definition = EQUIPMENT_SET_BONUSES[setId]
-    if (!definition) return []
-    return definition.bonuses
-      .filter((bonus) => equippedPieces >= bonus.requiredPieces)
-      .map((bonus) => ({
-        setId,
-        setName: definition.name,
-        equippedPieces,
-        ...bonus,
-      }))
-  })
+  return equipmentSetBonusProgress(items)
+    .filter((bonus) => bonus.active)
+    .map(({ active: _active, ...bonus }) => bonus)
 }
 
 export function sumEquipmentWithSetBonuses(

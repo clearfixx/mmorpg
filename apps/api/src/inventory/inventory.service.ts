@@ -10,6 +10,7 @@ import {
   itemDamageRange,
   levelBonuses,
   activeEquipmentSetBonuses,
+  equipmentSetBonusProgress,
   sumEquipmentWithSetBonuses,
   talentBonuses,
   type ItemRarity as EngineItemRarity,
@@ -212,6 +213,10 @@ export class InventoryService {
     const activeSetBonuses = activeEquipmentSetBonuses(
       character.equipment.map((assignment) => assignment.item),
     );
+    const setBonusProgress = equipmentSetBonusProgress(
+      character.equipment.map((assignment) => assignment.item),
+      character.items.map((item) => item.setId),
+    );
     const baseDamage =
       BASE_DAMAGE[character.archetype] +
       level.damage +
@@ -243,6 +248,7 @@ export class InventoryService {
         .map((item) => this.itemModel(item)),
       equipped,
       activeSetBonuses,
+      setBonusProgress,
       mainHandVisualAssetId: mainHand?.visualAssetId ?? null,
     };
   }
@@ -256,8 +262,8 @@ export class InventoryService {
     damage: number;
     armor: number;
     health: number;
-    binding: string;
     setId: string;
+    binding: string;
     visualAssetId: string;
   }): InventoryItemModel {
     const damageRange = itemDamageRange(

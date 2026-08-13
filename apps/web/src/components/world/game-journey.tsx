@@ -102,6 +102,7 @@ interface InventoryItem {
   damageMax: number
   compatibleSlots: EquipmentSlotKey[]
   binding: string
+  setId: string
   setName: string
   visualAssetId: string
 }
@@ -181,6 +182,17 @@ interface Inventory {
     damage: number
     armor: number
     health: number
+  }>
+  setBonusProgress: Array<{
+    setId: string
+    setName: string
+    equippedPieces: number
+    requiredPieces: number
+    name: string
+    damage: number
+    armor: number
+    health: number
+    active: boolean
   }>
   mainHandVisualAssetId: string | null
 }
@@ -3565,6 +3577,8 @@ function InventoryVault({
             pending={pending}
             onEquip={onEquip}
             setProgress={selectedSetProgress}
+            setBonusProgress={inventory.setBonusProgress}
+            equippedItems={inventory.equipped}
             onPrevious={() => selectRelativeItem(-1)}
             onNext={() => selectRelativeItem(1)}
           />
@@ -3729,6 +3743,8 @@ function InventoryItemDetails({
   pending,
   onEquip,
   setProgress,
+  setBonusProgress,
+  equippedItems,
   onPrevious,
   onNext,
 }: {
@@ -3738,6 +3754,8 @@ function InventoryItemDetails({
   pending: boolean
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
   setProgress: { owned: number; equipped: number } | null
+  setBonusProgress: Inventory['setBonusProgress']
+  equippedItems: Inventory['equipped']
   onPrevious: () => void
   onNext: () => void
 }) {
@@ -3756,6 +3774,9 @@ function InventoryItemDetails({
 
   const targetSlot = selectedSlot ?? item.compatibleSlots[0]
   const current = targetSlot ? equippedBySlot.get(targetSlot) : undefined
+  const setChange = targetSlot
+    ? equipmentSetChange(item, current, equippedItems, setBonusProgress)
+    : null
   const comparison = [
     ['Шкода', item.damage, current?.damage ?? 0],
     ['Броня', item.armor, current?.armor ?? 0],
@@ -3818,6 +3839,35 @@ function InventoryItemDetails({
             <span className="text-muted-foreground">Екіпіровано</span>
             <span className="font-mono text-moss">{setProgress.equipped}</span>
           </div>
+          {setBonusProgress.some((bonus) => bonus.setId === item.setId) ? (
+            <div className="mt-3 space-y-1.5 border-t border-border/60 pt-2">
+              {setBonusProgress
+                .filter((bonus) => bonus.setId === item.setId)
+                .map((bonus) => (
+                  <div
+                    key={bonus.requiredPieces}
+                    className={`flex items-start justify-between gap-3 text-[0.68rem] ${bonus.active ? 'text-moss' : 'text-muted-foreground'}`}
+                  >
+                    <span>
+                      {bonus.requiredPieces} реч. · {bonus.name}
+                    </span>
+                    <span className="shrink-0 font-mono">
+                      {setBonusStatsText(bonus)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {setChange ? (
+        <div
+          className={`mt-3 border px-3 py-2 text-xs ${setChange.kind === 'GAIN' ? 'border-moss/40 bg-moss/5' : setChange.kind === 'LOSS' ? 'border-destructive/40 bg-destructive/5' : 'border-border/60 bg-background/45'}`}
+        >
+          <p className="font-mono text-[0.55rem] uppercase tracking-wider text-muted-foreground">
+            Вплив на комплект
+          </p>
+          <p className="mt-1 leading-5">{setChange.message}</p>
         </div>
       ) : null}
       {item.compatibleSlots.length > 1 ? (
@@ -4325,7 +4375,7 @@ async function executeInventoryMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } }',
+        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } } } }',
       variables: {
         input: {
           itemId,
@@ -4361,7 +4411,7 @@ async function loadJourney(): Promise<{
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
+        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
       }),
     })
     const payload = (await response.json()) as {
@@ -4720,6 +4770,66 @@ function setBonusStatsText(bonus: {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+function equipmentSetChange(
+  nextItem: InventoryItem,
+  currentItem: InventoryItem | undefined,
+  equippedItems: Inventory['equipped'],
+  progress: Inventory['setBonusProgress'],
+): { kind: 'GAIN' | 'LOSS' | 'NEUTRAL'; message: string } | null {
+  if (currentItem?.setId === nextItem.setId) {
+    return {
+      kind: 'NEUTRAL',
+      message: `Кількість частин комплекту «${nextItem.setName}» не зміниться.`,
+    }
+  }
+
+  const currentCounts = new Map<string, number>()
+  for (const entry of equippedItems) {
+    currentCounts.set(
+      entry.item.setId,
+      (currentCounts.get(entry.item.setId) ?? 0) + 1,
+    )
+  }
+  const nextSetCount = (currentCounts.get(nextItem.setId) ?? 0) + 1
+  const gained = progress.find(
+    (bonus) =>
+      bonus.setId === nextItem.setId &&
+      bonus.requiredPieces === nextSetCount &&
+      !bonus.active,
+  )
+
+  let lost: Inventory['setBonusProgress'][number] | undefined
+  if (currentItem) {
+    const currentSetCount = currentCounts.get(currentItem.setId) ?? 0
+    lost = progress.find(
+      (bonus) =>
+        bonus.setId === currentItem.setId &&
+        bonus.requiredPieces === currentSetCount &&
+        bonus.active,
+    )
+  }
+
+  if (gained && lost)
+    return {
+      kind: 'NEUTRAL',
+      message: `Активується «${gained.name}» (${setBonusStatsText(gained)}), але буде втрачено «${lost.name}» (${setBonusStatsText(lost)}).`,
+    }
+  if (gained)
+    return {
+      kind: 'GAIN',
+      message: `Активується «${gained.name}»: ${setBonusStatsText(gained)}.`,
+    }
+  if (lost)
+    return {
+      kind: 'LOSS',
+      message: `Буде втрачено «${lost.name}»: ${setBonusStatsText(lost)}.`,
+    }
+  return {
+    kind: 'NEUTRAL',
+    message: `Після заміни комплект «${nextItem.setName}» матиме ${nextSetCount} част. Активні пороги не зміняться.`,
+  }
 }
 
 function inventoryItemCategory(item: InventoryItem): InventoryCategory {

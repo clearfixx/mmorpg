@@ -18,6 +18,7 @@ export class InventoryItemModel {
   @Field(() => Int) damageMax!: number;
   @Field(() => [EquipmentSlot]) compatibleSlots!: EquipmentSlot[];
   @Field() binding!: string;
+  @Field() setId!: string;
   @Field() setName!: string;
   @Field() visualAssetId!: string;
 }
@@ -41,6 +42,11 @@ export class ActiveSetBonusModel {
 }
 
 @ObjectType()
+export class SetBonusProgressModel extends ActiveSetBonusModel {
+  @Field() active!: boolean;
+}
+
+@ObjectType()
 export class InventoryModel {
   @Field(() => Int) characterVersion!: number;
   @Field(() => Int) baseDamage!: number;
@@ -53,6 +59,8 @@ export class InventoryModel {
   @Field(() => [InventoryItemModel]) backpack!: InventoryItemModel[];
   @Field(() => [EquippedItemModel]) equipped!: EquippedItemModel[];
   @Field(() => [ActiveSetBonusModel]) activeSetBonuses!: ActiveSetBonusModel[];
+  @Field(() => [SetBonusProgressModel])
+  setBonusProgress!: SetBonusProgressModel[];
   @Field(() => String, { nullable: true }) mainHandVisualAssetId!:
     string | null;
 }

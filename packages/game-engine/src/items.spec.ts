@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ITEM_RARITIES,
   activeEquipmentSetBonuses,
+  equipmentSetBonusProgress,
   equipmentDropChancePercent,
   itemDamageRange,
   itemLevelForReward,
@@ -93,6 +94,21 @@ describe('item power', () => {
         { setId: 'veil-warden', damage: 70, armor: 55, health: 220 },
       ]),
     ).toEqual({ damage: 82, armor: 65, health: 270 })
+  })
+
+  it('reports locked and active thresholds for equipment decisions', () => {
+    expect(
+      equipmentSetBonusProgress(
+        [{ setId: 'veteran' }, { setId: 'veteran' }],
+        ['veil-warden'],
+      ),
+    ).toMatchObject([
+      { setId: 'veteran', requiredPieces: 2, active: true },
+      { setId: 'veteran', requiredPieces: 4, active: false },
+      { setId: 'veteran', requiredPieces: 6, active: false },
+      { setId: 'veteran', requiredPieces: 8, active: false },
+      { setId: 'veil-warden', requiredPieces: 1, active: false },
+    ])
   })
 
   it('guarantees onboarding and milestone drops but rolls ordinary fights', () => {
