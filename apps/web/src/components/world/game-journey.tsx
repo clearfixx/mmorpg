@@ -13,6 +13,7 @@ import {
   ScrollText,
   Shield,
   Sparkles,
+  Star,
   Sword,
   Swords,
   Target,
@@ -125,8 +126,11 @@ type InventoryCategory = 'ALL' | 'WEAPON' | 'ARMOR' | 'ACCESSORY'
 type InventorySort = 'POWER' | 'LEVEL' | 'RARITY' | 'NAME'
 type InventoryScope = 'ALL' | 'CHEST' | 'BACKPACK'
 type InventoryUsability = 'ALL' | 'USABLE' | 'LOCKED'
+type InventoryDirection = 'DESC' | 'ASC'
+type InventoryDensity = 'COMFORTABLE' | 'COMPACT'
 
 const inventoryViewKey = 'veilfall.inventory-view'
+const favoriteItemsKey = 'veilfall.favorite-items'
 const inventoryItemsPerPage = 20
 
 const INVENTORY_RARITY_ORDER: Record<string, number> = {
@@ -2737,9 +2741,22 @@ function InventoryVault({
   const [inventoryScope, setInventoryScope] = useState<InventoryScope>('ALL')
   const [inventoryUsability, setInventoryUsability] =
     useState<InventoryUsability>('ALL')
+  const [inventoryDirection, setInventoryDirection] =
+    useState<InventoryDirection>('DESC')
+  const [inventoryDensity, setInventoryDensity] =
+    useState<InventoryDensity>('COMFORTABLE')
+  const [inventorySet, setInventorySet] = useState('ALL')
+  const [minimumLevel, setMinimumLevel] = useState(1)
+  const [maximumLevel, setMaximumLevel] = useState(99)
+  const [minimumQuality, setMinimumQuality] = useState(0)
+  const [favoriteOnly, setFavoriteOnly] = useState(false)
+  const [favoriteItemIds, setFavoriteItemIds] = useState<string[]>([])
   const [inventoryPage, setInventoryPage] = useState(1)
   const chestItemIds = new Set(inventory.chest.map((item) => item.id))
   const backpackItemIds = new Set(inventory.backpack.map((item) => item.id))
+  const availableSets = [
+    ...new Set(loot.map((item) => item.setName).filter(Boolean)),
+  ].sort((left, right) => left.localeCompare(right, 'uk'))
   const search = inventorySearch.trim().toLocaleLowerCase('uk')
   const filteredLoot = loot
     .filter(
@@ -2764,11 +2781,23 @@ function InventoryVault({
     )
     .filter(
       (item) =>
+        item.itemLevel >= minimumLevel && item.itemLevel <= maximumLevel,
+    )
+    .filter(
+      (item) => Math.round((item.rollQuality / 9_999) * 100) >= minimumQuality,
+    )
+    .filter((item) => inventorySet === 'ALL' || item.setName === inventorySet)
+    .filter((item) => !favoriteOnly || favoriteItemIds.includes(item.id))
+    .filter(
+      (item) =>
         !search ||
         item.name.toLocaleLowerCase('uk').includes(search) ||
         item.setName.toLocaleLowerCase('uk').includes(search),
     )
-    .sort((left, right) => compareInventoryItems(left, right, inventorySort))
+    .sort((left, right) => {
+      const comparison = compareInventoryItems(left, right, inventorySort)
+      return inventoryDirection === 'DESC' ? comparison : -comparison
+    })
   const inventoryPageCount = Math.max(
     1,
     Math.ceil(filteredLoot.length / inventoryItemsPerPage),
@@ -2782,6 +2811,12 @@ function InventoryVault({
     filteredLoot.find((item) => item.id === selectedItemId) ??
     filteredLoot[0] ??
     null
+  const rarityBreakdown = Object.keys(INVENTORY_RARITY_ORDER)
+    .map((rarity) => ({
+      rarity,
+      count: filteredLoot.filter((item) => item.rarity === rarity).length,
+    }))
+    .filter((entry) => entry.count > 0)
 
   useEffect(() => {
     const restore = window.setTimeout(() => {
@@ -2794,14 +2829,42 @@ function InventoryVault({
           sort?: InventorySort
           scope?: InventoryScope
           usability?: InventoryUsability
+          direction?: InventoryDirection
+          density?: InventoryDensity
+          set?: string
+          minimumLevel?: number
+          maximumLevel?: number
+          minimumQuality?: number
+          favoriteOnly?: boolean
+          selectedItemId?: string
         }
         setInventoryCategory(view.category ?? 'ALL')
         setInventoryRarity(view.rarity ?? 'ALL')
         setInventorySort(view.sort ?? 'POWER')
         setInventoryScope(view.scope ?? 'ALL')
         setInventoryUsability(view.usability ?? 'ALL')
+        setInventoryDirection(view.direction ?? 'DESC')
+        setInventoryDensity(view.density ?? 'COMFORTABLE')
+        setInventorySet(view.set ?? 'ALL')
+        setMinimumLevel(view.minimumLevel ?? 1)
+        setMaximumLevel(view.maximumLevel ?? 99)
+        setMinimumQuality(view.minimumQuality ?? 0)
+        setFavoriteOnly(view.favoriteOnly ?? false)
+        setSelectedItemId(view.selectedItemId ?? null)
       } catch {
         window.localStorage.removeItem(inventoryViewKey)
+      }
+    }, 0)
+    return () => window.clearTimeout(restore)
+  }, [])
+
+  useEffect(() => {
+    const restore = window.setTimeout(() => {
+      try {
+        const stored = window.localStorage.getItem(favoriteItemsKey)
+        if (stored) setFavoriteItemIds(JSON.parse(stored) as string[])
+      } catch {
+        window.localStorage.removeItem(favoriteItemsKey)
       }
     }, 0)
     return () => window.clearTimeout(restore)
@@ -2813,6 +2876,14 @@ function InventoryVault({
     sort?: InventorySort
     scope?: InventoryScope
     usability?: InventoryUsability
+    direction?: InventoryDirection
+    density?: InventoryDensity
+    set?: string
+    minimumLevel?: number
+    maximumLevel?: number
+    minimumQuality?: number
+    favoriteOnly?: boolean
+    selectedItemId?: string | null
   }) {
     const current = {
       category: inventoryCategory,
@@ -2820,12 +2891,59 @@ function InventoryVault({
       sort: inventorySort,
       scope: inventoryScope,
       usability: inventoryUsability,
+      direction: inventoryDirection,
+      density: inventoryDensity,
+      set: inventorySet,
+      minimumLevel,
+      maximumLevel,
+      minimumQuality,
+      favoriteOnly,
+      selectedItemId,
     }
     window.localStorage.setItem(
       inventoryViewKey,
       JSON.stringify({ ...current, ...next }),
     )
     setInventoryPage(1)
+  }
+
+  function selectInventoryItem(itemId: string) {
+    setSelectedItemId(itemId)
+    updateInventoryView({ selectedItemId: itemId })
+  }
+
+  function toggleFavoriteItem(itemId: string) {
+    setFavoriteItemIds((current) => {
+      const next = current.includes(itemId)
+        ? current.filter((id) => id !== itemId)
+        : [...current, itemId]
+      window.localStorage.setItem(favoriteItemsKey, JSON.stringify(next))
+      return next
+    })
+  }
+
+  function resetInventoryFilters() {
+    setInventorySearch('')
+    setInventoryCategory('ALL')
+    setInventoryRarity('ALL')
+    setInventoryScope('ALL')
+    setInventoryUsability('ALL')
+    setInventorySet('ALL')
+    setMinimumLevel(1)
+    setMaximumLevel(99)
+    setMinimumQuality(0)
+    setFavoriteOnly(false)
+    updateInventoryView({
+      category: 'ALL',
+      rarity: 'ALL',
+      scope: 'ALL',
+      usability: 'ALL',
+      set: 'ALL',
+      minimumLevel: 1,
+      maximumLevel: 99,
+      minimumQuality: 0,
+      favoriteOnly: false,
+    })
   }
 
   return (
@@ -2914,6 +3032,18 @@ function InventoryVault({
             <option value="RARITY">За рідкістю</option>
             <option value="NAME">За назвою</option>
           </select>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const next = inventoryDirection === 'DESC' ? 'ASC' : 'DESC'
+              setInventoryDirection(next)
+              updateInventoryView({ direction: next })
+            }}
+            className="h-9 rounded-sm px-3 text-xs lg:col-start-3"
+          >
+            {inventoryDirection === 'DESC' ? '↓ Спадання' : '↑ Зростання'}
+          </Button>
         </div>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-y border-border/60 py-2">
           <div className="flex flex-wrap gap-1">
@@ -2985,7 +3115,147 @@ function InventoryVault({
               {label}
             </Button>
           ))}
+          <Button
+            type="button"
+            variant={favoriteOnly ? 'secondary' : 'outline'}
+            onClick={() => {
+              const next = !favoriteOnly
+              setFavoriteOnly(next)
+              updateInventoryView({ favoriteOnly: next })
+            }}
+            className="h-8 rounded-none px-3 text-xs"
+          >
+            <Star
+              className={`size-3.5 ${favoriteOnly ? 'fill-ember text-ember' : ''}`}
+            />
+            Обрані
+          </Button>
         </div>
+        <details className="mt-2 border border-border/60 bg-background/30 p-3">
+          <summary className="cursor-pointer font-mono text-[0.62rem] uppercase text-muted-foreground">
+            Додаткові фільтри та вигляд
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <label className="text-xs text-muted-foreground">
+              Комплект
+              <select
+                value={inventorySet}
+                onChange={(event) => {
+                  setInventorySet(event.target.value)
+                  updateInventoryView({ set: event.target.value })
+                }}
+                className="mt-1 h-9 w-full border border-border/70 bg-background px-2 text-foreground outline-none"
+              >
+                <option value="ALL">Усі комплекти</option>
+                {availableSets.map((setName) => (
+                  <option key={setName} value={setName}>
+                    {setName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Рівень від
+              <Input
+                type="number"
+                min={1}
+                max={99}
+                value={minimumLevel}
+                onChange={(event) => {
+                  const next = Math.min(
+                    99,
+                    Math.max(1, Number(event.target.value) || 1),
+                  )
+                  setMinimumLevel(next)
+                  updateInventoryView({ minimumLevel: next })
+                }}
+                className="mt-1 h-9 rounded-sm"
+              />
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Рівень до
+              <Input
+                type="number"
+                min={1}
+                max={99}
+                value={maximumLevel}
+                onChange={(event) => {
+                  const next = Math.min(
+                    99,
+                    Math.max(1, Number(event.target.value) || 99),
+                  )
+                  setMaximumLevel(next)
+                  updateInventoryView({ maximumLevel: next })
+                }}
+                className="mt-1 h-9 rounded-sm"
+              />
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Якість від, %
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={minimumQuality}
+                onChange={(event) => {
+                  const next = Math.min(
+                    100,
+                    Math.max(0, Number(event.target.value) || 0),
+                  )
+                  setMinimumQuality(next)
+                  updateInventoryView({ minimumQuality: next })
+                }}
+                className="mt-1 h-9 rounded-sm"
+              />
+            </label>
+            <div className="flex flex-col justify-end gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const next =
+                    inventoryDensity === 'COMFORTABLE'
+                      ? 'COMPACT'
+                      : 'COMFORTABLE'
+                  setInventoryDensity(next)
+                  updateInventoryView({ density: next })
+                }}
+                className="h-9 rounded-sm text-xs"
+              >
+                {inventoryDensity === 'COMFORTABLE'
+                  ? 'Щільна сітка'
+                  : 'Звичайна сітка'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={resetInventoryFilters}
+                className="h-7 rounded-sm text-[0.62rem]"
+              >
+                Очистити фільтри
+              </Button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div className="grid gap-px border-b border-border/70 bg-border/60 sm:grid-cols-3">
+        <InventoryInsight label="Знайдено" value={filteredLoot.length} />
+        <InventoryInsight
+          label="Сумарна сила"
+          value={filteredLoot.reduce(
+            (sum, item) => sum + inventoryItemPower(item),
+            0,
+          )}
+        />
+        <InventoryInsight
+          label="Рідкісності"
+          value={
+            rarityBreakdown
+              .map((entry) => `${itemRarityName(entry.rarity)}: ${entry.count}`)
+              .join(' · ') || '—'
+          }
+        />
       </div>
 
       <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_19rem]">
@@ -3010,14 +3280,24 @@ function InventoryVault({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+            <div
+              className={
+                inventoryDensity === 'COMPACT'
+                  ? 'grid grid-cols-2 gap-1 sm:grid-cols-4 xl:grid-cols-6'
+                  : 'grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5'
+              }
+            >
               {pagedLoot.map((item) => (
                 <InventoryItemCard
                   key={item.id}
                   item={item}
                   equippedBySlot={equippedBySlot}
                   selected={item.id === selectedItem?.id}
-                  onSelect={() => setSelectedItemId(item.id)}
+                  scope={chestItemIds.has(item.id) ? 'CHEST' : 'BACKPACK'}
+                  favorite={favoriteItemIds.includes(item.id)}
+                  compact={inventoryDensity === 'COMPACT'}
+                  onSelect={() => selectInventoryItem(item.id)}
+                  onToggleFavorite={() => toggleFavoriteItem(item.id)}
                 />
               ))}
             </div>
@@ -3092,12 +3372,20 @@ function InventoryItemCard({
   item,
   equippedBySlot,
   selected,
+  scope,
+  favorite,
+  compact,
   onSelect,
+  onToggleFavorite,
 }: {
   item: InventoryItem
   equippedBySlot: ReadonlyMap<EquipmentSlotKey, InventoryItem>
   selected: boolean
+  scope: Exclude<InventoryScope, 'ALL'>
+  favorite: boolean
+  compact: boolean
   onSelect: () => void
+  onToggleFavorite: () => void
 }) {
   const targetSlot =
     item.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
@@ -3115,8 +3403,19 @@ function InventoryItemCard({
       onMouseEnter={onSelect}
       onFocus={onSelect}
       onClick={onSelect}
-      className={`flex min-h-44 cursor-pointer flex-col border bg-background/45 p-3 outline-none transition ${selected ? 'border-ember/70 bg-ember/5' : 'border-border/70 hover:border-ember/40'}`}
+      className={`relative flex cursor-pointer flex-col border bg-background/45 outline-none transition ${compact ? 'min-h-36 p-2' : 'min-h-44 p-3'} ${selected ? 'border-ember/70 bg-ember/5' : 'border-border/70 hover:border-ember/40'}`}
     >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onToggleFavorite()
+        }}
+        aria-label={favorite ? 'Прибрати з обраних' : 'Додати до обраних'}
+        className="absolute top-2 right-2 z-10 text-muted-foreground hover:text-ember"
+      >
+        <Star className={`size-4 ${favorite ? 'fill-ember text-ember' : ''}`} />
+      </button>
       <div className="flex items-start gap-2">
         <div className="grid size-10 shrink-0 place-items-center border border-ember/45 bg-ember/5">
           {item.armor > item.damage ? (
@@ -3163,10 +3462,33 @@ function InventoryItemCard({
           </div>
         ))}
       </div>
-      <p className="mt-auto pt-3 font-mono text-[0.55rem] uppercase text-muted-foreground">
-        Наведіть для деталей
+      <p className="mt-auto flex justify-between gap-2 pt-3 font-mono text-[0.55rem] uppercase text-muted-foreground">
+        <span>{scope === 'CHEST' ? 'Сундук' : 'Рюкзак'}</span>
+        <span>Деталі</span>
       </p>
     </article>
+  )
+}
+
+function InventoryInsight({
+  label,
+  value,
+}: {
+  label: string
+  value: ReactNode
+}) {
+  return (
+    <div className="bg-background/55 px-4 py-3">
+      <p className="font-mono text-[0.55rem] uppercase text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className="mt-1 truncate text-xs text-foreground"
+        title={typeof value === 'string' ? value : undefined}
+      >
+        {value}
+      </p>
+    </div>
   )
 }
 
