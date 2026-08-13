@@ -9,6 +9,7 @@ import {
   Eye,
   Flame,
   Package,
+  Search,
   ScrollText,
   Shield,
   Sparkles,
@@ -119,6 +120,19 @@ type EquipmentSlotKey =
   | 'BRACELET'
   | 'RING_LEFT'
   | 'RING_RIGHT'
+
+type InventoryCategory = 'ALL' | 'WEAPON' | 'ARMOR' | 'ACCESSORY'
+type InventorySort = 'POWER' | 'LEVEL' | 'RARITY' | 'NAME'
+
+const INVENTORY_RARITY_ORDER: Record<string, number> = {
+  COMMON: 0,
+  UNCOMMON: 1,
+  RARE: 2,
+  EPIC: 3,
+  LEGENDARY: 4,
+  MYTHIC: 5,
+  DIVINE: 6,
+}
 
 const EQUIPMENT_SLOT_NAMES: Record<EquipmentSlotKey, string> = {
   HEAD: 'шолом',
@@ -2710,8 +2724,32 @@ function InventoryVault({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(
     loot[0]?.id ?? null,
   )
+  const [inventorySearch, setInventorySearch] = useState('')
+  const [inventoryCategory, setInventoryCategory] =
+    useState<InventoryCategory>('ALL')
+  const [inventoryRarity, setInventoryRarity] = useState('ALL')
+  const [inventorySort, setInventorySort] = useState<InventorySort>('POWER')
+  const search = inventorySearch.trim().toLocaleLowerCase('uk')
+  const filteredLoot = loot
+    .filter(
+      (item) =>
+        inventoryCategory === 'ALL' ||
+        inventoryItemCategory(item) === inventoryCategory,
+    )
+    .filter(
+      (item) => inventoryRarity === 'ALL' || item.rarity === inventoryRarity,
+    )
+    .filter(
+      (item) =>
+        !search ||
+        item.name.toLocaleLowerCase('uk').includes(search) ||
+        item.setName.toLocaleLowerCase('uk').includes(search),
+    )
+    .sort((left, right) => compareInventoryItems(left, right, inventorySort))
   const selectedItem =
-    loot.find((item) => item.id === selectedItemId) ?? loot[0] ?? null
+    filteredLoot.find((item) => item.id === selectedItemId) ??
+    filteredLoot[0] ??
+    null
 
   return (
     <section className="mx-auto w-full max-w-6xl border border-border/70 bg-panel/60">
@@ -2755,41 +2793,89 @@ function InventoryVault({
           </dl>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-4">
-          {['Усі предмети', 'Зброя', 'Броня', 'Аксесуари', 'Матеріали'].map(
-            (label, index) => (
-              <Button
-                key={label}
-                type="button"
-                variant={index === 0 ? 'secondary' : 'outline'}
-                disabled={index !== 0}
-                className="h-8 rounded-none px-3 text-xs"
-              >
-                {label}
-              </Button>
-            ),
-          )}
+        <div className="mt-4 grid gap-2 border-t border-border/60 pt-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={inventorySearch}
+              onChange={(event) => setInventorySearch(event.target.value)}
+              placeholder="Пошук предмета або комплекту…"
+              className="h-9 rounded-sm pl-9"
+            />
+          </label>
+          <select
+            value={inventoryRarity}
+            onChange={(event) => setInventoryRarity(event.target.value)}
+            aria-label="Рідкість предметів"
+            className="h-9 border border-border/70 bg-background px-3 text-xs outline-none"
+          >
+            <option value="ALL">Усі рідкості</option>
+            {Object.keys(INVENTORY_RARITY_ORDER).map((rarity) => (
+              <option key={rarity} value={rarity}>
+                {itemRarityName(rarity)}
+              </option>
+            ))}
+          </select>
+          <select
+            value={inventorySort}
+            onChange={(event) =>
+              setInventorySort(event.target.value as InventorySort)
+            }
+            aria-label="Сортування інвентарю"
+            className="h-9 border border-border/70 bg-background px-3 text-xs outline-none"
+          >
+            <option value="POWER">За силою</option>
+            <option value="LEVEL">За рівнем</option>
+            <option value="RARITY">За рідкістю</option>
+            <option value="NAME">За назвою</option>
+          </select>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {(
+            [
+              ['ALL', 'Усі предмети'],
+              ['WEAPON', 'Зброя'],
+              ['ARMOR', 'Броня'],
+              ['ACCESSORY', 'Аксесуари'],
+            ] as const
+          ).map(([category, label]) => (
+            <Button
+              key={category}
+              type="button"
+              variant={inventoryCategory === category ? 'secondary' : 'outline'}
+              onClick={() => setInventoryCategory(category)}
+              className="h-8 rounded-none px-3 text-xs"
+            >
+              {label}
+            </Button>
+          ))}
         </div>
       </div>
 
       <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 p-4 sm:p-5">
-          {loot.length === 0 ? (
+          {filteredLoot.length === 0 ? (
             <div className="grid min-h-72 place-items-center border border-dashed border-border/70 bg-background/25 p-8 text-center">
               <div>
                 <Package
                   className="mx-auto size-8 text-muted-foreground"
                   aria-hidden="true"
                 />
-                <p className="mt-3 font-medium">Сундук порожній</p>
+                <p className="mt-3 font-medium">
+                  {loot.length === 0
+                    ? 'Сундук порожній'
+                    : 'Предметів не знайдено'}
+                </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Перенесіть сюди здобич після повернення з походу.
+                  {loot.length === 0
+                    ? 'Перенесіть сюди здобич після повернення з походу.'
+                    : 'Змініть пошук, категорію або рідкість.'}
                 </p>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-              {loot.map((item) => (
+              {filteredLoot.map((item) => (
                 <InventoryItemCard
                   key={item.id}
                   item={item}
@@ -2929,6 +3015,11 @@ function InventoryItemDetails({
     item.compatibleSlots.find((slot) => !equippedBySlot.has(slot)) ??
     item.compatibleSlots[0]
   const current = targetSlot ? equippedBySlot.get(targetSlot) : undefined
+  const comparison = [
+    ['Шкода', item.damage, current?.damage ?? 0],
+    ['Броня', item.armor, current?.armor ?? 0],
+    ['Здоров’я', item.health, current?.health ?? 0],
+  ] as const
 
   return (
     <div className="sticky top-4">
@@ -2958,9 +3049,33 @@ function InventoryItemDetails({
         ))}
       </dl>
       {current ? (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Порівняння з: {current.name}
-        </p>
+        <div className="mt-3 border border-border/60 bg-background/45 p-3">
+          <p className="text-xs text-muted-foreground">
+            Порівняння з:{' '}
+            <span className="text-foreground">{current.name}</span>
+          </p>
+          <dl className="mt-2 space-y-1 text-xs">
+            {comparison.map(([label, nextValue, currentValue]) => {
+              const delta = nextValue - currentValue
+              return (
+                <div
+                  key={label}
+                  className="grid grid-cols-[1fr_auto_auto] gap-3"
+                >
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="font-mono">
+                    {currentValue} → {nextValue}
+                  </dd>
+                  <dd
+                    className={`min-w-10 text-right font-mono ${deltaColor(delta)}`}
+                  >
+                    {formatDelta(delta)}
+                  </dd>
+                </div>
+              )
+            })}
+          </dl>
+        </div>
       ) : null}
       <Button
         type="button"
@@ -3516,6 +3631,41 @@ function itemRarityName(value: string): string {
       DIVINE: 'Божественний',
     }[value] ?? value
   )
+}
+
+function inventoryItemCategory(item: InventoryItem): InventoryCategory {
+  if (
+    item.compatibleSlots.some(
+      (slot) => slot === 'MAIN_HAND' || slot === 'OFF_HAND',
+    )
+  )
+    return 'WEAPON'
+  if (
+    item.compatibleSlots.some((slot) =>
+      ['AMULET', 'BRACELET', 'RING_LEFT', 'RING_RIGHT'].includes(slot),
+    )
+  )
+    return 'ACCESSORY'
+  return 'ARMOR'
+}
+
+function inventoryItemPower(item: InventoryItem): number {
+  return item.damage + item.armor + item.health
+}
+
+function compareInventoryItems(
+  left: InventoryItem,
+  right: InventoryItem,
+  sort: InventorySort,
+): number {
+  if (sort === 'NAME') return left.name.localeCompare(right.name, 'uk')
+  if (sort === 'LEVEL') return right.itemLevel - left.itemLevel
+  if (sort === 'RARITY')
+    return (
+      (INVENTORY_RARITY_ORDER[right.rarity] ?? -1) -
+      (INVENTORY_RARITY_ORDER[left.rarity] ?? -1)
+    )
+  return inventoryItemPower(right) - inventoryItemPower(left)
 }
 
 function archetypeName(value: Hero['archetype']): string {
