@@ -25,6 +25,7 @@ import { createHash } from 'node:crypto';
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { EquipItemInput } from './dto/equip-item.input';
+import { UnequipItemInput } from './dto/unequip-item.input';
 import { itemDefinition } from './item-catalog';
 import { InventoryItemModel, InventoryModel } from './models/inventory.model';
 
@@ -144,6 +145,88 @@ export class InventoryService {
             itemId: item.id,
             type: ItemLineageType.EQUIPPED,
             payload: {
+              slot: input.slot,
+              characterVersion: input.expectedCharacterVersion + 1,
+            },
+          },
+        });
+        await tx.inventoryCommand.create({
+          data: {
+            characterId,
+            idempotencyKey: input.idempotencyKey,
+            payloadHash,
+          },
+        });
+      });
+      return this.read(characterId);
+    } catch (error) {
+      const raced = await this.prisma.client.inventoryCommand.findUnique({
+        where: {
+          characterId_idempotencyKey: {
+            characterId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+      });
+      if (raced?.payloadHash === payloadHash) return this.read(characterId);
+      throw error;
+    }
+  }
+
+  async unequip(
+    userId: string,
+    input: UnequipItemInput,
+  ): Promise<InventoryModel> {
+    const characterId = await this.characters.requireIdForUser(userId);
+    const payloadHash = createHash('sha256')
+      .update(`UNEQUIP:${input.slot}:${input.expectedCharacterVersion}`)
+      .digest('hex');
+    const existing = await this.prisma.client.inventoryCommand.findUnique({
+      where: {
+        characterId_idempotencyKey: {
+          characterId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.payloadHash !== payloadHash)
+        throw new ConflictException('Command key was used for another slot');
+      return this.read(characterId);
+    }
+
+    try {
+      await this.prisma.client.$transaction(async (tx) => {
+        const version = await tx.character.updateMany({
+          where: { id: characterId, version: input.expectedCharacterVersion },
+          data: { version: { increment: 1 } },
+        });
+        if (version.count !== 1)
+          throw new ConflictException(
+            'Character state changed; refresh and retry',
+          );
+        const assignment = await tx.equipmentAssignment.findUnique({
+          where: { characterId_slot: { characterId, slot: input.slot } },
+        });
+        if (!assignment)
+          throw new BadRequestException('Equipment slot is already empty');
+        await tx.equipmentAssignment.delete({ where: { id: assignment.id } });
+        const moved = await tx.itemInstance.updateMany({
+          where: {
+            id: assignment.itemId,
+            ownerId: characterId,
+            location: ItemLocation.EQUIPPED,
+          },
+          data: { location: ItemLocation.CHEST },
+        });
+        if (moved.count !== 1)
+          throw new ConflictException('Equipped item state changed');
+        await tx.itemLineageEvent.create({
+          data: {
+            itemId: assignment.itemId,
+            type: ItemLineageType.EQUIPPED,
+            payload: {
+              action: 'UNEQUIPPED',
               slot: input.slot,
               characterVersion: input.expectedCharacterVersion + 1,
             },

@@ -41,6 +41,8 @@ const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const worldStateFields =
   'currentLocation preparationChoice version highestClearedTier dryadHighestClearedTier cinderhavenUnlockTier cinderhavenUnlocked watchpostVoices { id name role line } routes { destination locked lockReason }'
+const inventoryFields =
+  'characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } }'
 
 type Preparation = 'SEARCH_ARMORY' | 'INSPECT_TRACKS' | 'REST_BRAZIER'
 type Location =
@@ -554,6 +556,43 @@ export function GameJourney() {
           error={error}
           onBack={() => setView('LOBBY')}
           onOpenInventory={() => setView('INVENTORY')}
+          onUnequip={async (slot) => {
+            if (pending) return
+            setPending(true)
+            setError(null)
+            try {
+              const next = await executeUnequipMutation(
+                slot,
+                inventory.characterVersion,
+              )
+              setInventory(next)
+              setTalents((current) =>
+                current
+                  ? { ...current, characterVersion: next.characterVersion }
+                  : current,
+              )
+              setHero({
+                ...hero,
+                baseStats: {
+                  health: next.totalHealth,
+                  damage: next.totalDamage,
+                  armor: next.totalArmor,
+                },
+              })
+            } catch {
+              const refreshed = await loadJourney()
+              if (!refreshed.redirect) {
+                setHero(refreshed.hero)
+                setWorld(refreshed.world)
+                setInventory(refreshed.inventory)
+                setTalents(refreshed.talents)
+                setClan(refreshed.clan)
+              }
+              setError('Не вдалося зняти предмет. Стан героя вже оновлено.')
+            } finally {
+              setPending(false)
+            }
+          }}
           onEquip={async (itemId, slot) => {
             setPending(true)
             setError(null)
@@ -2565,6 +2604,7 @@ function EquipmentScreen({
   error,
   onBack,
   onOpenInventory,
+  onUnequip,
   onEquip,
 }: {
   mode: 'PROFILE' | 'INVENTORY'
@@ -2577,6 +2617,7 @@ function EquipmentScreen({
   error: string | null
   onBack: () => void
   onOpenInventory: () => void
+  onUnequip: (slot: EquipmentSlotKey) => void
   onEquip: (itemId: string, slot: EquipmentSlotKey) => void
 }) {
   const weapon = inventory.equipped.find(
@@ -2680,27 +2721,54 @@ function EquipmentScreen({
           </h2>
           <div className="relative mx-auto mt-7 grid max-w-xl grid-cols-[7rem_1fr_7rem] gap-3">
             <div className="space-y-3">
-              <EquipmentSlot label="Шолом" item={equippedBySlot.get('HEAD')} />
+              <EquipmentSlot
+                label="Шолом"
+                slot="HEAD"
+                item={equippedBySlot.get('HEAD')}
+                pending={pending}
+                onUnequip={onUnequip}
+              />
               <EquipmentSlot
                 label="Наплечники"
+                slot="SHOULDERS"
                 item={equippedBySlot.get('SHOULDERS')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
               <EquipmentSlot
                 label="Нагрудник"
+                slot="CHEST"
                 item={equippedBySlot.get('CHEST')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
               <EquipmentSlot
                 label="Наручі"
+                slot="BRACERS"
                 item={equippedBySlot.get('BRACERS')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
               <EquipmentSlot
                 label="Рукавиці"
+                slot="HANDS"
                 item={equippedBySlot.get('HANDS')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
-              <EquipmentSlot label="Штани" item={equippedBySlot.get('LEGS')} />
+              <EquipmentSlot
+                label="Штани"
+                slot="LEGS"
+                item={equippedBySlot.get('LEGS')}
+                pending={pending}
+                onUnequip={onUnequip}
+              />
               <EquipmentSlot
                 label="Черевики"
+                slot="FEET"
                 item={equippedBySlot.get('FEET')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
             </div>
             <div className="flex min-h-80 flex-col items-center justify-center border-x border-ember/20 bg-background/25 px-3">
@@ -2709,7 +2777,13 @@ function EquipmentScreen({
               </div>
               <div className="mt-5 h-36 w-24 border border-border/80 bg-panel/80 [clip-path:polygon(15%_0,85%_0,100%_100%,0_100%)]" />
               <div className="mt-3 w-full">
-                <EquipmentSlot label="Основна рука" item={weapon} />
+                <EquipmentSlot
+                  label="Основна рука"
+                  slot="MAIN_HAND"
+                  item={weapon}
+                  pending={pending}
+                  onUnequip={onUnequip}
+                />
                 <p className="mt-2 text-center font-mono text-[0.58rem] uppercase tracking-wider text-ember">
                   {weapon ? `+${weapon.damage} DMG` : 'Без зброї'}
                 </p>
@@ -2718,24 +2792,45 @@ function EquipmentScreen({
             <div className="space-y-3">
               <EquipmentSlot
                 label="Амулет"
+                slot="AMULET"
                 item={equippedBySlot.get('AMULET')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
               <EquipmentSlot
                 label="Браслет"
+                slot="BRACELET"
                 item={equippedBySlot.get('BRACELET')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
               <EquipmentSlot
                 label="Каблучка I"
+                slot="RING_LEFT"
                 item={equippedBySlot.get('RING_LEFT')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
               <EquipmentSlot
                 label="Каблучка II"
+                slot="RING_RIGHT"
                 item={equippedBySlot.get('RING_RIGHT')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
-              <EquipmentSlot label="Пояс" item={equippedBySlot.get('WAIST')} />
+              <EquipmentSlot
+                label="Пояс"
+                slot="WAIST"
+                item={equippedBySlot.get('WAIST')}
+                pending={pending}
+                onUnequip={onUnequip}
+              />
               <EquipmentSlot
                 label="Друга рука"
+                slot="OFF_HAND"
                 item={equippedBySlot.get('OFF_HAND')}
+                pending={pending}
+                onUnequip={onUnequip}
               />
             </div>
           </div>
@@ -2776,10 +2871,16 @@ function EquipmentScreen({
 
 function EquipmentSlot({
   label,
+  slot,
   item,
+  pending,
+  onUnequip,
 }: {
   label: string
+  slot: EquipmentSlotKey
   item?: InventoryItem
+  pending: boolean
+  onUnequip: (slot: EquipmentSlotKey) => void
 }) {
   return (
     <div className="grid min-h-12 place-items-center border border-border/70 bg-background/55 px-2 text-center">
@@ -2792,9 +2893,21 @@ function EquipmentSlot({
           {label}
         </p>
         {item ? (
-          <p className="mt-1 truncate text-[0.58rem] text-foreground">
-            {item.name}
-          </p>
+          <>
+            <p className="mt-1 truncate text-[0.58rem] text-foreground">
+              {item.name}
+            </p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onUnequip(slot)}
+              aria-label={`Зняти ${item.name} зі слота ${label.toLocaleLowerCase('uk-UA')}`}
+              title={`Повернути «${item.name}» у сундук`}
+              className="mt-1 font-mono text-[0.5rem] uppercase text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:pointer-events-none disabled:opacity-50"
+            >
+              Зняти
+            </button>
+          </>
         ) : null}
       </div>
     </div>
@@ -4374,8 +4487,7 @@ async function executeInventoryMutation(
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      query:
-        'mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } } } }',
+      query: `mutation Equip($input: EquipItemInput!) { equipItem(input: $input) { ${inventoryFields} } }`,
       variables: {
         input: {
           itemId,
@@ -4395,6 +4507,34 @@ async function executeInventoryMutation(
   return payload.data.equipItem
 }
 
+async function executeUnequipMutation(
+  slot: EquipmentSlotKey,
+  expectedCharacterVersion: number,
+): Promise<Inventory> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      query: `mutation Unequip($input: UnequipItemInput!) { unequipItem(input: $input) { ${inventoryFields} } }`,
+      variables: {
+        input: {
+          slot,
+          expectedCharacterVersion,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      },
+    }),
+  })
+  const payload = (await response.json()) as {
+    data?: { unequipItem: Inventory }
+    errors?: unknown
+  }
+  if (!response.ok || payload.errors || !payload.data)
+    throw new Error('UNEQUIP_FAILED')
+  return payload.data.unequipItem
+}
+
 async function loadJourney(): Promise<{
   hero: Hero | null
   world: WorldState | null
@@ -4411,7 +4551,7 @@ async function loadJourney(): Promise<{
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } } } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
+        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { ${inventoryFields} } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
       }),
     })
     const payload = (await response.json()) as {
