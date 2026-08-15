@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '../database/prisma.service';
+import { withTemperedStats } from '../inventory/tempered-item';
 import { CharacterNameService } from './character-name.service';
 import { CreateCharacterInput } from './dto/create-character.input';
 import { CharacterModel } from './models/character.model';
@@ -140,12 +141,19 @@ export class CharactersService {
     version: number;
     createdAt: Date;
     equipment?: Array<{
-      item: { damage: number; armor: number; health: number };
+      item: {
+        damage: number;
+        armor: number;
+        health: number;
+        temperingStage: number;
+      };
     }>;
     talents?: Array<{ type: TalentType; rank: number }>;
   }): CharacterModel {
     const equipmentStats = sumEquipmentStats(
-      character.equipment?.map((assignment) => assignment.item) ?? [],
+      character.equipment?.map((assignment) =>
+        withTemperedStats(assignment.item),
+      ) ?? [],
     );
     const progression = progressionForExperience(character.experience);
     const bonuses = levelBonuses(progression.level);

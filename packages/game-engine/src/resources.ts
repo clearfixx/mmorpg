@@ -39,6 +39,11 @@ export const RESOURCE_TYPES = [
   'BOSS_INVOCATION_SEAL',
   'DARK_PRIEST_INVOCATION_SEAL',
   'DRYAD_HEARTWOOD',
+  'TEMPERING_STONE_DULL',
+  'TEMPERING_STONE_WHOLE',
+  'TEMPERING_STONE_FLAWLESS',
+  'TEMPERING_STONE_MYTHIC',
+  'TEMPERING_STONE_DIVINE',
 ] as const
 
 export type ResourceType = (typeof RESOURCE_TYPES)[number]
@@ -168,6 +173,36 @@ export const RESOURCE_DEFINITIONS: Readonly<
     'Гарантований трофей Кореневого форпосту на 35-му етапі Лісу дріад.',
     'EPIC',
     18,
+  ),
+  TEMPERING_STONE_DULL: bossExclusive(
+    'TEMPERING_STONE_DULL',
+    'Тьмяний камінь гартування',
+    'Початковий камінь для перших трьох граней ендгеймного гартування.',
+    'LEGENDARY',
+  ),
+  TEMPERING_STONE_WHOLE: bossExclusive(
+    'TEMPERING_STONE_WHOLE',
+    'Цілісний камінь гартування',
+    'Рідкісний камінь для IV–VI ступенів гартування.',
+    'LEGENDARY',
+  ),
+  TEMPERING_STONE_FLAWLESS: bossExclusive(
+    'TEMPERING_STONE_FLAWLESS',
+    'Бездоганний камінь гартування',
+    'Міфічно чистий камінь для VII–IX ступенів.',
+    'MYTHIC',
+  ),
+  TEMPERING_STONE_MYTHIC: bossExclusive(
+    'TEMPERING_STONE_MYTHIC',
+    'Міфічний камінь гартування',
+    'Серце високого гартування для X–XII ступенів.',
+    'MYTHIC',
+  ),
+  TEMPERING_STONE_DIVINE: bossExclusive(
+    'TEMPERING_STONE_DIVINE',
+    'Божественний камінь гартування',
+    'Надзвичайно рідкісний камінь для фінальних трьох ступенів.',
+    'DIVINE',
   ),
 }
 

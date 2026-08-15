@@ -27,6 +27,7 @@ import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { equipmentSlotsForDefinition } from '../inventory/inventory.service';
 import { itemDefinition } from '../inventory/item-catalog';
+import { withTemperedStats } from '../inventory/tempered-item';
 import type { InventoryItemModel } from '../inventory/models/inventory.model';
 import { resourceBalance } from '../resources/resource-catalog';
 import { CreateMarketListingInput } from './dto/create-market-listing.input';
@@ -797,12 +798,15 @@ function marketItem(item: {
   health: number;
   binding: ItemBinding;
   visualAssetId: string;
+  temperingStage: number;
+  temperingProgress: number;
+  temperingVersion: number;
 }): InventoryItemModel {
   const definition = itemDefinition(item.definitionId);
   if (!definition) throw new ConflictException('Item definition is missing');
   const range = itemDamageRange(item.itemLevel, item.rarity);
   return {
-    ...item,
+    ...withTemperedStats(item),
     damageMin: range.min,
     damageMax: range.max,
     compatibleSlots: equipmentSlotsForDefinition(item.definitionId),

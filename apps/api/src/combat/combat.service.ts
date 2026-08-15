@@ -27,6 +27,7 @@ import { createHash } from 'node:crypto';
 
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
+import { withTemperedStats } from '../inventory/tempered-item';
 import { WorldService } from '../world/world.service';
 import { SubmitCombatCommandInput } from './dto/submit-combat-command.input';
 import { ContinueAdventureInput } from './dto/continue-adventure.input';
@@ -279,6 +280,7 @@ export class CombatService {
               select: {
                 definitionId: true,
                 setId: true,
+                temperingStage: true,
                 damage: true,
                 armor: true,
                 health: true,
@@ -296,14 +298,15 @@ export class CombatService {
         },
       },
     });
+    const temperedEquipment = character.equipment.map((assignment) => ({
+      ...assignment,
+      item: withTemperedStats(assignment.item),
+    }));
     const equipment = sumEquipmentWithSetBonuses(
-      character.equipment.map((assignment) => assignment.item),
+      temperedEquipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
-    const loadout = this.combatLoadout(
-      character.equipment,
-      character.resources,
-    );
+    const loadout = this.combatLoadout(temperedEquipment, character.resources);
     const rareEncounter =
       context.region === 'DRYAD_FOREST'
         ? false
@@ -500,6 +503,7 @@ export class CombatService {
               select: {
                 definitionId: true,
                 setId: true,
+                temperingStage: true,
                 damage: true,
                 armor: true,
                 health: true,
@@ -521,14 +525,15 @@ export class CombatService {
       throw new BadRequestException('Level 30 is required for the ritual');
     if (character.worldState?.currentLocation !== 'CINDERHAVEN_GATE')
       throw new BadRequestException('The ritual circle is in Cinderhaven');
+    const temperedEquipment = character.equipment.map((assignment) => ({
+      ...assignment,
+      item: withTemperedStats(assignment.item),
+    }));
     const equipment = sumEquipmentWithSetBonuses(
-      character.equipment.map((assignment) => assignment.item),
+      temperedEquipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
-    const loadout = this.combatLoadout(
-      character.equipment,
-      character.resources,
-    );
+    const loadout = this.combatLoadout(temperedEquipment, character.resources);
     const state = createBattle(
       character.archetype,
       'REST_BRAZIER',
@@ -813,6 +818,7 @@ export class CombatService {
               select: {
                 definitionId: true,
                 setId: true,
+                temperingStage: true,
                 damage: true,
                 armor: true,
                 health: true,
@@ -830,14 +836,15 @@ export class CombatService {
         },
       },
     });
+    const temperedEquipment = character.equipment.map((assignment) => ({
+      ...assignment,
+      item: withTemperedStats(assignment.item),
+    }));
     const equipment = sumEquipmentWithSetBonuses(
-      character.equipment.map((assignment) => assignment.item),
+      temperedEquipment.map((assignment) => assignment.item),
     );
     const bonuses = this.combatTalentBonuses(character.talents, equipment);
-    const loadout = this.combatLoadout(
-      character.equipment,
-      character.resources,
-    );
+    const loadout = this.combatLoadout(temperedEquipment, character.resources);
     const tier = (previousState.encounterTier ?? 1) + 1;
     const dryadForest = previousState.region === 'DRYAD_FOREST';
     const rareEncounter = dryadForest

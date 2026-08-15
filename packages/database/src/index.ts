@@ -22,6 +22,7 @@ export {
   PreparationChoice,
   ResourceType,
   TalentType,
+  TemperingJobStatus,
   UserRole,
   UserStatus,
   WorldLocation,

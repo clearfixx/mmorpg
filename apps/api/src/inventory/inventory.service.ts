@@ -28,6 +28,7 @@ import { EquipItemInput } from './dto/equip-item.input';
 import { UnequipItemInput } from './dto/unequip-item.input';
 import { itemDefinition } from './item-catalog';
 import { InventoryItemModel, InventoryModel } from './models/inventory.model';
+import { withTemperedStats } from './tempered-item';
 
 const BASE_DAMAGE = {
   [CharacterArchetype.VANGUARD]: 16,
@@ -269,7 +270,11 @@ export class InventoryService {
         talents: true,
       },
     });
-    const equipped = character.equipment.map((assignment) => ({
+    const temperedEquipment = character.equipment.map((assignment) => ({
+      ...assignment,
+      item: withTemperedStats(assignment.item),
+    }));
+    const equipped = temperedEquipment.map((assignment) => ({
       slot: assignment.slot,
       item: this.itemModel(assignment.item),
     }));
@@ -291,13 +296,13 @@ export class InventoryService {
     };
     const level = levelBonuses(character.level);
     const equipmentStats = sumEquipmentWithSetBonuses(
-      character.equipment.map((assignment) => assignment.item),
+      temperedEquipment.map((assignment) => assignment.item),
     );
     const activeSetBonuses = activeEquipmentSetBonuses(
-      character.equipment.map((assignment) => assignment.item),
+      temperedEquipment.map((assignment) => assignment.item),
     );
     const setBonusProgress = equipmentSetBonusProgress(
-      character.equipment.map((assignment) => assignment.item),
+      temperedEquipment.map((assignment) => assignment.item),
       character.items.map((item) => item.setId),
     );
     const baseDamage =
@@ -348,13 +353,16 @@ export class InventoryService {
     setId: string;
     binding: string;
     visualAssetId: string;
+    temperingStage: number;
+    temperingProgress: number;
+    temperingVersion: number;
   }): InventoryItemModel {
     const damageRange = itemDamageRange(
       item.itemLevel,
       item.rarity as EngineItemRarity,
     );
     return {
-      ...item,
+      ...withTemperedStats(item),
       damageMin: damageRange.min,
       damageMax: damageRange.max,
       compatibleSlots: equipmentSlotsForDefinition(item.definitionId),

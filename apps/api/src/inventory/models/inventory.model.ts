@@ -14,6 +14,9 @@ export class InventoryItemModel {
   @Field(() => Int) damage!: number;
   @Field(() => Int) armor!: number;
   @Field(() => Int) health!: number;
+  @Field(() => Int) temperingStage!: number;
+  @Field(() => Int) temperingProgress!: number;
+  @Field(() => Int) temperingVersion!: number;
   @Field(() => Int) damageMin!: number;
   @Field(() => Int) damageMax!: number;
   @Field(() => [EquipmentSlot]) compatibleSlots!: EquipmentSlot[];

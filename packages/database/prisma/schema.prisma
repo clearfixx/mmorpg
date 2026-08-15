@@ -95,6 +95,7 @@ enum ItemLineageType {
   STORED_IN_CHEST
   EQUIPPED
   LOST_IN_BATTLE
+  TEMPERING
 }
 
 enum EquipmentSlot {
@@ -144,6 +145,18 @@ enum ResourceType {
   BOSS_INVOCATION_SEAL
   DARK_PRIEST_INVOCATION_SEAL
   DRYAD_HEARTWOOD
+  TEMPERING_STONE_DULL
+  TEMPERING_STONE_WHOLE
+  TEMPERING_STONE_FLAWLESS
+  TEMPERING_STONE_MYTHIC
+  TEMPERING_STONE_DIVINE
+}
+
+enum TemperingJobStatus {
+  ACTIVE
+  SUCCEEDED
+  PROGRESS_GAINED
+  CANCELLED
 }
 
 enum ClanRole {
@@ -238,6 +251,8 @@ model Character {
   recipeKnowledge         CharacterRecipeKnowledge[]
   factionCommands         FactionCommand[]
   bossInvocationCommands  BossInvocationCommand[]
+  temperingJobs           TemperingJob[]
+  temperingCommands       TemperingCommand[]
 
   @@map("characters")
 }
@@ -635,6 +650,9 @@ model ItemInstance {
   location            ItemLocation         @default(CHEST)
   setId               String               @map("set_id") @db.VarChar(64)
   visualAssetId       String               @map("visual_asset_id") @db.VarChar(64)
+  temperingStage      Int                  @default(0) @map("tempering_stage")
+  temperingProgress   Int                  @default(0) @map("tempering_progress")
+  temperingVersion    Int                  @default(1) @map("tempering_version")
   createdAt           DateTime             @default(now()) @map("created_at")
   owner               Character            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   sourceBattle        Battle               @relation(fields: [sourceBattleId], references: [id], onDelete: Restrict)
@@ -642,9 +660,51 @@ model ItemInstance {
   lineage             ItemLineageEvent[]
   equipmentAssignment EquipmentAssignment?
   marketListings      MarketListing[]
+  temperingJobs       TemperingJob[]
 
   @@index([ownerId, location])
   @@map("item_instances")
+}
+
+model TemperingJob {
+  id                  String             @id @default(uuid()) @db.Uuid
+  characterId         String             @map("character_id") @db.Uuid
+  itemId              String             @map("item_id") @db.Uuid
+  activeItemId        String?            @unique @map("active_item_id") @db.Uuid
+  startingStage       Int                @map("starting_stage")
+  targetStage         Int                @map("target_stage")
+  startingProgress    Int                @map("starting_progress")
+  accelerationPercent Int                @default(0) @map("acceleration_percent")
+  costSnapshot        Json               @map("cost_snapshot")
+  status              TemperingJobStatus @default(ACTIVE)
+  resultProgress      Int?               @map("result_progress")
+  guaranteed          Boolean?
+  startedAt           DateTime           @default(now()) @map("started_at")
+  readyAt             DateTime           @map("ready_at")
+  resolvedAt          DateTime?          @map("resolved_at")
+  character           Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  item                ItemInstance       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  commands            TemperingCommand[]
+
+  @@index([characterId, status, readyAt])
+  @@index([itemId, startedAt])
+  @@map("tempering_jobs")
+}
+
+model TemperingCommand {
+  id             String       @id @default(uuid()) @db.Uuid
+  characterId    String       @map("character_id") @db.Uuid
+  temperingJobId String       @map("tempering_job_id") @db.Uuid
+  idempotencyKey String       @map("idempotency_key") @db.VarChar(64)
+  commandType    String       @map("command_type") @db.VarChar(24)
+  payloadHash    String       @map("payload_hash") @db.Char(64)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  character      Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  temperingJob   TemperingJob @relation(fields: [temperingJobId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@index([temperingJobId, createdAt])
+  @@map("tempering_commands")
 }
 
 model MarketListing {

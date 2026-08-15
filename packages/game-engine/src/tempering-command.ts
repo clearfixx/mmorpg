@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-
 import {
   temperingProcessStatus,
   type TemperingProcess,
@@ -64,18 +62,31 @@ export interface TemperingCommandResult {
 export function temperingCommandHash(
   command: TemperingCommandEnvelope,
 ): string {
-  return createHash('sha256')
-    .update(
-      [
-        command.commandType,
-        command.itemId,
-        command.processId ?? '',
-        command.expectedCharacterVersion,
-        command.expectedItemVersion,
-        Math.floor(command.accelerationPercent ?? 0),
-      ].join(':'),
-    )
-    .digest('hex')
+  const payload = [
+    command.commandType,
+    command.itemId,
+    command.processId ?? '',
+    command.expectedCharacterVersion,
+    command.expectedItemVersion,
+    Math.floor(command.accelerationPercent ?? 0),
+  ].join(':')
+  return [
+    0xcbf29ce484222325n,
+    0x84222325cbf29ce4n,
+    0x9e3779b185ebca87n,
+    0x517cc1b727220a95n,
+  ]
+    .map((seed) => fnv64(payload, seed))
+    .join('')
+}
+
+function fnv64(value: string, seed: bigint): string {
+  let hash = seed
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= BigInt(value.charCodeAt(index))
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n)
+  }
+  return hash.toString(16).padStart(16, '0')
 }
 
 export function resolveTemperingCommandReplay(input: {
