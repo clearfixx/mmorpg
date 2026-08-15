@@ -204,6 +204,15 @@ export function temperingCancellationRefund(
   )
 }
 
+export function temperingStoneRewardForBossTier(tier: number): ResourceType {
+  const normalizedTier = Math.max(1, Math.floor(tier))
+  if (normalizedTier === 1) return 'TEMPERING_STONE_DULL'
+  if (normalizedTier === 2) return 'TEMPERING_STONE_WHOLE'
+  if (normalizedTier === 3) return 'TEMPERING_STONE_FLAWLESS'
+  if (normalizedTier === 4) return 'TEMPERING_STONE_MYTHIC'
+  return 'TEMPERING_STONE_DIVINE'
+}
+
 function temperingStoneGrade(stage: number): TemperingStoneGrade {
   if (stage <= 3) return 'DULL'
   if (stage <= 6) return 'WHOLE'

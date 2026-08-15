@@ -16,10 +16,15 @@ describe('MarketService', () => {
     transaction: Record<string, unknown>,
     clientOverrides: Record<string, unknown> = {},
   ) {
+    const transactionWithCapabilities = {
+      temperingJob: { findUnique: jest.fn().mockResolvedValue(null) },
+      ...transaction,
+    };
     const client = {
       marketCommand: { findUnique: jest.fn().mockResolvedValue(null) },
+      temperingJob: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((work: (tx: unknown) => unknown) =>
-        Promise.resolve(work(transaction)),
+        Promise.resolve(work(transactionWithCapabilities)),
       ),
       ...clientOverrides,
     };
@@ -92,6 +97,30 @@ describe('MarketService', () => {
       },
       data: { location: ItemLocation.MARKET },
     });
+  });
+
+  it('does not list an item while its tempering process is active', async () => {
+    const updateMany = jest.fn();
+    const tx = {
+      temperingJob: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'active-tempering' }),
+      },
+      itemInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: itemId,
+          itemLevel: 60,
+          rarity: 'LEGENDARY',
+        }),
+        updateMany,
+      },
+      marketListing: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const { service } = serviceWith(tx);
+
+    await expect(
+      service.createListing('user', { itemId, price: 1_000, idempotencyKey }),
+    ).rejects.toThrow('Item action is unavailable');
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('quotes an owned item from completed comparable sales', async () => {

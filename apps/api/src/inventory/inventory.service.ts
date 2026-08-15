@@ -29,6 +29,7 @@ import { UnequipItemInput } from './dto/unequip-item.input';
 import { itemDefinition } from './item-catalog';
 import { InventoryItemModel, InventoryModel } from './models/inventory.model';
 import { withTemperedStats } from './tempered-item';
+import { canItemPerformInventoryAction } from '../tempering/tempering-item-capability';
 
 const BASE_DAMAGE = {
   [CharacterArchetype.VANGUARD]: 16,
@@ -106,6 +107,8 @@ export class InventoryService {
         });
         if (!item)
           throw new BadRequestException('Item is not available in your chest');
+        if (!(await canItemPerformInventoryAction(tx, item.id)))
+          throw new BadRequestException('Item action is unavailable');
         if (!isEquipmentSlotCompatible(item.definitionId, input.slot))
           throw new BadRequestException('Item is incompatible with this slot');
         if (item.itemLevel > character.level)
@@ -122,6 +125,8 @@ export class InventoryService {
           where: { characterId_slot: { characterId, slot: input.slot } },
         });
         if (current) {
+          if (!(await canItemPerformInventoryAction(tx, current.itemId)))
+            throw new BadRequestException('Item action is unavailable');
           await tx.itemInstance.update({
             where: { id: current.itemId },
             data: { location: ItemLocation.CHEST },
@@ -211,6 +216,8 @@ export class InventoryService {
         });
         if (!assignment)
           throw new BadRequestException('Equipment slot is already empty');
+        if (!(await canItemPerformInventoryAction(tx, assignment.itemId)))
+          throw new BadRequestException('Item action is unavailable');
         await tx.equipmentAssignment.delete({ where: { id: assignment.id } });
         const moved = await tx.itemInstance.updateMany({
           where: {
@@ -257,26 +264,40 @@ export class InventoryService {
   }
 
   private async read(characterId: string): Promise<InventoryModel> {
-    const character = await this.prisma.client.character.findUniqueOrThrow({
-      where: { id: characterId },
-      include: {
-        items: {
-          where: {
-            location: { in: [ItemLocation.CHEST, ItemLocation.BACKPACK] },
+    const [character, activeTempering] = await Promise.all([
+      this.prisma.client.character.findUniqueOrThrow({
+        where: { id: characterId },
+        include: {
+          items: {
+            where: {
+              location: { in: [ItemLocation.CHEST, ItemLocation.BACKPACK] },
+            },
+            orderBy: { createdAt: 'desc' },
           },
-          orderBy: { createdAt: 'desc' },
+          equipment: { include: { item: true } },
+          talents: true,
         },
-        equipment: { include: { item: true } },
-        talents: true,
-      },
-    });
+      }),
+      this.prisma.client.temperingJob.findMany({
+        where: { characterId, activeItemId: { not: null } },
+        select: { activeItemId: true },
+      }),
+    ]);
+    const lockedItemIds = new Set(
+      activeTempering.flatMap((job) =>
+        job.activeItemId ? [job.activeItemId] : [],
+      ),
+    );
     const temperedEquipment = character.equipment.map((assignment) => ({
       ...assignment,
       item: withTemperedStats(assignment.item),
     }));
     const equipped = temperedEquipment.map((assignment) => ({
       slot: assignment.slot,
-      item: this.itemModel(assignment.item),
+      item: this.itemModel(
+        assignment.item,
+        lockedItemIds.has(assignment.item.id),
+      ),
     }));
     const mainHand = character.equipment.find(
       (entry) => entry.slot === EquipmentSlot.MAIN_HAND,
@@ -330,10 +351,10 @@ export class InventoryService {
       totalHealth: baseHealth + equipmentStats.health,
       chest: character.items
         .filter((item) => item.location === ItemLocation.CHEST)
-        .map((item) => this.itemModel(item)),
+        .map((item) => this.itemModel(item, lockedItemIds.has(item.id))),
       backpack: character.items
         .filter((item) => item.location === ItemLocation.BACKPACK)
-        .map((item) => this.itemModel(item)),
+        .map((item) => this.itemModel(item, lockedItemIds.has(item.id))),
       equipped,
       activeSetBonuses,
       setBonusProgress,
@@ -341,22 +362,25 @@ export class InventoryService {
     };
   }
 
-  private itemModel(item: {
-    id: string;
-    definitionId: string;
-    itemLevel: number;
-    rarity: string;
-    rollQuality: number;
-    damage: number;
-    armor: number;
-    health: number;
-    setId: string;
-    binding: string;
-    visualAssetId: string;
-    temperingStage: number;
-    temperingProgress: number;
-    temperingVersion: number;
-  }): InventoryItemModel {
+  private itemModel(
+    item: {
+      id: string;
+      definitionId: string;
+      itemLevel: number;
+      rarity: string;
+      rollQuality: number;
+      damage: number;
+      armor: number;
+      health: number;
+      setId: string;
+      binding: string;
+      visualAssetId: string;
+      temperingStage: number;
+      temperingProgress: number;
+      temperingVersion: number;
+    },
+    temperingLocked = false,
+  ): InventoryItemModel {
     const damageRange = itemDamageRange(
       item.itemLevel,
       item.rarity as EngineItemRarity,
@@ -368,6 +392,7 @@ export class InventoryService {
       compatibleSlots: equipmentSlotsForDefinition(item.definitionId),
       name: itemDefinition(item.definitionId)?.name ?? 'Невідомий предмет',
       setName: itemDefinition(item.definitionId)?.setName ?? item.setId,
+      temperingLocked,
     };
   }
 }

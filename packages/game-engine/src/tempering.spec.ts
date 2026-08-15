@@ -9,6 +9,7 @@ import {
   temperingCancellationRefund,
   temperingEligibility,
   temperingStage,
+  temperingStoneRewardForBossTier,
 } from './tempering'
 
 describe('endgame tempering', () => {
@@ -108,6 +109,17 @@ describe('endgame tempering', () => {
   it('refunds only forty percent of mundane refundable inputs', () => {
     expect(temperingCancellationRefund(6)).toEqual([
       expect.objectContaining({ resourceType: 'VEIL_STEEL', amount: 57 }),
+    ])
+  })
+
+  it('reserves stronger tempering stones for higher clan boss tiers', () => {
+    expect([1, 2, 3, 4, 5, 12].map(temperingStoneRewardForBossTier)).toEqual([
+      'TEMPERING_STONE_DULL',
+      'TEMPERING_STONE_WHOLE',
+      'TEMPERING_STONE_FLAWLESS',
+      'TEMPERING_STONE_MYTHIC',
+      'TEMPERING_STONE_DIVINE',
+      'TEMPERING_STONE_DIVINE',
     ])
   })
 })

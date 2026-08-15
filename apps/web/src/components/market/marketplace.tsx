@@ -26,6 +26,7 @@ interface MarketItem {
   health: number
   binding: string
   setName: string
+  temperingLocked: boolean
 }
 
 interface Listing {
@@ -96,7 +97,7 @@ interface InventoryLike {
 }
 
 const marketFields =
-  'balance listingDeposit saleFeePercent page totalPages totalListings stats { purchases sales spent earned feesPaid } listings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } myListings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } } history { id price saleFee sellerProceeds status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName } resource { type name amount rarity } }'
+  'balance listingDeposit saleFeePercent page totalPages totalListings stats { purchases sales spent earned feesPaid } listings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName temperingLocked } resource { type name amount rarity } } myListings { id price deposit minimumPrice referencePrice comparableSales status expiresAt createdAt own item { id name itemLevel rarity rollQuality damage armor health binding setName temperingLocked } resource { type name amount rarity } } history { id price saleFee sellerProceeds status role completedAt item { id name itemLevel rarity rollQuality damage armor health binding setName temperingLocked } resource { type name amount rarity } }'
 
 export function Marketplace({
   inventory,
@@ -132,7 +133,10 @@ export function Marketplace({
       ) ?? [],
     )
     return [...(inventory?.chest ?? []), ...(inventory?.backpack ?? [])].filter(
-      (item) => item.binding !== 'BOUND' && !listed.has(item.id),
+      (item) =>
+        item.binding !== 'BOUND' &&
+        !item.temperingLocked &&
+        !listed.has(item.id),
     )
   }, [inventory, market?.myListings])
 

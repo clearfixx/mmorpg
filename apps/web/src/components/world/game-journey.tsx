@@ -44,7 +44,7 @@ const endpoint =
 const worldStateFields =
   'currentLocation preparationChoice version highestClearedTier dryadHighestClearedTier cinderhavenUnlockTier cinderhavenUnlocked watchpostVoices { id name role line } routes { destination locked lockReason }'
 const inventoryFields =
-  'characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion } }'
+  'characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion temperingLocked } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion temperingLocked } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion temperingLocked } }'
 
 type Preparation = 'SEARCH_ARMORY' | 'INSPECT_TRACKS' | 'REST_BRAZIER'
 type Location =
@@ -112,6 +112,7 @@ interface InventoryItem {
   temperingStage: number
   temperingProgress: number
   temperingVersion: number
+  temperingLocked: boolean
 }
 
 type EquipmentSlotKey =
@@ -232,6 +233,11 @@ type ResourceType =
   | 'BOSS_INVOCATION_SEAL'
   | 'DARK_PRIEST_INVOCATION_SEAL'
   | 'DRYAD_HEARTWOOD'
+  | 'TEMPERING_STONE_DULL'
+  | 'TEMPERING_STONE_WHOLE'
+  | 'TEMPERING_STONE_FLAWLESS'
+  | 'TEMPERING_STONE_MYTHIC'
+  | 'TEMPERING_STONE_DIVINE'
 
 interface TalentTree {
   characterVersion: number
@@ -310,6 +316,10 @@ interface ClanBoss {
   viewerMaxHealth: number
   rewardType: ResourceType
   rewardAmount: number
+  bonusRewardType: ResourceType
+  bonusRewardAmount: number
+  nextBonusRewardType: ResourceType
+  nextBonusRewardAmount: number
   participants: Array<{
     characterId: string
     name: string
@@ -2495,6 +2505,8 @@ function ClanHall({
                 </p>
                 <p className="mt-2 text-sm">
                   {boss.rewardAmount} {resourceName(boss.rewardType)}
+                  {' · '}
+                  {boss.bonusRewardAmount} {resourceName(boss.bonusRewardType)}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   Відгомін Завіси отримують лише герої, які брали участь у
@@ -2524,6 +2536,9 @@ function ClanHall({
                   <p className="mt-2 text-sm">
                     Рівень {boss.nextTier} · {boss.nextMaxHealth} HP ·{' '}
                     {boss.rewardAmount * 2} {resourceName(boss.rewardType)}
+                    {' · '}
+                    {boss.nextBonusRewardAmount}{' '}
+                    {resourceName(boss.nextBonusRewardType)}
                   </p>
                   {boss.summonLockedReason ? (
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -2941,13 +2956,13 @@ function EquipmentSlot({
             </p>
             <button
               type="button"
-              disabled={pending}
+              disabled={pending || item.temperingLocked}
               onClick={() => onUnequip(slot)}
               aria-label={`Зняти ${item.name} зі слота ${label.toLocaleLowerCase('uk-UA')}`}
               title={`Повернути «${item.name}» у сундук`}
               className="mt-1 font-mono text-[0.5rem] uppercase text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:pointer-events-none disabled:opacity-50"
             >
-              Зняти
+              {item.temperingLocked ? 'У кузні' : 'Зняти'}
             </button>
           </>
         ) : null}
@@ -3825,11 +3840,11 @@ function EquippedInventorySlot({
           <Button
             type="button"
             variant="ghost"
-            disabled={pending}
+            disabled={pending || item.temperingLocked}
             onClick={() => onUnequip(slot)}
             className="mt-2 h-7 w-full rounded-sm text-[0.58rem] text-muted-foreground hover:text-destructive"
           >
-            Зняти в сундук
+            {item.temperingLocked ? 'Предмет у кузні' : 'Зняти в сундук'}
           </Button>
         </>
       ) : (
@@ -4231,18 +4246,21 @@ function InventoryItemDetails({
         disabled={
           pending ||
           item.itemLevel > hero.level ||
-          item.compatibleSlots.length === 0
+          item.compatibleSlots.length === 0 ||
+          item.temperingLocked
         }
         onClick={() => {
           if (targetSlot) onEquip(item.id, targetSlot)
         }}
         className="mt-4 h-9 w-full rounded-sm bg-ember text-ink hover:bg-ember-bright"
       >
-        {pending
-          ? 'Екіпіруємо…'
-          : targetSlot
-            ? `Екіпірувати: ${EQUIPMENT_SLOT_NAMES[targetSlot]}`
-            : 'Несумісний предмет'}
+        {item.temperingLocked
+          ? 'Предмет у Високій кузні'
+          : pending
+            ? 'Екіпіруємо…'
+            : targetSlot
+              ? `Екіпірувати: ${EQUIPMENT_SLOT_NAMES[targetSlot]}`
+              : 'Несумісний предмет'}
       </Button>
     </div>
   )
@@ -4703,7 +4721,7 @@ async function loadJourney(): Promise<{
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { ${inventoryFields} } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
+        query: `{ viewer { id } myCharacter { name archetype level experience experienceIntoLevel experienceForNextLevel gold baseStats { health damage armor } } currentLocation { ${worldStateFields} } worldMap { nodes { id name kind status stages note } } myInventory { ${inventoryFields} } myTalents { characterVersion availablePoints resources { type amount } talents { type name description rank maxRank requiredLevel effectPerRank advanced unlocked costResource costAmount affordable } } myClan { id name inviteCode level experience experienceIntoLevel experienceForNextLevel version characterVersion viewerRole treasury { type amount } developments { branch name description rank maxRank requiredClanLevel costResource costAmount affordable unlocked } members { characterId name level role joinedAt contribution } } currentClanBoss { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount bonusRewardType bonusRewardAmount nextBonusRewardType nextBonusRewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }`,
       }),
     })
     const payload = (await response.json()) as {
@@ -4870,8 +4888,8 @@ async function executeClanBossMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query: summoning
-        ? 'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }'
-        : 'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
+        ? 'mutation Summon($input: SummonClanBossInput!) { summonClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount bonusRewardType bonusRewardAmount nextBonusRewardType nextBonusRewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }'
+        : 'mutation Attack($input: AttackClanBossInput!) { attackClanBoss(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount bonusRewardType bonusRewardAmount nextBonusRewardType nextBonusRewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       variables: { input },
     }),
   })
@@ -4896,7 +4914,7 @@ async function executeClanBossRewardMutation(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       query:
-        'mutation Claim($input: ClaimClanBossRewardInput!) { claimClanBossReward(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
+        'mutation Claim($input: ClaimClanBossRewardInput!) { claimClanBossReward(input: $input) { id name tier status maxHealth currentHealth version canSummon nextTier nextMaxHealth summonLockedReason viewerEligibleForReward viewerRewardClaimed viewerCanAttack viewerCurrentHealth viewerMaxHealth rewardType rewardAmount bonusRewardType bonusRewardAmount nextBonusRewardType nextBonusRewardAmount participants { characterId name damage actions maxHealth currentHealth defeated } } }',
       variables: {
         input: { encounterId, idempotencyKey: crypto.randomUUID() },
       },
@@ -5027,6 +5045,11 @@ function resourceName(value: ResourceType): string {
     VEIL_STEEL: 'сталь Завіси',
     STABILIZED_CATALYST: 'стабілізований каталізатор',
     VEIL_ECHO: 'відгомін Завіси',
+    TEMPERING_STONE_DULL: 'тьмяний камінь гартування',
+    TEMPERING_STONE_WHOLE: 'цілісний камінь гартування',
+    TEMPERING_STONE_FLAWLESS: 'бездоганний камінь гартування',
+    TEMPERING_STONE_MYTHIC: 'міфічний камінь гартування',
+    TEMPERING_STONE_DIVINE: 'божественний камінь гартування',
     CURSED_HEART: 'серце Проклятого лицаря',
     FALLEN_ELF_EYE: 'око Павшого ельфа',
     DARK_PRIEST_ASH: 'попіл Темного жерця',

@@ -28,6 +28,7 @@ import { PrismaService } from '../database/prisma.service';
 import { equipmentSlotsForDefinition } from '../inventory/inventory.service';
 import { itemDefinition } from '../inventory/item-catalog';
 import { withTemperedStats } from '../inventory/tempered-item';
+import { canItemPerformInventoryAction } from '../tempering/tempering-item-capability';
 import type { InventoryItemModel } from '../inventory/models/inventory.model';
 import { resourceBalance } from '../resources/resource-catalog';
 import { CreateMarketListingInput } from './dto/create-market-listing.input';
@@ -89,6 +90,8 @@ export class MarketService {
         },
       });
       if (!item) throw new BadRequestException('Item cannot be listed');
+      if (!(await canItemPerformInventoryAction(tx, item.id)))
+        throw new BadRequestException('Item action is unavailable');
       const minimumPrice = minimumEquipmentMarketPrice(
         item.itemLevel,
         item.rarity,
@@ -170,6 +173,8 @@ export class MarketService {
         },
       });
       if (!item) throw new BadRequestException('Item cannot be quoted');
+      if (!(await canItemPerformInventoryAction(this.prisma.client, item.id)))
+        throw new BadRequestException('Item action is unavailable');
       minimumPrice = minimumEquipmentMarketPrice(item.itemLevel, item.rarity);
       key = `ITEM:${item.definitionId}:${item.rarity}`;
     } else {
@@ -813,6 +818,7 @@ function marketItem(item: {
     name: definition.name,
     setId: definition.setId,
     setName: definition.setName,
+    temperingLocked: false,
   };
 }
 
