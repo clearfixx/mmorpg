@@ -8,6 +8,7 @@ import {
 } from '@veilfall/database';
 import {
   actionsFor,
+  canCharacterPerform,
   createBattle,
   createDryadForestBattle,
   INTENTS,
@@ -521,10 +522,13 @@ export class CombatService {
         },
       },
     });
-    if (character.level < 30)
-      throw new BadRequestException('Level 30 is required for the ritual');
-    if (character.worldState?.currentLocation !== 'CINDERHAVEN_GATE')
-      throw new BadRequestException('The ritual circle is in Cinderhaven');
+    if (
+      !canCharacterPerform('INVOKE_RITUAL_BOSS', {
+        level: character.level,
+        currentLocation: character.worldState?.currentLocation ?? null,
+      })
+    )
+      throw new BadRequestException('This action is unavailable');
     const temperedEquipment = character.equipment.map((assignment) => ({
       ...assignment,
       item: withTemperedStats(assignment.item),

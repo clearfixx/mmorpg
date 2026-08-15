@@ -1,4 +1,5 @@
 export * from './combat'
+export * from './capabilities'
 export * from './crafting'
 export * from './items'
 export * from './market'
