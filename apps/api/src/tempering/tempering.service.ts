@@ -10,7 +10,9 @@ import {
   cancelTemperingProcess,
   completeTemperingProcess,
   quoteTempering,
+  temperingCancellationPreview,
   startTemperingProcess,
+  temperingRoadmap,
   temperingPreview,
   temperingProcessView,
   type ItemRarity,
@@ -344,7 +346,7 @@ export class TemperingService {
     itemId: string | null,
     accelerationPercent: number,
   ): Promise<TemperingStateModel> {
-    const [character, jobs, item] = await Promise.all([
+    const [character, jobs, history, item] = await Promise.all([
       this.prisma.client.character.findUniqueOrThrow({
         where: { id: characterId },
       }),
@@ -353,6 +355,15 @@ export class TemperingService {
         include: { item: true },
         orderBy: { readyAt: 'asc' },
       }),
+      this.prisma.client.temperingJob.findMany({
+        where: {
+          characterId,
+          status: { not: TemperingJobStatus.ACTIVE },
+        },
+        include: { item: true },
+        orderBy: { resolvedAt: 'desc' },
+        take: 20,
+      }),
       itemId
         ? this.prisma.client.itemInstance.findFirst({
             where: { id: itemId, ownerId: characterId },
@@ -360,23 +371,128 @@ export class TemperingService {
         : null,
     ]);
     const now = new Date();
+    const preview = item
+      ? await this.previewFor(
+          this.prisma.client,
+          character,
+          item,
+          accelerationPercent,
+        )
+      : null;
+    if (preview && jobs.some((job) => job.itemId === preview.itemId)) {
+      preview.eligible = false;
+      preview.blockingReasons = [
+        ...preview.blockingReasons,
+        'Предмет уже перебуває у черзі гартування',
+      ];
+    }
+    const roadmap = item
+      ? temperingRoadmap({
+          fromStage: item.temperingStage,
+          accelerationPercent,
+        })
+      : null;
     return {
       characterVersion: character.version,
       queueCapacity: QUEUE_CAPACITY,
       queueAvailable: Math.max(0, QUEUE_CAPACITY - jobs.length),
-      jobs: jobs.map((job) => ({
-        ...temperingProcessView(this.engineProcess(job), now),
-        itemVersion: job.item.temperingVersion,
+      jobs: jobs.map((job) => {
+        const process = this.engineProcess(job);
+        const view = temperingProcessView(process, now);
+        const cancellation = temperingCancellationPreview(process, now);
+        return {
+          ...view,
+          itemVersion: job.item.temperingVersion,
+          itemName:
+            itemDefinition(job.item.definitionId)?.name ??
+            job.item.definitionId,
+          startingStage: job.startingStage,
+          progressPercent: cancellation.progressPercent,
+          cancellationRefunds: this.costEntries(cancellation.returnedResources),
+          cancellationLosses: [
+            this.costEntry('GOLD', cancellation.lostGold),
+            ...this.costEntries(cancellation.lostStones, '_STONE'),
+            ...this.costEntries(cancellation.lostResources),
+          ].filter((entry) => entry.required > 0),
+        };
+      }),
+      history: history.map((job) => ({
+        id: job.id,
+        itemId: job.itemId,
+        itemName:
+          itemDefinition(job.item.definitionId)?.name ?? job.item.definitionId,
+        startingStage: job.startingStage,
+        targetStage: job.targetStage,
+        status: job.status,
+        resultProgress: job.resultProgress,
+        guaranteed: job.guaranteed,
+        startedAt: job.startedAt,
+        resolvedAt: job.resolvedAt,
       })),
-      preview: item
-        ? await this.previewFor(
-            this.prisma.client,
-            character,
-            item,
-            accelerationPercent,
-          )
+      roadmap: roadmap
+        ? {
+            fromStage: roadmap.fromStage,
+            toStage: roadmap.toStage,
+            expectedAttempts: Math.ceil(roadmap.expectedAttempts),
+            maximumAttempts: roadmap.maximumAttempts,
+            expectedDurationSeconds: roadmap.expectedDurationSeconds,
+            maximumDurationSeconds: roadmap.maximumDurationSeconds,
+            expectedCosts: [
+              this.costEntry('GOLD', roadmap.expectedCost.gold),
+              ...this.costEntries(roadmap.expectedCost.stones, '_STONE'),
+              ...this.costEntries(roadmap.expectedCost.resources),
+            ].filter((entry) => entry.required > 0),
+            stages: roadmap.stages.map((stage) => ({
+              stage: stage.stage,
+              successChanceBasisPoints: stage.successChanceBasisPoints,
+              expectedAttempts: Math.ceil(stage.expectedAttempts),
+              maximumAttempts: stage.maximumAttempts,
+              expectedDurationSeconds: stage.expectedDurationSeconds,
+            })),
+          }
         : null,
+      investment: {
+        completedAttempts: history.filter(
+          (job) => job.status !== TemperingJobStatus.CANCELLED,
+        ).length,
+        successfulAttempts: history.filter(
+          (job) => job.status === TemperingJobStatus.SUCCEEDED,
+        ).length,
+        progressAttempts: history.filter(
+          (job) => job.status === TemperingJobStatus.PROGRESS_GAINED,
+        ).length,
+        cancelledAttempts: history.filter(
+          (job) => job.status === TemperingJobStatus.CANCELLED,
+        ).length,
+        goldSpent: history.reduce(
+          (total, job) => total + this.snapshotGold(job.costSnapshot),
+          0,
+        ),
+      },
+      preview,
     };
+  }
+
+  private costEntry(key: string, amount: number) {
+    return {
+      key,
+      required: amount,
+      available: amount,
+      sufficient: true,
+    };
+  }
+
+  private costEntries(values: Record<string, number | undefined>, suffix = '') {
+    return Object.entries(values).map(([key, amount]) =>
+      this.costEntry(`${key}${suffix}`, amount ?? 0),
+    );
+  }
+
+  private snapshotGold(snapshot: unknown): number {
+    if (!snapshot || typeof snapshot !== 'object' || !('gold' in snapshot))
+      return 0;
+    const gold = (snapshot as { gold?: unknown }).gold;
+    return typeof gold === 'number' ? gold : 0;
   }
 
   private async previewFor(

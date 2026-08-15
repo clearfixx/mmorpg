@@ -46,6 +46,8 @@ export class TemperingJobModel {
   @Field(() => ID) id!: string;
   @Field(() => ID) itemId!: string;
   @Field(() => Int) itemVersion!: number;
+  @Field() itemName!: string;
+  @Field(() => Int) startingStage!: number;
   @Field(() => Int) targetStage!: number;
   @Field() status!: string;
   @Field() startedAt!: Date;
@@ -54,6 +56,54 @@ export class TemperingJobModel {
   @Field(() => Int) accelerationPercent!: number;
   @Field() canComplete!: boolean;
   @Field() canCancel!: boolean;
+  @Field(() => Int) progressPercent!: number;
+  @Field(() => [TemperingCostModel]) cancellationRefunds!: TemperingCostModel[];
+  @Field(() => [TemperingCostModel]) cancellationLosses!: TemperingCostModel[];
+}
+
+@ObjectType()
+export class TemperingHistoryModel {
+  @Field(() => ID) id!: string;
+  @Field(() => ID) itemId!: string;
+  @Field() itemName!: string;
+  @Field(() => Int) startingStage!: number;
+  @Field(() => Int) targetStage!: number;
+  @Field() status!: string;
+  @Field(() => Int, { nullable: true }) resultProgress!: number | null;
+  @Field(() => Boolean, { nullable: true }) guaranteed!: boolean | null;
+  @Field(() => Date) startedAt!: Date;
+  @Field(() => Date, { nullable: true }) resolvedAt!: Date | null;
+}
+
+@ObjectType()
+export class TemperingRoadmapStageModel {
+  @Field(() => Int) stage!: number;
+  @Field(() => Int) successChanceBasisPoints!: number;
+  @Field(() => Int) expectedAttempts!: number;
+  @Field(() => Int) maximumAttempts!: number;
+  @Field(() => Int) expectedDurationSeconds!: number;
+}
+
+@ObjectType()
+export class TemperingRoadmapModel {
+  @Field(() => Int) fromStage!: number;
+  @Field(() => Int) toStage!: number;
+  @Field(() => Int) expectedAttempts!: number;
+  @Field(() => Int) maximumAttempts!: number;
+  @Field(() => Int) expectedDurationSeconds!: number;
+  @Field(() => Int) maximumDurationSeconds!: number;
+  @Field(() => [TemperingCostModel]) expectedCosts!: TemperingCostModel[];
+  @Field(() => [TemperingRoadmapStageModel])
+  stages!: TemperingRoadmapStageModel[];
+}
+
+@ObjectType()
+export class TemperingInvestmentModel {
+  @Field(() => Int) completedAttempts!: number;
+  @Field(() => Int) successfulAttempts!: number;
+  @Field(() => Int) progressAttempts!: number;
+  @Field(() => Int) cancelledAttempts!: number;
+  @Field(() => Int) goldSpent!: number;
 }
 
 @ObjectType()
@@ -62,6 +112,10 @@ export class TemperingStateModel {
   @Field(() => Int) queueCapacity!: number;
   @Field(() => Int) queueAvailable!: number;
   @Field(() => [TemperingJobModel]) jobs!: TemperingJobModel[];
+  @Field(() => [TemperingHistoryModel]) history!: TemperingHistoryModel[];
+  @Field(() => TemperingRoadmapModel, { nullable: true })
+  roadmap!: TemperingRoadmapModel | null;
+  @Field(() => TemperingInvestmentModel) investment!: TemperingInvestmentModel;
   @Field(() => TemperingPreviewModel, { nullable: true })
   preview!: TemperingPreviewModel | null;
 }

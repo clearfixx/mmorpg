@@ -24,6 +24,10 @@ import { Button } from '@/components/ui/button'
 
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
+const ukDateTime = new Intl.DateTimeFormat('uk-UA', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+})
 
 interface TemperingItem {
   id: string
@@ -36,6 +40,14 @@ interface TemperingItem {
   temperingStage: number
   temperingProgress: number
   temperingVersion: number
+  binding?: string
+}
+
+interface TemperingCost {
+  key: string
+  required: number
+  available: number
+  sufficient: boolean
 }
 
 interface TemperingPreview {
@@ -53,12 +65,7 @@ interface TemperingPreview {
   accelerationPercent: number
   blockingReasons: string[]
   warnings: string[]
-  costs: Array<{
-    key: string
-    required: number
-    available: number
-    sufficient: boolean
-  }>
+  costs: TemperingCost[]
   stats: {
     currentDamage: number
     nextDamage: number
@@ -76,6 +83,8 @@ interface TemperingJob {
   id: string
   itemId: string
   itemVersion: number
+  itemName: string
+  startingStage: number
   targetStage: number
   status: string
   startedAt: string
@@ -84,6 +93,39 @@ interface TemperingJob {
   accelerationPercent: number
   canComplete: boolean
   canCancel: boolean
+  progressPercent: number
+  cancellationRefunds: TemperingCost[]
+  cancellationLosses: TemperingCost[]
+}
+
+interface TemperingHistory {
+  id: string
+  itemId: string
+  itemName: string
+  startingStage: number
+  targetStage: number
+  status: string
+  resultProgress: number | null
+  guaranteed: boolean | null
+  startedAt: string
+  resolvedAt: string | null
+}
+
+interface TemperingRoadmap {
+  fromStage: number
+  toStage: number
+  expectedAttempts: number
+  maximumAttempts: number
+  expectedDurationSeconds: number
+  maximumDurationSeconds: number
+  expectedCosts: TemperingCost[]
+  stages: Array<{
+    stage: number
+    successChanceBasisPoints: number
+    expectedAttempts: number
+    maximumAttempts: number
+    expectedDurationSeconds: number
+  }>
 }
 
 interface TemperingState {
@@ -91,15 +133,36 @@ interface TemperingState {
   queueCapacity: number
   queueAvailable: number
   jobs: TemperingJob[]
+  history: TemperingHistory[]
+  roadmap: TemperingRoadmap | null
+  investment: {
+    completedAttempts: number
+    successfulAttempts: number
+    progressAttempts: number
+    cancelledAttempts: number
+    goldSpent: number
+  }
   preview: TemperingPreview | null
 }
 
 const temperingFields = `
   characterVersion queueCapacity queueAvailable
   jobs {
-    id itemId itemVersion targetStage status startedAt readyAt remainingSeconds
-    accelerationPercent canComplete canCancel
+    id itemId itemVersion itemName startingStage targetStage status startedAt
+    readyAt remainingSeconds accelerationPercent canComplete canCancel progressPercent
+    cancellationRefunds { key required available sufficient }
+    cancellationLosses { key required available sufficient }
   }
+  history {
+    id itemId itemName startingStage targetStage status resultProgress
+    guaranteed startedAt resolvedAt
+  }
+  roadmap {
+    fromStage toStage expectedAttempts maximumAttempts expectedDurationSeconds
+    maximumDurationSeconds expectedCosts { key required available sufficient }
+    stages { stage successChanceBasisPoints expectedAttempts maximumAttempts expectedDurationSeconds }
+  }
+  investment { completedAttempts successfulAttempts progressAttempts cancelledAttempts goldSpent }
   preview {
     itemId itemName itemVersion currentStage targetStage progressBasisPoints
     successChanceBasisPoints guaranteed eligible affordable durationSeconds
@@ -133,6 +196,9 @@ export function TemperingForge({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [showEligibleOnly, setShowEligibleOnly] = useState(false)
+  const [cancelJobId, setCancelJobId] = useState<string | null>(null)
+  const [lastResult, setLastResult] = useState<TemperingHistory | null>(null)
 
   useEffect(() => {
     if (!selectedItemId) return
@@ -223,6 +289,8 @@ export function TemperingForge({
         },
       )
       setTempering(data[field])
+      if (action === 'complete') setLastResult(data[field].history[0] ?? null)
+      setCancelJobId(null)
       await onChanged()
       if (selectedItemId) await refreshPreview(selectedItemId)
     } catch {
@@ -250,6 +318,15 @@ export function TemperingForge({
 
   const preview = tempering?.preview ?? null
   const selectedItem = uniqueItems.find((item) => item.id === selectedItemId)
+  const activeItemIds = new Set(tempering?.jobs.map((job) => job.itemId) ?? [])
+  const visibleItems = uniqueItems.filter(
+    (item) =>
+      !showEligibleOnly ||
+      (item.itemLevel >= 50 &&
+        ['LEGENDARY', 'MYTHIC', 'DIVINE'].includes(item.rarity) &&
+        item.binding === 'BOUND' &&
+        item.temperingStage < 15),
+  )
 
   return (
     <div className={gameUi.pageGap}>
@@ -298,12 +375,27 @@ export function TemperingForge({
           {error}
         </div>
       ) : null}
+      {lastResult ? (
+        <TemperingResult
+          result={lastResult}
+          onDismiss={() => setLastResult(null)}
+        />
+      ) : null}
 
       <div className="grid gap-2 xl:grid-cols-[17rem_minmax(0,1fr)_21rem]">
         <GamePanel eyebrow="Сховище" title="Оберіть реліквію">
+          <label className="mb-2 flex items-center gap-2 border border-border/60 bg-background/50 p-2 text-[0.65rem] text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showEligibleOnly}
+              onChange={(event) => setShowEligibleOnly(event.target.checked)}
+              className="accent-orange-500"
+            />
+            Лише потенційно придатні
+          </label>
           <div className="max-h-[42rem] space-y-1 overflow-y-auto pr-1">
-            {uniqueItems.length ? (
-              uniqueItems.map((item) => (
+            {visibleItems.length ? (
+              visibleItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -322,6 +414,7 @@ export function TemperingForge({
                     <span className="mt-1 block font-mono text-[0.52rem] uppercase text-muted-foreground">
                       {item.rarity} · {item.itemLevel} рів. · +
                       {item.temperingStage}
+                      {activeItemIds.has(item.id) ? ' · у роботі' : ''}
                     </span>
                   </span>
                 </button>
@@ -503,8 +596,9 @@ export function TemperingForge({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <p className="text-xs">Гарт до +{job.targetStage}</p>
+                          <p className="text-xs">{job.itemName}</p>
                           <p className="mt-1 font-mono text-[0.55rem] text-muted-foreground">
+                            +{job.startingStage} → +{job.targetStage} ·{' '}
                             {job.accelerationPercent}% прискорення
                           </p>
                         </div>
@@ -517,6 +611,12 @@ export function TemperingForge({
                       <p className="mt-3 font-mono text-sm">
                         {ready ? 'Готово' : formatDuration(remaining)}
                       </p>
+                      <div className="mt-2 h-1 overflow-hidden bg-border/70">
+                        <div
+                          className="h-full bg-ember"
+                          style={{ width: `${job.progressPercent}%` }}
+                        />
+                      </div>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <Button
                           type="button"
@@ -530,12 +630,58 @@ export function TemperingForge({
                           type="button"
                           variant="outline"
                           disabled={pending || ready || !job.canCancel}
-                          onClick={() => void resolveTempering(job, 'cancel')}
+                          onClick={() => setCancelJobId(job.id)}
                           className="h-8 rounded-sm text-xs"
                         >
                           <X /> Скасувати
                         </Button>
                       </div>
+                      {cancelJobId === job.id ? (
+                        <div className="mt-3 border border-destructive/35 bg-destructive/5 p-2 text-[0.65rem]">
+                          <p className="text-destructive">
+                            Скасування незворотне. Ви втратите:
+                          </p>
+                          <p className="mt-1 text-muted-foreground">
+                            {job.cancellationLosses
+                              .map(
+                                (cost) =>
+                                  `${costName(cost.key)} × ${cost.required}`,
+                              )
+                              .join(' · ')}
+                          </p>
+                          <p className="mt-1 text-moss">
+                            Повернеться:{' '}
+                            {job.cancellationRefunds.length
+                              ? job.cancellationRefunds
+                                  .map(
+                                    (cost) =>
+                                      `${costName(cost.key)} × ${cost.required}`,
+                                  )
+                                  .join(' · ')
+                              : 'нічого'}
+                          </p>
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              className="h-7 rounded-sm text-xs"
+                              onClick={() =>
+                                void resolveTempering(job, 'cancel')
+                              }
+                            >
+                              Підтвердити
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-7 rounded-sm text-xs"
+                              onClick={() => setCancelJobId(null)}
+                            >
+                              Залишити
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                     </article>
                   )
                 })}
@@ -556,8 +702,183 @@ export function TemperingForge({
           </GamePanel>
         </div>
       </div>
+      {tempering?.roadmap ? (
+        <TemperingRoadmapPanel roadmap={tempering.roadmap} />
+      ) : null}
+      {tempering ? (
+        <TemperingHistoryPanel
+          history={tempering.history}
+          investment={tempering.investment}
+        />
+      ) : null}
     </div>
   )
+}
+
+function TemperingResult({
+  result,
+  onDismiss,
+}: {
+  result: TemperingHistory
+  onDismiss: () => void
+}) {
+  const succeeded = result.status === 'SUCCEEDED'
+  return (
+    <section
+      className={`flex items-center justify-between gap-4 border p-3 ${succeeded ? 'border-moss/50 bg-moss/10' : 'border-ember/50 bg-ember/10'}`}
+    >
+      <div>
+        <p className="font-mono text-[0.58rem] uppercase tracking-wider text-muted-foreground">
+          Результат гартування
+        </p>
+        <p className="mt-1 text-sm">
+          {succeeded
+            ? `${result.itemName} досяг ступеня +${result.targetStage}.`
+            : `${result.itemName} витримав ритуал, але ступінь не підвищився.`}
+        </p>
+        {!succeeded && result.resultProgress ? (
+          <p className="mt-1 text-xs text-ember">
+            Гарантія наступної спроби: {result.resultProgress / 100}%
+          </p>
+        ) : null}
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onDismiss}
+        className="h-8 rounded-sm"
+      >
+        Закрити
+      </Button>
+    </section>
+  )
+}
+
+function TemperingRoadmapPanel({ roadmap }: { roadmap: TemperingRoadmap }) {
+  return (
+    <GamePanel
+      eyebrow="Довгий шлях"
+      title={`Прогноз від +${roadmap.fromStage} до +${roadmap.toStage}`}
+      action={
+        <span className="font-mono text-[0.6rem] text-muted-foreground">
+          очікувано {roadmap.expectedAttempts} спроб
+        </span>
+      }
+    >
+      <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="overflow-x-auto">
+          <div className="grid min-w-[48rem] grid-cols-5 gap-px bg-border/60">
+            {roadmap.stages.map((stage) => (
+              <article key={stage.stage} className="bg-background/70 p-3">
+                <p className="font-serif text-lg text-ember">+{stage.stage}</p>
+                <p className="mt-1 font-mono text-[0.55rem] text-muted-foreground">
+                  {(stage.successChanceBasisPoints / 100).toFixed(0)}% успіху
+                </p>
+                <p className="mt-3 text-xs">
+                  ≈ {stage.expectedAttempts} спроб · до {stage.maximumAttempts}
+                </p>
+                <p className="mt-1 text-[0.65rem] text-muted-foreground">
+                  {formatDuration(stage.expectedDurationSeconds)}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+        <div className="border border-border/60 bg-background/55 p-3">
+          <p className="font-mono text-[0.58rem] uppercase text-ember">
+            Очікувана інвестиція
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Час: {formatDuration(roadmap.expectedDurationSeconds)} ·
+            песимістично {formatDuration(roadmap.maximumDurationSeconds)}
+          </p>
+          <div className="mt-3 space-y-1">
+            {roadmap.expectedCosts.map((cost) => (
+              <p key={cost.key} className="flex justify-between gap-2 text-xs">
+                <span className="text-muted-foreground">
+                  {costName(cost.key)}
+                </span>
+                <span className="font-mono">
+                  {cost.required.toLocaleString('uk-UA')}
+                </span>
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </GamePanel>
+  )
+}
+
+function TemperingHistoryPanel({
+  history,
+  investment,
+}: {
+  history: TemperingHistory[]
+  investment: TemperingState['investment']
+}) {
+  return (
+    <GamePanel eyebrow="Літопис ковадла" title="Історія та інвестиції">
+      <div className="grid gap-2 xl:grid-cols-[20rem_minmax(0,1fr)]">
+        <dl className="grid grid-cols-2 gap-px bg-border/60">
+          <GameMetric
+            label="Спроб (останні 20)"
+            value={investment.completedAttempts}
+          />
+          <GameMetric label="Успішних" value={investment.successfulAttempts} />
+          <GameMetric label="Прогрес" value={investment.progressAttempts} />
+          <GameMetric label="Скасовано" value={investment.cancelledAttempts} />
+          <div className="col-span-2">
+            <GameMetric
+              label="Витрачено золота"
+              value={investment.goldSpent.toLocaleString('uk-UA')}
+            />
+          </div>
+        </dl>
+        <div className="max-h-72 overflow-y-auto border border-border/60">
+          {history.length ? (
+            history.map((entry) => (
+              <article
+                key={entry.id}
+                className="grid gap-2 border-b border-border/60 bg-background/50 p-3 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_8rem_9rem]"
+              >
+                <div>
+                  <p>{entry.itemName}</p>
+                  <p className="mt-1 font-mono text-[0.55rem] text-muted-foreground">
+                    +{entry.startingStage} → +{entry.targetStage}
+                  </p>
+                </div>
+                <p className={historyStatusColor(entry.status)}>
+                  {historyStatusName(entry.status)}
+                </p>
+                <time className="font-mono text-[0.58rem] text-muted-foreground">
+                  {entry.resolvedAt
+                    ? ukDateTime.format(new Date(entry.resolvedAt))
+                    : '—'}
+                </time>
+              </article>
+            ))
+          ) : (
+            <p className="p-4 text-xs text-muted-foreground">
+              Ковадло ще не зберегло жодної завершеної спроби.
+            </p>
+          )}
+        </div>
+      </div>
+    </GamePanel>
+  )
+}
+
+function historyStatusName(status: string) {
+  if (status === 'SUCCEEDED') return 'Ступінь здобуто'
+  if (status === 'PROGRESS_GAINED') return 'Зросла гарантія'
+  return 'Скасовано'
+}
+
+function historyStatusColor(status: string) {
+  if (status === 'SUCCEEDED') return 'text-moss'
+  if (status === 'PROGRESS_GAINED') return 'text-ember'
+  return 'text-destructive'
 }
 
 function StatDelta({
