@@ -8,6 +8,7 @@ import {
   Compass,
   Eye,
   Flame,
+  Hammer,
   Package,
   Search,
   ScrollText,
@@ -35,6 +36,7 @@ import {
 } from '@/components/game-ui/game-dashboard'
 import { GameShell, type GameSection } from '@/components/layout/game-shell'
 import { Marketplace } from '@/components/market/marketplace'
+import { TemperingForge } from '@/components/tempering/tempering-forge'
 import { BattleEncounter } from '@/components/world/battle-encounter'
 
 const endpoint =
@@ -42,7 +44,7 @@ const endpoint =
 const worldStateFields =
   'currentLocation preparationChoice version highestClearedTier dryadHighestClearedTier cinderhavenUnlockTier cinderhavenUnlocked watchpostVoices { id name role line } routes { destination locked lockReason }'
 const inventoryFields =
-  'characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId } }'
+  'characterVersion baseDamage totalDamage baseArmor totalArmor baseHealth totalHealth mainHandVisualAssetId activeSetBonuses { setId setName equippedPieces requiredPieces name damage armor health } setBonusProgress { setId setName equippedPieces requiredPieces name damage armor health active } chest { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion } backpack { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion } equipped { slot item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax compatibleSlots binding setId setName visualAssetId temperingStage temperingProgress temperingVersion } }'
 
 type Preparation = 'SEARCH_ARMORY' | 'INSPECT_TRACKS' | 'REST_BRAZIER'
 type Location =
@@ -107,6 +109,9 @@ interface InventoryItem {
   setId: string
   setName: string
   visualAssetId: string
+  temperingStage: number
+  temperingProgress: number
+  temperingVersion: number
 }
 
 type EquipmentSlotKey =
@@ -361,13 +366,14 @@ type JourneyView =
   | 'FRONT'
 
 type CityDistrictKey =
-  'HUB' | 'TRAINING' | 'CRAFTING' | 'FRONT' | 'CLAN' | 'MARKET'
+  'HUB' | 'TRAINING' | 'CRAFTING' | 'TEMPERING' | 'FRONT' | 'CLAN' | 'MARKET'
 
 function cityDistrictName(district: CityDistrictKey) {
   return {
     HUB: 'Попелястий Прихисток',
     TRAINING: 'Зала гарту',
     CRAFTING: 'Майстерня',
+    TEMPERING: 'Висока кузня',
     FRONT: 'Воєнна рада',
     CLAN: 'Клановий двір',
     MARKET: 'Торгові ряди',
@@ -491,6 +497,18 @@ export function GameJourney() {
     } finally {
       setPending(false)
     }
+  }
+
+  async function refreshJourney() {
+    const refreshed = await loadJourney()
+    if (refreshed.redirect) return window.location.replace(refreshed.redirect)
+    setHero(refreshed.hero)
+    setWorld(refreshed.world)
+    setWorldMap(refreshed.worldMap)
+    setInventory(refreshed.inventory)
+    setTalents(refreshed.talents)
+    setClan(refreshed.clan)
+    setClanBoss(refreshed.clanBoss)
   }
 
   async function travel(destination: Location) {
@@ -704,6 +722,7 @@ export function GameJourney() {
         }}
         onOpenProfile={() => setView('PROFILE')}
         onOpenEquipment={() => setView('INVENTORY')}
+        onRefresh={refreshJourney}
         onCreateClan={async (name) => {
           if (!inventory || pending) return
           await runClanAction('CREATE', name, inventory.characterVersion)
@@ -1592,6 +1611,7 @@ function CinderhavenGate({
   onEnterDryadForest,
   onOpenProfile,
   onOpenEquipment,
+  onRefresh,
   onCreateClan,
   onJoinClan,
   onContributeClan,
@@ -1618,6 +1638,7 @@ function CinderhavenGate({
   onEnterDryadForest: () => void
   onOpenProfile: () => void
   onOpenEquipment: () => void
+  onRefresh: () => Promise<void>
   onCreateClan: (name: string) => Promise<void>
   onJoinClan: (inviteCode: string) => Promise<void>
   onContributeClan: (
@@ -1659,6 +1680,7 @@ function CinderhavenGate({
     HUB: 'LOBBY',
     TRAINING: 'CHARACTER',
     CRAFTING: 'CRAFTING',
+    TEMPERING: 'CRAFTING',
     FRONT: 'MAP',
     CLAN: 'CLAN',
     MARKET: 'LOBBY',
@@ -1782,6 +1804,13 @@ function CinderhavenGate({
                   description="Кодекс ремесел, паралельні станції та фонове створення матеріалів."
                   action="Відкрити майстерню"
                   onClick={() => setDistrict('CRAFTING')}
+                />
+                <CityDistrict
+                  icon={Hammer}
+                  title="Висока кузня"
+                  description="Довге гартування легендарного спорядження рідкісними каменями Завіси."
+                  action="Відкрити ковадло"
+                  onClick={() => setDistrict('TEMPERING')}
                 />
                 <CityDistrict
                   icon={Swords}
@@ -1911,7 +1940,19 @@ function CinderhavenGate({
             </section>
           </>
         ) : district === 'CRAFTING' ? (
-          <CraftingWorkshop onBack={() => setDistrict('HUB')} />
+          <CraftingWorkshop
+            onBack={() => setDistrict('HUB')}
+            onOpenTempering={() => setDistrict('TEMPERING')}
+          />
+        ) : district === 'TEMPERING' ? (
+          <TemperingForge
+            items={[
+              ...(inventory?.chest ?? []),
+              ...(inventory?.equipped.map((entry) => entry.item) ?? []),
+            ]}
+            onBack={() => setDistrict('CRAFTING')}
+            onChanged={onRefresh}
+          />
         ) : district === 'MARKET' ? (
           <Marketplace
             inventory={inventory}
@@ -3771,6 +3812,11 @@ function EquippedInventorySlot({
               {inventoryItemPower(item)} сили
             </span>
           </div>
+          {item.temperingStage > 0 ? (
+            <p className="mt-1 font-mono text-[0.55rem] text-ember">
+              Гарт +{item.temperingStage}
+            </p>
+          ) : null}
           {activeBonuses > 0 ? (
             <p className="mt-1 text-[0.55rem] text-moss">
               Активних бонусів сету: {activeBonuses}
@@ -3861,6 +3907,7 @@ function InventoryItemCard({
           <h2 className="font-medium leading-5">{item.name}</h2>
           <p className="mt-1 font-mono text-[0.58rem] uppercase tracking-wider text-ember">
             {itemRarityName(item.rarity)} · {item.itemLevel} рівень
+            {item.temperingStage > 0 ? ` · гарт +${item.temperingStage}` : ''}
           </p>
           <p className="mt-1 truncate text-xs text-muted-foreground">
             {item.setName}
@@ -4001,6 +4048,7 @@ function InventoryItemDetails({
       </div>
       <p className="mt-4 font-mono text-[0.58rem] uppercase tracking-wider text-ember">
         {itemRarityName(item.rarity)} · {item.itemLevel} рівень
+        {item.temperingStage > 0 ? ` · гарт +${item.temperingStage}` : ''}
       </p>
       <h2 className="mt-1 font-serif text-xl">{item.name}</h2>
       <p className="mt-1 text-xs text-muted-foreground">{item.setName}</p>
@@ -4030,6 +4078,16 @@ function InventoryItemDetails({
         <div className="bg-background/70 p-2">
           <dt className="text-muted-foreground">Сила</dt>
           <dd className="mt-1 font-mono">{inventoryItemPower(item)}</dd>
+        </div>
+        <div className="bg-background/70 p-2">
+          <dt className="text-muted-foreground">Гарт</dt>
+          <dd className="mt-1 font-mono text-ember">+{item.temperingStage}</dd>
+        </div>
+        <div className="bg-background/70 p-2">
+          <dt className="text-muted-foreground">Гарантія</dt>
+          <dd className="mt-1 font-mono">
+            {(item.temperingProgress / 100).toFixed(0)}%
+          </dd>
         </div>
       </dl>
       {setProgress ? (

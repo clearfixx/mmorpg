@@ -45,6 +45,7 @@ export class TemperingPreviewModel {
 export class TemperingJobModel {
   @Field(() => ID) id!: string;
   @Field(() => ID) itemId!: string;
+  @Field(() => Int) itemVersion!: number;
   @Field(() => Int) targetStage!: number;
   @Field() status!: string;
   @Field() startedAt!: Date;

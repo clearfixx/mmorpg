@@ -364,9 +364,10 @@ export class TemperingService {
       characterVersion: character.version,
       queueCapacity: QUEUE_CAPACITY,
       queueAvailable: Math.max(0, QUEUE_CAPACITY - jobs.length),
-      jobs: jobs.map((job) =>
-        temperingProcessView(this.engineProcess(job), now),
-      ),
+      jobs: jobs.map((job) => ({
+        ...temperingProcessView(this.engineProcess(job), now),
+        itemVersion: job.item.temperingVersion,
+      })),
       preview: item
         ? await this.previewFor(
             this.prisma.client,

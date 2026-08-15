@@ -90,7 +90,13 @@ const craftingFields = `
   }
 `
 
-export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
+export function CraftingWorkshop({
+  onBack,
+  onOpenTempering,
+}: {
+  onBack: () => void
+  onOpenTempering?: () => void
+}) {
   const [crafting, setCrafting] = useState<CraftingState | null>(null)
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -447,6 +453,16 @@ export function CraftingWorkshop({ onBack }: { onBack: () => void }) {
               <GameMetric label="Обрано" value={selectedRecipe?.name ?? '—'} />
               <GameMetric label="Кількість" value={selectedQuantity} />
             </dl>
+            {onOpenTempering ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onOpenTempering}
+                className="mt-3 h-8 w-full rounded-sm text-xs"
+              >
+                <Hammer className="size-3.5" /> Висока кузня
+              </Button>
+            ) : null}
           </>
         }
       />
