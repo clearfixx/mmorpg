@@ -27,7 +27,10 @@ export class TemperingPreviewModel {
   @Field() itemName!: string;
   @Field(() => Int) itemVersion!: number;
   @Field(() => Int) currentStage!: number;
+  @Field() currentStageName!: string;
   @Field(() => Int, { nullable: true }) targetStage!: number | null;
+  @Field(() => String, { nullable: true }) targetStageName!: string | null;
+  @Field() ritualMilestone!: string;
   @Field(() => Int) progressBasisPoints!: number;
   @Field(() => Int) successChanceBasisPoints!: number;
   @Field() guaranteed!: boolean;
@@ -49,6 +52,8 @@ export class TemperingJobModel {
   @Field() itemName!: string;
   @Field(() => Int) startingStage!: number;
   @Field(() => Int) targetStage!: number;
+  @Field() targetStageName!: string;
+  @Field() ritualMilestone!: string;
   @Field() status!: string;
   @Field() startedAt!: Date;
   @Field() readyAt!: Date;

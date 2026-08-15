@@ -1956,10 +1956,7 @@ function CinderhavenGate({
           />
         ) : district === 'TEMPERING' ? (
           <TemperingForge
-            items={[
-              ...(inventory?.chest ?? []),
-              ...(inventory?.equipped.map((entry) => entry.item) ?? []),
-            ]}
+            items={inventory?.chest ?? []}
             onBack={() => setDistrict('CRAFTING')}
             onChanged={onRefresh}
           />

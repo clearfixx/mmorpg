@@ -15,6 +15,7 @@ import {
   temperingRoadmap,
   temperingPreview,
   temperingProcessView,
+  temperingStage,
   type ItemRarity,
   type ResourceType as EngineResourceType,
   type TemperingProcess,
@@ -31,6 +32,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { itemDefinition } from '../inventory/item-catalog';
+import { canItemPerformInventoryAction } from './tempering-item-capability';
 import { ResolveTemperingInput } from './dto/resolve-tempering.input';
 import { StartTemperingInput } from './dto/start-tempering.input';
 import {
@@ -84,7 +86,7 @@ export class TemperingService {
           where: {
             id: input.itemId,
             ownerId: characterId,
-            location: { in: [ItemLocation.CHEST, ItemLocation.EQUIPPED] },
+            location: ItemLocation.CHEST,
           },
         }),
         tx.temperingJob.count({
@@ -92,6 +94,8 @@ export class TemperingService {
         }),
       ]);
       if (!item) throw new BadRequestException('Item is unavailable');
+      if (!(await canItemPerformInventoryAction(tx, item.id)))
+        throw new ConflictException('Item action is unavailable');
       if (activeCount >= QUEUE_CAPACITY)
         throw new ConflictException('Tempering queue is full');
       if (item.temperingVersion !== input.expectedItemVersion)
@@ -407,6 +411,10 @@ export class TemperingService {
             itemDefinition(job.item.definitionId)?.name ??
             job.item.definitionId,
           startingStage: job.startingStage,
+          targetStageName:
+            temperingStage(job.targetStage)?.name ??
+            `Ступінь ${job.targetStage}`,
+          ritualMilestone: this.ritualMilestone(job.targetStage),
           progressPercent: cancellation.progressPercent,
           cancellationRefunds: this.costEntries(cancellation.returnedResources),
           cancellationLosses: [
@@ -511,6 +519,7 @@ export class TemperingService {
       temperingProgress: number;
       temperingVersion: number;
       ownerId: string;
+      location: ItemLocation;
     },
     accelerationPercent: number,
   ): Promise<TemperingPreviewModel> {
@@ -537,6 +546,10 @@ export class TemperingService {
       accelerationPercent,
     });
     const cost = preview.totalCost;
+    const chestRequired = item.location !== ItemLocation.CHEST;
+    const targetStage = preview.targetStage
+      ? temperingStage(preview.targetStage)
+      : null;
     const costs = cost
       ? [
           { key: 'GOLD', required: cost.gold, available: wallet.gold },
@@ -560,15 +573,24 @@ export class TemperingService {
       itemName: itemDefinition(item.definitionId)?.name ?? item.definitionId,
       itemVersion: item.temperingVersion,
       currentStage: preview.currentStage,
+      currentStageName:
+        temperingStage(preview.currentStage)?.name ?? 'Незагартований',
       targetStage: preview.targetStage,
+      targetStageName: targetStage?.name ?? null,
+      ritualMilestone: this.ritualMilestone(preview.targetStage),
       progressBasisPoints: preview.progressBasisPoints,
       successChanceBasisPoints: preview.successChanceBasisPoints,
       guaranteed: preview.guaranteed,
-      eligible: preview.eligible,
+      eligible: preview.eligible && !chestRequired,
       affordable: preview.affordable,
       durationSeconds: preview.quote?.durationSeconds ?? 0,
       accelerationPercent: preview.quote?.accelerationPercent ?? 0,
-      blockingReasons: [...preview.blockingReasons],
+      blockingReasons: chestRequired
+        ? [
+            ...preview.blockingReasons,
+            'Спочатку зніміть предмет і покладіть його до скрині',
+          ]
+        : [...preview.blockingReasons],
       warnings: [...preview.warnings],
       costs,
       stats: {
@@ -583,6 +605,15 @@ export class TemperingService {
         healthDelta: preview.stats.delta.health,
       },
     };
+  }
+
+  private ritualMilestone(stage: number | null): string {
+    if (stage === null) return 'Досягнуто межу гартування';
+    if (stage >= 15) return 'Божественний рубіж';
+    if (stage >= 12) return 'Рубіж безсмертної сталі';
+    if (stage >= 8) return 'Рубіж міфічного гарту';
+    if (stage >= 4) return 'Рубіж майстерного гарту';
+    return 'Початковий гарт';
   }
 
   private engineProcess(job: {

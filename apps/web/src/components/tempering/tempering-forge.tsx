@@ -7,12 +7,13 @@ import {
   Clock3,
   Flame,
   Hammer,
+  Search,
   Shield,
   Sparkles,
   Sword,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import {
   GameHeroBanner,
@@ -55,7 +56,10 @@ interface TemperingPreview {
   itemName: string
   itemVersion: number
   currentStage: number
+  currentStageName: string
   targetStage: number | null
+  targetStageName: string | null
+  ritualMilestone: string
   progressBasisPoints: number
   successChanceBasisPoints: number
   guaranteed: boolean
@@ -86,6 +90,8 @@ interface TemperingJob {
   itemName: string
   startingStage: number
   targetStage: number
+  targetStageName: string
+  ritualMilestone: string
   status: string
   startedAt: string
   readyAt: string
@@ -148,7 +154,7 @@ interface TemperingState {
 const temperingFields = `
   characterVersion queueCapacity queueAvailable
   jobs {
-    id itemId itemVersion itemName startingStage targetStage status startedAt
+    id itemId itemVersion itemName startingStage targetStage targetStageName ritualMilestone status startedAt
     readyAt remainingSeconds accelerationPercent canComplete canCancel progressPercent
     cancellationRefunds { key required available sufficient }
     cancellationLosses { key required available sufficient }
@@ -164,7 +170,7 @@ const temperingFields = `
   }
   investment { completedAttempts successfulAttempts progressAttempts cancelledAttempts goldSpent }
   preview {
-    itemId itemName itemVersion currentStage targetStage progressBasisPoints
+    itemId itemName itemVersion currentStage currentStageName targetStage targetStageName ritualMilestone progressBasisPoints
     successChanceBasisPoints guaranteed eligible affordable durationSeconds
     accelerationPercent blockingReasons warnings
     costs { key required available sufficient }
@@ -197,6 +203,9 @@ export function TemperingForge({
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [showEligibleOnly, setShowEligibleOnly] = useState(false)
+  const [itemSearch, setItemSearch] = useState('')
+  const [itemSort, setItemSort] = useState('stage')
+  const deferredItemSearch = useDeferredValue(itemSearch)
   const [cancelJobId, setCancelJobId] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<TemperingHistory | null>(null)
 
@@ -235,6 +244,49 @@ export function TemperingForge({
     const timer = window.setInterval(() => setNow(Date.now()), 1_000)
     return () => window.clearInterval(timer)
   }, [tempering?.jobs.length])
+
+  useEffect(() => {
+    let active = true
+    const savedItemId = window.localStorage.getItem(
+      'veilfall.tempering.item.v1',
+    )
+    if (savedItemId && uniqueItems.some((item) => item.id === savedItemId)) {
+      window.queueMicrotask(() => {
+        if (active) setSelectedItemId(savedItemId)
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [uniqueItems])
+
+  useEffect(() => {
+    if (!selectedItemId) return
+    window.localStorage.setItem('veilfall.tempering.item.v1', selectedItemId)
+  }, [selectedItemId])
+
+  useEffect(() => {
+    if (!selectedItemId || !tempering?.jobs.length) return
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      void queryTempering(
+        `query Tempering($itemId: String, $acceleration: Int) {
+          myTempering(itemId: $itemId, accelerationPercent: $acceleration) {
+            ${temperingFields}
+          }
+        }`,
+        { itemId: selectedItemId, acceleration: accelerationPercent },
+      )
+        .then((data) => setTempering(data.myTempering))
+        .catch(() => undefined)
+    }
+    const timer = window.setInterval(refresh, 15_000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [selectedItemId, accelerationPercent, tempering?.jobs.length])
 
   async function startTempering() {
     const preview = tempering?.preview
@@ -319,14 +371,31 @@ export function TemperingForge({
   const preview = tempering?.preview ?? null
   const selectedItem = uniqueItems.find((item) => item.id === selectedItemId)
   const activeItemIds = new Set(tempering?.jobs.map((job) => job.itemId) ?? [])
-  const visibleItems = uniqueItems.filter(
-    (item) =>
-      !showEligibleOnly ||
-      (item.itemLevel >= 50 &&
-        ['LEGENDARY', 'MYTHIC', 'DIVINE'].includes(item.rarity) &&
-        item.binding === 'BOUND' &&
-        item.temperingStage < 15),
-  )
+  const readyCount =
+    tempering?.jobs.filter((job) => new Date(job.readyAt).getTime() <= now)
+      .length ?? 0
+  const visibleItems = useMemo(() => {
+    const query = deferredItemSearch.trim().toLocaleLowerCase('uk-UA')
+    const eligible = (item: TemperingItem) =>
+      item.itemLevel >= 50 &&
+      ['LEGENDARY', 'MYTHIC', 'DIVINE'].includes(item.rarity) &&
+      item.binding === 'BOUND' &&
+      item.temperingStage < 15
+    return [...uniqueItems]
+      .filter(
+        (item) =>
+          (!showEligibleOnly || eligible(item)) &&
+          (!query || item.name.toLocaleLowerCase('uk-UA').includes(query)),
+      )
+      .sort((left, right) => {
+        if (itemSort === 'level') return right.itemLevel - left.itemLevel
+        if (itemSort === 'name')
+          return left.name.localeCompare(right.name, 'uk')
+        if (itemSort === 'rarity')
+          return rarityRank(right.rarity) - rarityRank(left.rarity)
+        return right.temperingStage - left.temperingStage
+      })
+  }, [deferredItemSearch, itemSort, showEligibleOnly, uniqueItems])
 
   return (
     <div className={gameUi.pageGap}>
@@ -361,7 +430,7 @@ export function TemperingForge({
               label="Вільно"
               value={tempering?.queueAvailable ?? '—'}
             />
-            <GameMetric label="Межа" value="XV" />
+            <GameMetric label="Готово" value={readyCount} />
             <GameMetric label="Прискорення" value={`до 35%`} />
           </dl>
         }
@@ -384,6 +453,28 @@ export function TemperingForge({
 
       <div className="grid gap-2 xl:grid-cols-[17rem_minmax(0,1fr)_21rem]">
         <GamePanel eyebrow="Сховище" title="Оберіть реліквію">
+          <label className="mb-2 flex items-center gap-2 border border-border/60 bg-background/50 px-2">
+            <Search className="size-3.5 text-muted-foreground" />
+            <span className="sr-only">Пошук предмета</span>
+            <input
+              type="search"
+              value={itemSearch}
+              onChange={(event) => setItemSearch(event.target.value)}
+              placeholder="Пошук у скрині…"
+              className="h-9 min-w-0 flex-1 bg-transparent text-xs outline-none"
+            />
+          </label>
+          <select
+            aria-label="Сортування предметів"
+            value={itemSort}
+            onChange={(event) => setItemSort(event.target.value)}
+            className="mb-2 h-9 w-full border border-border/60 bg-background/50 px-2 text-xs"
+          >
+            <option value="stage">За ступенем гарту</option>
+            <option value="level">За рівнем предмета</option>
+            <option value="rarity">За рідкістю</option>
+            <option value="name">За назвою</option>
+          </select>
           <label className="mb-2 flex items-center gap-2 border border-border/60 bg-background/50 p-2 text-[0.65rem] text-muted-foreground">
             <input
               type="checkbox"
@@ -436,13 +527,11 @@ export function TemperingForge({
               <div className="grid gap-px bg-border/60 sm:grid-cols-4">
                 <GameMetric
                   label="Поточний гарт"
-                  value={`+${preview.currentStage}`}
+                  value={preview.currentStageName}
                 />
                 <GameMetric
                   label="Наступний"
-                  value={
-                    preview.targetStage ? `+${preview.targetStage}` : 'Межа'
-                  }
+                  value={preview.targetStageName ?? 'Межа'}
                 />
                 <GameMetric
                   label="Шанс"
@@ -464,7 +553,7 @@ export function TemperingForge({
                 </div>
                 <p className="mt-3 font-serif text-lg">{preview.itemName}</p>
                 <p className="mt-1 font-mono text-[0.58rem] text-muted-foreground">
-                  Накопичена гарантія:{' '}
+                  {preview.ritualMilestone} · накопичена гарантія:{' '}
                   {(preview.progressBasisPoints / 100).toFixed(0)}%
                 </p>
               </div>
@@ -598,8 +687,11 @@ export function TemperingForge({
                         <div>
                           <p className="text-xs">{job.itemName}</p>
                           <p className="mt-1 font-mono text-[0.55rem] text-muted-foreground">
-                            +{job.startingStage} → +{job.targetStage} ·{' '}
+                            +{job.startingStage} → {job.targetStageName} ·{' '}
                             {job.accelerationPercent}% прискорення
+                          </p>
+                          <p className="mt-1 text-[0.6rem] text-ember">
+                            {job.ritualMilestone}
                           </p>
                         </div>
                         {ready ? (
@@ -700,6 +792,13 @@ export function TemperingForge({
               рідкісні компоненти згорають.
             </p>
           </GamePanel>
+          <GamePanel eyebrow="Де шукати" title="Матеріали гарту">
+            <ul className="space-y-2 text-xs leading-5 text-muted-foreground">
+              <li>Камені гарту — трофеї кланових босів відповідного рангу.</li>
+              <li>Сталь Завіси — довгі ремісничі ланцюги Високої кузні.</li>
+              <li>Попіл і серця — ритуальні боси та пізні регіони світу.</li>
+            </ul>
+          </GamePanel>
         </div>
       </div>
       {tempering?.roadmap ? (
@@ -713,6 +812,18 @@ export function TemperingForge({
       ) : null}
     </div>
   )
+}
+
+function rarityRank(rarity: string) {
+  return [
+    'COMMON',
+    'UNCOMMON',
+    'RARE',
+    'EPIC',
+    'LEGENDARY',
+    'MYTHIC',
+    'DIVINE',
+  ].indexOf(rarity)
 }
 
 function TemperingResult({
