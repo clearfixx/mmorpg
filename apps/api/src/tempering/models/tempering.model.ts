@@ -33,6 +33,11 @@ export class TemperingPreviewModel {
   @Field() ritualMilestone!: string;
   @Field(() => Int) progressBasisPoints!: number;
   @Field(() => Int) successChanceBasisPoints!: number;
+  @Field(() => Int) failureProgressBasisPoints!: number;
+  @Field(() => Int) failuresUntilGuarantee!: number;
+  @Field(() => Int) maximumAttemptsToAdvance!: number;
+  @Field(() => Int) currentStatBonusBasisPoints!: number;
+  @Field(() => Int) targetStatBonusBasisPoints!: number;
   @Field() guaranteed!: boolean;
   @Field() eligible!: boolean;
   @Field() affordable!: boolean;
@@ -54,6 +59,9 @@ export class TemperingJobModel {
   @Field(() => Int) targetStage!: number;
   @Field() targetStageName!: string;
   @Field() ritualMilestone!: string;
+  @Field(() => Int) successChanceBasisPoints!: number;
+  @Field(() => Int) failureProgressBasisPoints!: number;
+  @Field() guaranteedAttempt!: boolean;
   @Field() status!: string;
   @Field() startedAt!: Date;
   @Field() readyAt!: Date;
@@ -73,6 +81,9 @@ export class TemperingHistoryModel {
   @Field() itemName!: string;
   @Field(() => Int) startingStage!: number;
   @Field(() => Int) targetStage!: number;
+  @Field() targetStageName!: string;
+  @Field(() => Int) resultingStage!: number;
+  @Field() resultingStageName!: string;
   @Field() status!: string;
   @Field(() => Int, { nullable: true }) resultProgress!: number | null;
   @Field(() => Boolean, { nullable: true }) guaranteed!: boolean | null;
@@ -83,10 +94,15 @@ export class TemperingHistoryModel {
 @ObjectType()
 export class TemperingRoadmapStageModel {
   @Field(() => Int) stage!: number;
+  @Field() name!: string;
+  @Field() ritualMilestone!: boolean;
+  @Field(() => Int) cumulativeStatBonusBasisPoints!: number;
   @Field(() => Int) successChanceBasisPoints!: number;
+  @Field(() => Int) failureProgressBasisPoints!: number;
   @Field(() => Int) expectedAttempts!: number;
   @Field(() => Int) maximumAttempts!: number;
   @Field(() => Int) expectedDurationSeconds!: number;
+  @Field(() => Int) maximumDurationSeconds!: number;
 }
 
 @ObjectType()
@@ -98,6 +114,7 @@ export class TemperingRoadmapModel {
   @Field(() => Int) expectedDurationSeconds!: number;
   @Field(() => Int) maximumDurationSeconds!: number;
   @Field(() => [TemperingCostModel]) expectedCosts!: TemperingCostModel[];
+  @Field(() => [TemperingCostModel]) maximumCosts!: TemperingCostModel[];
   @Field(() => [TemperingRoadmapStageModel])
   stages!: TemperingRoadmapStageModel[];
 }
@@ -109,6 +126,7 @@ export class TemperingInvestmentModel {
   @Field(() => Int) progressAttempts!: number;
   @Field(() => Int) cancelledAttempts!: number;
   @Field(() => Int) goldSpent!: number;
+  @Field(() => [TemperingCostModel]) spentResources!: TemperingCostModel[];
 }
 
 @ObjectType()

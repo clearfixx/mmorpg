@@ -56,6 +56,14 @@ export interface TemperingResolution {
   guaranteed: boolean
 }
 
+export interface TemperingAttemptForecast {
+  successChanceBasisPoints: number
+  failureProgressBasisPoints: number
+  failuresUntilGuarantee: number
+  maximumAttemptsToAdvance: number
+  guaranteedNow: boolean
+}
+
 const RARITY_ORDER: Record<ItemRarity, number> = {
   COMMON: 0,
   UNCOMMON: 1,
@@ -178,6 +186,36 @@ export function resolveTempering(input: {
       progress + nextDefinition.failureProgressBasisPoints,
     ),
     guaranteed: false,
+  }
+}
+
+export function temperingAttemptForecast(input: {
+  currentStage: number
+  progressBasisPoints: number
+}): TemperingAttemptForecast {
+  const definition = temperingStage(input.currentStage + 1)
+  if (!definition) throw new Error('TEMPERING_COMPLETE')
+  const progress = clampBasisPoints(input.progressBasisPoints)
+  const guaranteedNow = progress >= 10_000
+  if (guaranteedNow || definition.successChanceBasisPoints >= 10_000)
+    return {
+      successChanceBasisPoints: guaranteedNow
+        ? 10_000
+        : definition.successChanceBasisPoints,
+      failureProgressBasisPoints: definition.failureProgressBasisPoints,
+      failuresUntilGuarantee: 0,
+      maximumAttemptsToAdvance: 1,
+      guaranteedNow,
+    }
+  const failuresUntilGuarantee = Math.ceil(
+    (10_000 - progress) / definition.failureProgressBasisPoints,
+  )
+  return {
+    successChanceBasisPoints: definition.successChanceBasisPoints,
+    failureProgressBasisPoints: definition.failureProgressBasisPoints,
+    failuresUntilGuarantee,
+    maximumAttemptsToAdvance: failuresUntilGuarantee + 1,
+    guaranteedNow: false,
   }
 }
 

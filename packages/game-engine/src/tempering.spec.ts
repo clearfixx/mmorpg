@@ -8,6 +8,7 @@ import {
   temperedStats,
   temperingCancellationRefund,
   temperingEligibility,
+  temperingAttemptForecast,
   temperingStage,
   temperingStoneRewardForBossTier,
 } from './tempering'
@@ -86,6 +87,29 @@ describe('endgame tempering', () => {
       nextStage: 14,
       nextProgressBasisPoints: 0,
       guaranteed: true,
+    })
+  })
+
+  it('forecasts the exact worst-case route to a guaranteed attempt', () => {
+    expect(
+      temperingAttemptForecast({ currentStage: 9, progressBasisPoints: 0 }),
+    ).toEqual({
+      successChanceBasisPoints: 3_500,
+      failureProgressBasisPoints: 1_700,
+      failuresUntilGuarantee: 6,
+      maximumAttemptsToAdvance: 7,
+      guaranteedNow: false,
+    })
+    expect(
+      temperingAttemptForecast({
+        currentStage: 13,
+        progressBasisPoints: 10_000,
+      }),
+    ).toMatchObject({
+      successChanceBasisPoints: 10_000,
+      failuresUntilGuarantee: 0,
+      maximumAttemptsToAdvance: 1,
+      guaranteedNow: true,
     })
   })
 

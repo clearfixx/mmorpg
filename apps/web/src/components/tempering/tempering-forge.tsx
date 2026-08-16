@@ -62,6 +62,11 @@ interface TemperingPreview {
   ritualMilestone: string
   progressBasisPoints: number
   successChanceBasisPoints: number
+  failureProgressBasisPoints: number
+  failuresUntilGuarantee: number
+  maximumAttemptsToAdvance: number
+  currentStatBonusBasisPoints: number
+  targetStatBonusBasisPoints: number
   guaranteed: boolean
   eligible: boolean
   affordable: boolean
@@ -92,6 +97,9 @@ interface TemperingJob {
   targetStage: number
   targetStageName: string
   ritualMilestone: string
+  successChanceBasisPoints: number
+  failureProgressBasisPoints: number
+  guaranteedAttempt: boolean
   status: string
   startedAt: string
   readyAt: string
@@ -110,6 +118,9 @@ interface TemperingHistory {
   itemName: string
   startingStage: number
   targetStage: number
+  targetStageName: string
+  resultingStage: number
+  resultingStageName: string
   status: string
   resultProgress: number | null
   guaranteed: boolean | null
@@ -125,12 +136,18 @@ interface TemperingRoadmap {
   expectedDurationSeconds: number
   maximumDurationSeconds: number
   expectedCosts: TemperingCost[]
+  maximumCosts: TemperingCost[]
   stages: Array<{
     stage: number
+    name: string
+    ritualMilestone: boolean
+    cumulativeStatBonusBasisPoints: number
     successChanceBasisPoints: number
+    failureProgressBasisPoints: number
     expectedAttempts: number
     maximumAttempts: number
     expectedDurationSeconds: number
+    maximumDurationSeconds: number
   }>
 }
 
@@ -147,6 +164,7 @@ interface TemperingState {
     progressAttempts: number
     cancelledAttempts: number
     goldSpent: number
+    spentResources: TemperingCost[]
   }
   preview: TemperingPreview | null
 }
@@ -154,24 +172,35 @@ interface TemperingState {
 const temperingFields = `
   characterVersion queueCapacity queueAvailable
   jobs {
-    id itemId itemVersion itemName startingStage targetStage targetStageName ritualMilestone status startedAt
+    id itemId itemVersion itemName startingStage targetStage targetStageName ritualMilestone
+    successChanceBasisPoints failureProgressBasisPoints guaranteedAttempt status startedAt
     readyAt remainingSeconds accelerationPercent canComplete canCancel progressPercent
     cancellationRefunds { key required available sufficient }
     cancellationLosses { key required available sufficient }
   }
   history {
-    id itemId itemName startingStage targetStage status resultProgress
+    id itemId itemName startingStage targetStage targetStageName resultingStage resultingStageName status resultProgress
     guaranteed startedAt resolvedAt
   }
   roadmap {
     fromStage toStage expectedAttempts maximumAttempts expectedDurationSeconds
     maximumDurationSeconds expectedCosts { key required available sufficient }
-    stages { stage successChanceBasisPoints expectedAttempts maximumAttempts expectedDurationSeconds }
+    maximumCosts { key required available sufficient }
+    stages {
+      stage name ritualMilestone cumulativeStatBonusBasisPoints successChanceBasisPoints
+      failureProgressBasisPoints expectedAttempts maximumAttempts
+      expectedDurationSeconds maximumDurationSeconds
+    }
   }
-  investment { completedAttempts successfulAttempts progressAttempts cancelledAttempts goldSpent }
+  investment {
+    completedAttempts successfulAttempts progressAttempts cancelledAttempts goldSpent
+    spentResources { key required available sufficient }
+  }
   preview {
     itemId itemName itemVersion currentStage currentStageName targetStage targetStageName ritualMilestone progressBasisPoints
-    successChanceBasisPoints guaranteed eligible affordable durationSeconds
+    successChanceBasisPoints failureProgressBasisPoints failuresUntilGuarantee
+    maximumAttemptsToAdvance currentStatBonusBasisPoints targetStatBonusBasisPoints
+    guaranteed eligible affordable durationSeconds
     accelerationPercent blockingReasons warnings
     costs { key required available sufficient }
     stats {
@@ -579,6 +608,43 @@ export function TemperingForge({
                 />
               </div>
 
+              <div className="grid gap-px bg-border/60 sm:grid-cols-3">
+                <GameMetric
+                  label="Сила ступеня"
+                  value={`+${(preview.targetStatBonusBasisPoints / 100).toFixed(0)}%`}
+                />
+                <GameMetric
+                  label="Невдача дасть"
+                  value={`+${(preview.failureProgressBasisPoints / 100).toFixed(0)}% гарантії`}
+                />
+                <GameMetric
+                  label="Найгірший шлях"
+                  value={`${preview.maximumAttemptsToAdvance} спроб`}
+                />
+              </div>
+
+              <div className="border border-border/70 bg-background/45 p-3">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span>Прогрес до гарантованого гарту</span>
+                  <span className="font-mono text-ember">
+                    {(preview.progressBasisPoints / 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden bg-border/70">
+                  <div
+                    className="h-full bg-ember"
+                    style={{
+                      width: `${Math.min(100, preview.progressBasisPoints / 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-2 text-[0.65rem] text-muted-foreground">
+                  {preview.guaranteed
+                    ? 'Наступна завершена спроба гарантовано підвищить ступінь.'
+                    : `До гарантованої спроби — не більше ${preview.failuresUntilGuarantee} невдач.`}
+                </p>
+              </div>
+
               <div className="border border-border/70 bg-background/45 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <label htmlFor="tempering-acceleration" className="text-xs">
@@ -692,6 +758,11 @@ export function TemperingForge({
                           </p>
                           <p className="mt-1 text-[0.6rem] text-ember">
                             {job.ritualMilestone}
+                          </p>
+                          <p className="mt-1 text-[0.6rem] text-muted-foreground">
+                            {job.guaranteedAttempt
+                              ? 'Гарантований результат'
+                              : `${(job.successChanceBasisPoints / 100).toFixed(0)}% успіху · +${(job.failureProgressBasisPoints / 100).toFixed(0)}% гарантії при невдачі`}
                           </p>
                         </div>
                         {ready ? (
@@ -844,7 +915,7 @@ function TemperingResult({
         </p>
         <p className="mt-1 text-sm">
           {succeeded
-            ? `${result.itemName} досяг ступеня +${result.targetStage}.`
+            ? `${result.itemName} досяг ступеня «${result.resultingStageName}» (+${result.resultingStage}).`
             : `${result.itemName} витримав ритуал, але ступінь не підвищився.`}
         </p>
         {!succeeded && result.resultProgress ? (
@@ -882,15 +953,26 @@ function TemperingRoadmapPanel({ roadmap }: { roadmap: TemperingRoadmap }) {
             {roadmap.stages.map((stage) => (
               <article key={stage.stage} className="bg-background/70 p-3">
                 <p className="font-serif text-lg text-ember">+{stage.stage}</p>
+                <p className="truncate text-xs">{stage.name}</p>
                 <p className="mt-1 font-mono text-[0.55rem] text-muted-foreground">
                   {(stage.successChanceBasisPoints / 100).toFixed(0)}% успіху
+                </p>
+                <p className="mt-1 font-mono text-[0.55rem] text-moss">
+                  +{(stage.cumulativeStatBonusBasisPoints / 100).toFixed(0)}% до
+                  характеристик
                 </p>
                 <p className="mt-3 text-xs">
                   ≈ {stage.expectedAttempts} спроб · до {stage.maximumAttempts}
                 </p>
                 <p className="mt-1 text-[0.65rem] text-muted-foreground">
-                  {formatDuration(stage.expectedDurationSeconds)}
+                  {formatDuration(stage.expectedDurationSeconds)} · до{' '}
+                  {formatDuration(stage.maximumDurationSeconds)}
                 </p>
+                {stage.ritualMilestone ? (
+                  <p className="mt-2 text-[0.6rem] uppercase text-ember">
+                    Ритуальний рубіж
+                  </p>
+                ) : null}
               </article>
             ))}
           </div>
@@ -915,6 +997,23 @@ function TemperingRoadmapPanel({ roadmap }: { roadmap: TemperingRoadmap }) {
               </p>
             ))}
           </div>
+          <details className="mt-3 border-t border-border/60 pt-3 text-xs">
+            <summary className="cursor-pointer text-ember">
+              Максимальна інвестиція
+            </summary>
+            <div className="mt-2 space-y-1">
+              {roadmap.maximumCosts.map((cost) => (
+                <p key={cost.key} className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">
+                    {costName(cost.key)}
+                  </span>
+                  <span className="font-mono">
+                    {cost.required.toLocaleString('uk-UA')}
+                  </span>
+                </p>
+              ))}
+            </div>
+          </details>
         </div>
       </div>
     </GamePanel>
@@ -945,6 +1044,13 @@ function TemperingHistoryPanel({
               value={investment.goldSpent.toLocaleString('uk-UA')}
             />
           </div>
+          {investment.spentResources.slice(0, 4).map((cost) => (
+            <GameMetric
+              key={cost.key}
+              label={`Витрачено: ${costName(cost.key)}`}
+              value={cost.required.toLocaleString('uk-UA')}
+            />
+          ))}
         </dl>
         <div className="max-h-72 overflow-y-auto border border-border/60">
           {history.length ? (
@@ -956,7 +1062,14 @@ function TemperingHistoryPanel({
                 <div>
                   <p>{entry.itemName}</p>
                   <p className="mt-1 font-mono text-[0.55rem] text-muted-foreground">
-                    +{entry.startingStage} → +{entry.targetStage}
+                    +{entry.startingStage} → {entry.targetStageName}
+                  </p>
+                  <p className="mt-1 text-[0.6rem] text-muted-foreground">
+                    Підсумок: {entry.resultingStageName} (+
+                    {entry.resultingStage})
+                    {entry.resultProgress
+                      ? ` · гарантія ${entry.resultProgress / 100}%`
+                      : ''}
                   </p>
                 </div>
                 <p className={historyStatusColor(entry.status)}>

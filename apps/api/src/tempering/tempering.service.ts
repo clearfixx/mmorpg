@@ -11,6 +11,7 @@ import {
   completeTemperingProcess,
   quoteTempering,
   temperingCancellationPreview,
+  temperingAttemptForecast,
   startTemperingProcess,
   temperingRoadmap,
   temperingPreview,
@@ -404,6 +405,10 @@ export class TemperingService {
         const process = this.engineProcess(job);
         const view = temperingProcessView(process, now);
         const cancellation = temperingCancellationPreview(process, now);
+        const forecast = temperingAttemptForecast({
+          currentStage: job.startingStage,
+          progressBasisPoints: job.startingProgress,
+        });
         return {
           ...view,
           itemVersion: job.item.temperingVersion,
@@ -415,6 +420,9 @@ export class TemperingService {
             temperingStage(job.targetStage)?.name ??
             `Ступінь ${job.targetStage}`,
           ritualMilestone: this.ritualMilestone(job.targetStage),
+          successChanceBasisPoints: forecast.successChanceBasisPoints,
+          failureProgressBasisPoints: forecast.failureProgressBasisPoints,
+          guaranteedAttempt: forecast.guaranteedNow,
           progressPercent: cancellation.progressPercent,
           cancellationRefunds: this.costEntries(cancellation.returnedResources),
           cancellationLosses: [
@@ -424,19 +432,32 @@ export class TemperingService {
           ].filter((entry) => entry.required > 0),
         };
       }),
-      history: history.map((job) => ({
-        id: job.id,
-        itemId: job.itemId,
-        itemName:
-          itemDefinition(job.item.definitionId)?.name ?? job.item.definitionId,
-        startingStage: job.startingStage,
-        targetStage: job.targetStage,
-        status: job.status,
-        resultProgress: job.resultProgress,
-        guaranteed: job.guaranteed,
-        startedAt: job.startedAt,
-        resolvedAt: job.resolvedAt,
-      })),
+      history: history.map((job) => {
+        const resultingStage =
+          job.status === TemperingJobStatus.SUCCEEDED
+            ? job.targetStage
+            : job.startingStage;
+        return {
+          id: job.id,
+          itemId: job.itemId,
+          itemName:
+            itemDefinition(job.item.definitionId)?.name ??
+            job.item.definitionId,
+          startingStage: job.startingStage,
+          targetStage: job.targetStage,
+          targetStageName:
+            temperingStage(job.targetStage)?.name ??
+            `Ступінь ${job.targetStage}`,
+          resultingStage,
+          resultingStageName:
+            temperingStage(resultingStage)?.name ?? 'Незагартований',
+          status: job.status,
+          resultProgress: job.resultProgress,
+          guaranteed: job.guaranteed,
+          startedAt: job.startedAt,
+          resolvedAt: job.resolvedAt,
+        };
+      }),
       roadmap: roadmap
         ? {
             fromStage: roadmap.fromStage,
@@ -450,12 +471,26 @@ export class TemperingService {
               ...this.costEntries(roadmap.expectedCost.stones, '_STONE'),
               ...this.costEntries(roadmap.expectedCost.resources),
             ].filter((entry) => entry.required > 0),
+            maximumCosts: [
+              this.costEntry('GOLD', roadmap.maximumCost.gold),
+              ...this.costEntries(roadmap.maximumCost.stones, '_STONE'),
+              ...this.costEntries(roadmap.maximumCost.resources),
+            ].filter((entry) => entry.required > 0),
             stages: roadmap.stages.map((stage) => ({
               stage: stage.stage,
+              name:
+                temperingStage(stage.stage)?.name ?? `Ступінь ${stage.stage}`,
+              ritualMilestone:
+                temperingStage(stage.stage)?.ritualMilestone ?? false,
+              cumulativeStatBonusBasisPoints:
+                temperingStage(stage.stage)?.cumulativeStatBonusBasisPoints ??
+                0,
               successChanceBasisPoints: stage.successChanceBasisPoints,
+              failureProgressBasisPoints: stage.failureProgressBasisPoints,
               expectedAttempts: Math.ceil(stage.expectedAttempts),
               maximumAttempts: stage.maximumAttempts,
               expectedDurationSeconds: stage.expectedDurationSeconds,
+              maximumDurationSeconds: stage.maximumDurationSeconds,
             })),
           }
         : null,
@@ -475,6 +510,9 @@ export class TemperingService {
         goldSpent: history.reduce(
           (total, job) => total + this.snapshotGold(job.costSnapshot),
           0,
+        ),
+        spentResources: this.historySpentResources(
+          history.map((job) => job.costSnapshot),
         ),
       },
       preview,
@@ -501,6 +539,46 @@ export class TemperingService {
       return 0;
     const gold = (snapshot as { gold?: unknown }).gold;
     return typeof gold === 'number' ? gold : 0;
+  }
+
+  private historySpentResources(snapshots: unknown[]) {
+    const totals = new Map<string, number>();
+    for (const snapshot of snapshots) {
+      if (!snapshot || typeof snapshot !== 'object') continue;
+      const value = snapshot as {
+        stoneGrade?: unknown;
+        stoneAmount?: unknown;
+        resources?: unknown;
+      };
+      if (
+        typeof value.stoneGrade === 'string' &&
+        typeof value.stoneAmount === 'number'
+      )
+        totals.set(
+          `${value.stoneGrade}_STONE`,
+          (totals.get(`${value.stoneGrade}_STONE`) ?? 0) + value.stoneAmount,
+        );
+      if (!Array.isArray(value.resources)) continue;
+      for (const resource of value.resources) {
+        if (!resource || typeof resource !== 'object') continue;
+        const entry = resource as {
+          resourceType?: unknown;
+          amount?: unknown;
+        };
+        if (
+          typeof entry.resourceType !== 'string' ||
+          typeof entry.amount !== 'number'
+        )
+          continue;
+        totals.set(
+          entry.resourceType,
+          (totals.get(entry.resourceType) ?? 0) + entry.amount,
+        );
+      }
+    }
+    return [...totals.entries()].map(([key, amount]) =>
+      this.costEntry(key, amount),
+    );
   }
 
   private async previewFor(
@@ -550,6 +628,13 @@ export class TemperingService {
     const targetStage = preview.targetStage
       ? temperingStage(preview.targetStage)
       : null;
+    const currentStage = temperingStage(preview.currentStage);
+    const forecast = targetStage
+      ? temperingAttemptForecast({
+          currentStage: preview.currentStage,
+          progressBasisPoints: preview.progressBasisPoints,
+        })
+      : null;
     const costs = cost
       ? [
           { key: 'GOLD', required: cost.gold, available: wallet.gold },
@@ -580,6 +665,13 @@ export class TemperingService {
       ritualMilestone: this.ritualMilestone(preview.targetStage),
       progressBasisPoints: preview.progressBasisPoints,
       successChanceBasisPoints: preview.successChanceBasisPoints,
+      failureProgressBasisPoints: forecast?.failureProgressBasisPoints ?? 0,
+      failuresUntilGuarantee: forecast?.failuresUntilGuarantee ?? 0,
+      maximumAttemptsToAdvance: forecast?.maximumAttemptsToAdvance ?? 0,
+      currentStatBonusBasisPoints:
+        currentStage?.cumulativeStatBonusBasisPoints ?? 0,
+      targetStatBonusBasisPoints:
+        targetStage?.cumulativeStatBonusBasisPoints ?? 0,
       guaranteed: preview.guaranteed,
       eligible: preview.eligible && !chestRequired,
       affordable: preview.affordable,
