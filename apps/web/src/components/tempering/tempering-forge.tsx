@@ -121,6 +121,9 @@ interface TemperingHistory {
   targetStageName: string
   resultingStage: number
   resultingStageName: string
+  durationSeconds: number
+  accelerationPercent: number
+  costs: TemperingCost[]
   status: string
   resultProgress: number | null
   guaranteed: boolean | null
@@ -152,9 +155,12 @@ interface TemperingRoadmap {
 }
 
 interface TemperingState {
+  serverTime: string
   characterVersion: number
   queueCapacity: number
   queueAvailable: number
+  readyCount: number
+  nextReadyAt: string | null
   jobs: TemperingJob[]
   history: TemperingHistory[]
   roadmap: TemperingRoadmap | null
@@ -170,7 +176,7 @@ interface TemperingState {
 }
 
 const temperingFields = `
-  characterVersion queueCapacity queueAvailable
+  serverTime characterVersion queueCapacity queueAvailable readyCount nextReadyAt
   jobs {
     id itemId itemVersion itemName startingStage targetStage targetStageName ritualMilestone
     successChanceBasisPoints failureProgressBasisPoints guaranteedAttempt status startedAt
@@ -179,7 +185,8 @@ const temperingFields = `
     cancellationLosses { key required available sufficient }
   }
   history {
-    id itemId itemName startingStage targetStage targetStageName resultingStage resultingStageName status resultProgress
+    id itemId itemName startingStage targetStage targetStageName resultingStage resultingStageName
+    durationSeconds accelerationPercent costs { key required available sufficient } status resultProgress
     guaranteed startedAt resolvedAt
   }
   roadmap {
@@ -228,6 +235,7 @@ export function TemperingForge({
   )
   const [accelerationPercent, setAccelerationPercent] = useState(0)
   const [tempering, setTempering] = useState<TemperingState | null>(null)
+  const [serverOffsetMs, setServerOffsetMs] = useState(0)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -253,6 +261,7 @@ export function TemperingForge({
         (data) => {
           if (active) {
             setTempering(data.myTempering)
+            setServerOffsetMs(serverClockOffset(data.myTempering.serverTime))
             setError(null)
           }
         },
@@ -306,7 +315,10 @@ export function TemperingForge({
         }`,
         { itemId: selectedItemId, acceleration: accelerationPercent },
       )
-        .then((data) => setTempering(data.myTempering))
+        .then((data) => {
+          setTempering(data.myTempering)
+          setServerOffsetMs(serverClockOffset(data.myTempering.serverTime))
+        })
         .catch(() => undefined)
     }
     const timer = window.setInterval(refresh, 15_000)
@@ -338,6 +350,7 @@ export function TemperingForge({
         },
       )
       setTempering(data.startTempering)
+      setServerOffsetMs(serverClockOffset(data.startTempering.serverTime))
       await onChanged()
     } catch {
       setError('Не вдалося розпочати гартування. Стан або ресурси змінилися.')
@@ -370,6 +383,7 @@ export function TemperingForge({
         },
       )
       setTempering(data[field])
+      setServerOffsetMs(serverClockOffset(data[field].serverTime))
       if (action === 'complete') setLastResult(data[field].history[0] ?? null)
       setCancelJobId(null)
       await onChanged()
@@ -395,14 +409,18 @@ export function TemperingForge({
       { itemId, acceleration: accelerationPercent },
     )
     setTempering(data.myTempering)
+    setServerOffsetMs(serverClockOffset(data.myTempering.serverTime))
   }
 
   const preview = tempering?.preview ?? null
   const selectedItem = uniqueItems.find((item) => item.id === selectedItemId)
   const activeItemIds = new Set(tempering?.jobs.map((job) => job.itemId) ?? [])
-  const readyCount =
-    tempering?.jobs.filter((job) => new Date(job.readyAt).getTime() <= now)
-      .length ?? 0
+  const readyCount = Math.max(
+    tempering?.readyCount ?? 0,
+    tempering?.jobs.filter(
+      (job) => new Date(job.readyAt).getTime() <= now + serverOffsetMs,
+    ).length ?? 0,
+  )
   const visibleItems = useMemo(() => {
     const query = deferredItemSearch.trim().toLocaleLowerCase('uk-UA')
     const eligible = (item: TemperingItem) =>
@@ -460,7 +478,24 @@ export function TemperingForge({
               value={tempering?.queueAvailable ?? '—'}
             />
             <GameMetric label="Готово" value={readyCount} />
-            <GameMetric label="Прискорення" value={`до 35%`} />
+            <GameMetric
+              label="Найближча робота"
+              value={
+                tempering?.nextReadyAt
+                  ? formatDuration(
+                      Math.max(
+                        0,
+                        Math.ceil(
+                          (new Date(tempering.nextReadyAt).getTime() -
+                            now -
+                            serverOffsetMs) /
+                            1_000,
+                        ),
+                      ),
+                    )
+                  : '—'
+              }
+            />
           </dl>
         }
       />
@@ -632,6 +667,14 @@ export function TemperingForge({
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden bg-border/70">
                   <div
+                    role="progressbar"
+                    aria-label="Прогрес до гарантованого гарту"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.min(
+                      100,
+                      preview.progressBasisPoints / 100,
+                    )}
                     className="h-full bg-ember"
                     style={{
                       width: `${Math.min(100, preview.progressBasisPoints / 100)}%`,
@@ -741,7 +784,10 @@ export function TemperingForge({
                 {tempering.jobs.map((job) => {
                   const remaining = Math.max(
                     0,
-                    Math.ceil((new Date(job.readyAt).getTime() - now) / 1_000),
+                    Math.ceil(
+                      (new Date(job.readyAt).getTime() - now - serverOffsetMs) /
+                        1_000,
+                    ),
                   )
                   const ready = remaining === 0
                   return (
@@ -776,6 +822,11 @@ export function TemperingForge({
                       </p>
                       <div className="mt-2 h-1 overflow-hidden bg-border/70">
                         <div
+                          role="progressbar"
+                          aria-label={`Гартування ${job.itemName}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={job.progressPercent}
                           className="h-full bg-ember"
                           style={{ width: `${job.progressPercent}%` }}
                         />
@@ -1027,8 +1078,29 @@ function TemperingHistoryPanel({
   history: TemperingHistory[]
   investment: TemperingState['investment']
 }) {
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const visibleHistory =
+    statusFilter === 'ALL'
+      ? history
+      : history.filter((entry) => entry.status === statusFilter)
   return (
-    <GamePanel eyebrow="Літопис ковадла" title="Історія та інвестиції">
+    <GamePanel
+      eyebrow="Літопис ковадла"
+      title="Історія та інвестиції"
+      action={
+        <select
+          aria-label="Фільтр історії гартування"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          className="h-8 border border-border/60 bg-background px-2 text-xs"
+        >
+          <option value="ALL">Усі події</option>
+          <option value="SUCCEEDED">Успішні</option>
+          <option value="PROGRESS_GAINED">Прогрес гарантії</option>
+          <option value="CANCELLED">Скасовані</option>
+        </select>
+      }
+    >
       <div className="grid gap-2 xl:grid-cols-[20rem_minmax(0,1fr)]">
         <dl className="grid grid-cols-2 gap-px bg-border/60">
           <GameMetric
@@ -1053,8 +1125,8 @@ function TemperingHistoryPanel({
           ))}
         </dl>
         <div className="max-h-72 overflow-y-auto border border-border/60">
-          {history.length ? (
-            history.map((entry) => (
+          {visibleHistory.length ? (
+            visibleHistory.map((entry) => (
               <article
                 key={entry.id}
                 className="grid gap-2 border-b border-border/60 bg-background/50 p-3 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_8rem_9rem]"
@@ -1071,6 +1143,23 @@ function TemperingHistoryPanel({
                       ? ` · гарантія ${entry.resultProgress / 100}%`
                       : ''}
                   </p>
+                  <p className="mt-1 text-[0.6rem] text-muted-foreground">
+                    {formatDuration(entry.durationSeconds)} · прискорення{' '}
+                    {entry.accelerationPercent}%
+                  </p>
+                  <details className="mt-2 text-[0.6rem]">
+                    <summary className="cursor-pointer text-ember">
+                      Вартість спроби
+                    </summary>
+                    <p className="mt-1 text-muted-foreground">
+                      {entry.costs
+                        .map(
+                          (cost) =>
+                            `${costName(cost.key)} × ${cost.required.toLocaleString('uk-UA')}`,
+                        )
+                        .join(' · ')}
+                    </p>
+                  </details>
                 </div>
                 <p className={historyStatusColor(entry.status)}>
                   {historyStatusName(entry.status)}
@@ -1084,7 +1173,9 @@ function TemperingHistoryPanel({
             ))
           ) : (
             <p className="p-4 text-xs text-muted-foreground">
-              Ковадло ще не зберегло жодної завершеної спроби.
+              {history.length
+                ? 'За вибраним фільтром подій немає.'
+                : 'Ковадло ще не зберегло жодної завершеної спроби.'}
             </p>
           )}
         </div>
@@ -1137,6 +1228,10 @@ function formatDuration(seconds: number) {
   if (days) return `${days} дн ${hours} год`
   if (hours) return `${hours} год ${minutes} хв`
   return `${minutes} хв`
+}
+
+function serverClockOffset(serverTime: string) {
+  return new Date(serverTime).getTime() - Date.now()
 }
 
 function costName(key: string) {

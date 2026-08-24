@@ -181,6 +181,28 @@ export class TemperingService {
           readyAt,
         },
       });
+      await tx.itemLineageEvent.create({
+        data: {
+          itemId: item.id,
+          type: ItemLineageType.TEMPERING,
+          payload: {
+            action: 'START',
+            processId: job.id,
+            startingStage: item.temperingStage,
+            targetStage: quote.targetStage,
+            startingProgress: item.temperingProgress,
+            accelerationPercent: quote.accelerationPercent,
+            startedAt: startedAt.toISOString(),
+            readyAt: readyAt.toISOString(),
+            cost: {
+              gold: cost.gold,
+              stoneGrade: cost.stoneGrade,
+              stoneAmount: cost.stoneAmount,
+              resources: cost.resources.map((resource) => ({ ...resource })),
+            },
+          },
+        },
+      });
       for (const resource of resourceCosts) {
         await tx.resourceLedgerEntry.create({
           data: {
@@ -248,10 +270,11 @@ export class TemperingService {
         throw new ConflictException('Tempering is not complete');
       if (action === 'CANCEL' && now >= job.readyAt)
         throw new ConflictException('Ready tempering must be completed');
-      const resolved =
-        action === 'COMPLETE'
-          ? completeTemperingProcess(process, { now, roll: randomInt(10_000) })
-          : cancelTemperingProcess(process, now).process;
+      const cancellation =
+        action === 'CANCEL' ? cancelTemperingProcess(process, now) : null;
+      const resolved = cancellation
+        ? cancellation.process
+        : completeTemperingProcess(process, { now, roll: randomInt(10_000) });
       const character = await tx.character.updateMany({
         where: { id: characterId, version: input.expectedCharacterVersion },
         data: { version: { increment: 1 } },
@@ -279,7 +302,7 @@ export class TemperingService {
       if (updated.count !== 1)
         throw new ConflictException('Item state changed');
       if (action === 'CANCEL') {
-        const settlement = cancelTemperingProcess(process, now).settlement;
+        const settlement = cancellation!.settlement;
         for (const refund of settlement.resourceRefunds) {
           await tx.characterResource.upsert({
             where: {
@@ -328,8 +351,30 @@ export class TemperingService {
           payload: {
             action,
             processId: job.id,
+            startingStage: job.startingStage,
             targetStage: job.targetStage,
+            startingProgress: job.startingProgress,
+            resultingStage: resolved.resolution?.nextStage ?? job.startingStage,
+            resultingProgress:
+              resolved.resolution?.nextProgressBasisPoints ??
+              job.startingProgress,
             outcome: resolved.resolution?.outcome ?? 'CANCELLED',
+            guaranteed: resolved.resolution?.guaranteed ?? false,
+            accelerationPercent: job.accelerationPercent,
+            startedAt: job.startedAt.toISOString(),
+            readyAt: job.readyAt.toISOString(),
+            resolvedAt: now.toISOString(),
+            elapsedSeconds: Math.max(
+              0,
+              Math.floor((now.getTime() - job.startedAt.getTime()) / 1_000),
+            ),
+            cost: job.costSnapshot,
+            refunds:
+              cancellation?.settlement.resourceRefunds.map((refund) => ({
+                resourceType: refund.resourceType,
+                amount: refund.amount,
+                refundable: refund.refundable,
+              })) ?? [],
           },
         },
       });
@@ -398,9 +443,12 @@ export class TemperingService {
         })
       : null;
     return {
+      serverTime: now,
       characterVersion: character.version,
       queueCapacity: QUEUE_CAPACITY,
       queueAvailable: Math.max(0, QUEUE_CAPACITY - jobs.length),
+      readyCount: jobs.filter((job) => job.readyAt <= now).length,
+      nextReadyAt: jobs[0]?.readyAt ?? null,
       jobs: jobs.map((job) => {
         const process = this.engineProcess(job);
         const view = temperingProcessView(process, now);
@@ -451,6 +499,19 @@ export class TemperingService {
           resultingStage,
           resultingStageName:
             temperingStage(resultingStage)?.name ?? 'Незагартований',
+          durationSeconds: Math.max(
+            0,
+            Math.floor(
+              ((job.resolvedAt?.getTime() ?? job.readyAt.getTime()) -
+                job.startedAt.getTime()) /
+                1_000,
+            ),
+          ),
+          accelerationPercent: job.accelerationPercent,
+          costs: [
+            this.costEntry('GOLD', this.snapshotGold(job.costSnapshot)),
+            ...this.historySpentResources([job.costSnapshot]),
+          ].filter((entry) => entry.required > 0),
           status: job.status,
           resultProgress: job.resultProgress,
           guaranteed: job.guaranteed,

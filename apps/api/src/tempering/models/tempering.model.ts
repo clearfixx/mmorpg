@@ -84,6 +84,9 @@ export class TemperingHistoryModel {
   @Field() targetStageName!: string;
   @Field(() => Int) resultingStage!: number;
   @Field() resultingStageName!: string;
+  @Field(() => Int) durationSeconds!: number;
+  @Field(() => Int) accelerationPercent!: number;
+  @Field(() => [TemperingCostModel]) costs!: TemperingCostModel[];
   @Field() status!: string;
   @Field(() => Int, { nullable: true }) resultProgress!: number | null;
   @Field(() => Boolean, { nullable: true }) guaranteed!: boolean | null;
@@ -131,9 +134,12 @@ export class TemperingInvestmentModel {
 
 @ObjectType()
 export class TemperingStateModel {
+  @Field(() => Date) serverTime!: Date;
   @Field(() => Int) characterVersion!: number;
   @Field(() => Int) queueCapacity!: number;
   @Field(() => Int) queueAvailable!: number;
+  @Field(() => Int) readyCount!: number;
+  @Field(() => Date, { nullable: true }) nextReadyAt!: Date | null;
   @Field(() => [TemperingJobModel]) jobs!: TemperingJobModel[];
   @Field(() => [TemperingHistoryModel]) history!: TemperingHistoryModel[];
   @Field(() => TemperingRoadmapModel, { nullable: true })
