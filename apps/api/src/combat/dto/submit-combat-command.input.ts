@@ -1,5 +1,12 @@
 import { Field, InputType, Int } from '@nestjs/graphql';
-import { IsIn, IsInt, IsString, Length, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Min,
+} from 'class-validator';
 
 const ACTION_IDS = [
   'STRIKE',
@@ -14,6 +21,12 @@ const ACTION_IDS = [
   'WARD',
   'DISRUPTING_SPARK',
   'VEIL_FLARE',
+  'HEAVY_STRIKE',
+  'FOCUS_CHANNEL',
+  'BERSERK',
+  'MENDING_LIGHT',
+  'HEALTH_POTION',
+  'MANA_POTION',
 ];
 
 @InputType()
@@ -22,6 +35,12 @@ export class SubmitCombatCommandInput {
   @IsString()
   @IsIn(ACTION_IDS)
   actionId!: string;
+
+  @Field(() => String, { nullable: true })
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  targetEnemyId?: string;
 
   @Field(() => Int)
   @IsInt()

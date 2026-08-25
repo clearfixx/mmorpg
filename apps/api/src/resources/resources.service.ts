@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { CharactersService } from '../characters/characters.service';
 import { PrismaService } from '../database/prisma.service';
 import { ResourceBalanceModel } from './models/resource-balance.model';
+import { resourceBalance } from './resource-catalog';
 
 @Injectable()
 export class ResourcesService {
@@ -20,9 +21,8 @@ export class ResourcesService {
     const balances = new Map(
       resources.map((entry) => [entry.type, entry.balance]),
     );
-    return Object.values(ResourceType).map((type) => ({
-      type,
-      amount: balances.get(type) ?? 0,
-    }));
+    return Object.values(ResourceType).map((type) =>
+      resourceBalance(type, balances.get(type) ?? 0),
+    );
   }
 }

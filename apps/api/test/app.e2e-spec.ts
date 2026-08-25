@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@veilfall/database';
+import { itemDamageRange } from '@veilfall/game-engine';
 import type { Server } from 'node:http';
 import request from 'supertest';
 
@@ -22,8 +23,12 @@ describe('Health (e2e)', () => {
   afterEach(async () => {
     if (createdEmails.length > 0) {
       const prisma = app.get(PrismaService);
+      const emails = createdEmails.splice(0);
+      await prisma.client.adminAuditLog.deleteMany({
+        where: { actor: { email: { in: emails } } },
+      });
       await prisma.client.user.deleteMany({
-        where: { email: { in: createdEmails.splice(0) } },
+        where: { email: { in: emails } },
       });
       await prisma.client.clan.deleteMany({ where: { members: { none: {} } } });
     }
@@ -318,7 +323,7 @@ describe('Health (e2e)', () => {
         .set('Cookie', cookie)
         .send({
           query:
-            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold item { id definitionId name rarity damage binding setName visualAssetId location } } }',
+            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { claimId battleId experience gold resources { type amount } item { id definitionId name itemLevel rarity rollQuality damage damageMin damageMax binding setName visualAssetId location } } }',
           variables: {
             input: { battleId, idempotencyKey: rewardKey },
           },
@@ -332,16 +337,13 @@ describe('Health (e2e)', () => {
     expect(firstReward.text).toContain('"location":"CHEST"');
     expect(firstReward.text).toContain('"experience":40');
     expect(firstReward.text).toContain('"gold":18');
-    expect(
-      await prisma.client.characterResource.findUnique({
-        where: {
-          characterId_type: {
-            characterId: combatUser.character!.id,
-            type: 'IRON',
-          },
-        },
-      }),
-    ).toMatchObject({ balance: 20 });
+    const claimedMaterials = await prisma.client.rewardClaimResource.findMany({
+      where: { rewardClaim: { battleId } },
+    });
+    expect(claimedMaterials.length).toBeLessThanOrEqual(4);
+    expect(claimedMaterials.every((material) => material.amount === 1)).toBe(
+      true,
+    );
 
     expect(await prisma.client.rewardClaim.count({ where: { battleId } })).toBe(
       1,
@@ -362,11 +364,20 @@ describe('Health (e2e)', () => {
     });
     expect(rewardedCharacter.experience).toBe(40);
     expect(rewardedCharacter.gold).toBe(18);
-    expect(rewardedCharacter.worldState?.cinderhavenUnlocked).toBe(true);
+    expect(rewardedCharacter.worldState?.cinderhavenUnlocked).toBe(false);
 
     const rewardedItem = await prisma.client.itemInstance.findUniqueOrThrow({
       where: { sourceBattleId: battleId },
     });
+    const rewardedRange = itemDamageRange(
+      rewardedItem.itemLevel,
+      rewardedItem.rarity,
+    );
+    expect(rewardedItem.itemLevel).toBe(1);
+    expect(rewardedItem.rollQuality).toBeGreaterThanOrEqual(0);
+    expect(rewardedItem.rollQuality).toBeLessThanOrEqual(9_999);
+    expect(rewardedItem.damage).toBeGreaterThanOrEqual(rewardedRange.min);
+    expect(rewardedItem.damage).toBeLessThanOrEqual(rewardedRange.max);
     const equipKey = `equip-${Date.now()}`;
     const equip = () =>
       request(server)
@@ -448,7 +459,12 @@ describe('Health (e2e)', () => {
       data: {
         status: 'WON',
         version: 2,
-        state: { ...secondState, status: 'WON', version: 2 },
+        state: {
+          ...secondState,
+          status: 'WON',
+          version: 2,
+          personalBest: false,
+        },
         activeCharacterId: null,
         completedAt: new Date(),
       },
@@ -495,6 +511,104 @@ describe('Health (e2e)', () => {
         },
       });
 
+    await prisma.client.character.update({
+      where: { id: rewardedCharacter.id },
+      data: { gold: { increment: 100 } },
+    });
+    await prisma.client.characterWorldState.update({
+      where: { characterId: rewardedCharacter.id },
+      data: { highestClearedTier: 2 },
+    });
+    await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ expeditionProgress { highestClearedTier checkpointTier saveableTier saveCost canAffordSave } }',
+      })
+      .expect(200)
+      .expect({
+        data: {
+          expeditionProgress: {
+            highestClearedTier: 2,
+            checkpointTier: 1,
+            saveableTier: 2,
+            saveCost: 100,
+            canAffordSave: true,
+          },
+        },
+      });
+    const replayedRoute = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { checkpointTier } }',
+        variables: {
+          input: {
+            checkpointTier: 2,
+            idempotencyKey: `replayed-guide-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(replayedRoute.text).toContain('errors');
+    expect(replayedRoute.text).toContain(
+      'A new personal-best victory is required to secure the route',
+    );
+    const futureRoute = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { checkpointTier } }',
+        variables: {
+          input: {
+            checkpointTier: 3,
+            idempotencyKey: `future-guide-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(futureRoute.text).toContain('errors');
+    expect(futureRoute.text).toContain(
+      'Only the highest cleared tier can be secured',
+    );
+    await prisma.client.battle.update({
+      where: { id: secondBattle.id },
+      data: {
+        state: {
+          ...secondState,
+          status: 'WON',
+          version: 2,
+          personalBest: true,
+        },
+      },
+    });
+    const securedRoute = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { checkpointTier saveableTier gold } }',
+        variables: {
+          input: {
+            checkpointTier: 2,
+            idempotencyKey: `guide-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(securedRoute.body).toEqual({
+      data: {
+        hireExpeditionGuide: {
+          checkpointTier: 2,
+          saveableTier: null,
+          gold: 48,
+        },
+      },
+    });
+
     await prisma.client.battle.create({
       data: {
         characterId: rewardedCharacter.id,
@@ -534,6 +648,11 @@ describe('Health (e2e)', () => {
       .send({ query: '{ latestBattle { id } }' })
       .expect(200)
       .expect({ data: { latestBattle: null } });
+
+    await prisma.client.characterWorldState.update({
+      where: { characterId: combatUser.character!.id },
+      data: { highestClearedTier: 50, cinderhavenUnlocked: true },
+    });
 
     const watchpostState = await request(server)
       .post('/graphql')
@@ -577,6 +696,21 @@ describe('Health (e2e)', () => {
     expect(gatePayload.data.travel.currentLocation).toBe('CINDERHAVEN_GATE');
     expect(gatePayload.data.travel.version).toBe(gateVersion + 1);
 
+    await prisma.client.characterResource.upsert({
+      where: {
+        characterId_type: {
+          characterId: combatUser.character!.id,
+          type: 'IRON',
+        },
+      },
+      create: {
+        characterId: combatUser.character!.id,
+        type: 'IRON',
+        balance: 50,
+      },
+      update: { balance: 50 },
+    });
+
     const talentState = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
@@ -613,6 +747,219 @@ describe('Health (e2e)', () => {
         affordable: true,
       }),
     );
+    const resourceCatalog = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myResources { type amount name origin rarity tradeable clanContributable } }',
+      })
+      .expect(200);
+    const resourceCatalogPayload = JSON.parse(resourceCatalog.text) as {
+      data: { myResources: Array<Record<string, unknown>> };
+    };
+    expect(resourceCatalogPayload.data.myResources).toContainEqual({
+      type: 'IRON',
+      amount: 50,
+      name: 'Залізо',
+      origin: 'DROPPED',
+      rarity: 'COMMON',
+      tradeable: true,
+      clanContributable: true,
+    });
+    expect(resourceCatalogPayload.data.myResources).toContainEqual(
+      expect.objectContaining({
+        type: 'CURSED_HEART',
+        amount: 0,
+        origin: 'BOSS_EXCLUSIVE',
+        rarity: 'MYTHIC',
+        clanContributable: false,
+      }),
+    );
+    for (const [type, balance] of [
+      ['COAL', 10],
+      ['COPPER', 20],
+      ['BRONZE', 10],
+      ['HERBS', 10],
+    ] as const) {
+      await prisma.client.characterResource.upsert({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type,
+          },
+        },
+        create: { characterId: combatUser.character!.id, type, balance },
+        update: { balance },
+      });
+    }
+    const craftState = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myCrafting { recipes { id station affordable stationAvailable ingredients { resourceType amount available } outputType outputAmount durationSeconds } jobs { id } } }',
+      })
+      .expect(200);
+    expect(craftState.text).toContain('"id":"veil-steel-v1"');
+    expect(craftState.text).toContain('"station":"FORGE"');
+    expect(craftState.text).toContain('"affordable":true');
+    expect(craftState.text).not.toContain('tempered-veil-steel-v1');
+
+    const unknownRecipe = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Start($input: StartCraftInput!) { startCraft(input: $input) { jobs { id } } }',
+        variables: {
+          input: {
+            recipeId: 'tempered-veil-steel-v1',
+            quantity: 1,
+            idempotencyKey: `unknown-recipe-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const unknownRecipePayload = JSON.parse(unknownRecipe.text) as {
+      errors?: unknown[];
+    };
+    expect(unknownRecipePayload.errors).toBeDefined();
+
+    const forgeKey = `craft-forge-${Date.now()}`;
+    const startForge = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Start($input: StartCraftInput!) { startCraft(input: $input) { jobs { id recipeId station status outputType outputAmount ready } } }',
+          variables: {
+            input: {
+              recipeId: 'veil-steel-v1',
+              quantity: 1,
+              idempotencyKey: forgeKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstForge = await startForge();
+    const retriedForge = await startForge();
+    expect(firstForge.body).toEqual(retriedForge.body);
+    expect(firstForge.text).toContain('"station":"FORGE"');
+    expect(firstForge.text).toContain('"outputType":"VEIL_STEEL"');
+
+    const startAlchemy = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Start($input: StartCraftInput!) { startCraft(input: $input) { jobs { id recipeId station status outputType outputAmount } } }',
+        variables: {
+          input: {
+            recipeId: 'stabilized-catalyst-v1',
+            quantity: 1,
+            idempotencyKey: `craft-alchemy-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    expect(startAlchemy.text).toContain('"station":"ALCHEMY_TABLE"');
+    expect(
+      await prisma.client.craftJob.count({
+        where: {
+          characterId: combatUser.character!.id,
+          status: 'ACTIVE',
+        },
+      }),
+    ).toBe(2);
+    await prisma.client.craftJob.updateMany({
+      where: { characterId: combatUser.character!.id, status: 'ACTIVE' },
+      data: { completesAt: new Date(Date.now() - 1_000) },
+    });
+    const forgeJob = await prisma.client.craftJob.findFirstOrThrow({
+      where: {
+        characterId: combatUser.character!.id,
+        recipeId: 'veil-steel-v1',
+      },
+    });
+    const claimKey = `claim-craft-${Date.now()}`;
+    const claimForge = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Claim($input: ClaimCraftInput!) { claimCraft(input: $input) { jobs { id status ready } } }',
+          variables: {
+            input: {
+              craftJobId: forgeJob.id,
+              idempotencyKey: claimKey,
+            },
+          },
+        })
+        .expect(200);
+    const firstClaim = await claimForge();
+    const retriedClaim = await claimForge();
+    expect(firstClaim.body).toEqual(retriedClaim.body);
+    expect(
+      await prisma.client.characterResource.findUnique({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'VEIL_STEEL',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 1 });
+    expect(
+      await prisma.client.resourceLedgerEntry.count({
+        where: {
+          characterId: combatUser.character!.id,
+          reason: { in: ['CRAFT_START', 'CRAFT_OUTPUT'] },
+        },
+      }),
+    ).toBe(7);
+
+    const alchemyJob = await prisma.client.craftJob.findFirstOrThrow({
+      where: {
+        characterId: combatUser.character!.id,
+        recipeId: 'stabilized-catalyst-v1',
+      },
+    });
+    const claimAlchemy = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation Claim($input: ClaimCraftInput!) { claimCraft(input: $input) { recipes { id discovered } } }',
+        variables: {
+          input: {
+            craftJobId: alchemyJob.id,
+            idempotencyKey: `claim-alchemy-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const claimAlchemyPayload = JSON.parse(claimAlchemy.text) as {
+      data: {
+        claimCraft: { recipes: Array<{ id: string; discovered: boolean }> };
+      };
+    };
+    expect(claimAlchemyPayload.data.claimCraft.recipes).toContainEqual({
+      id: 'tempered-veil-steel-v1',
+      discovered: true,
+    });
+    expect(
+      await prisma.client.characterRecipeKnowledge.findUnique({
+        where: {
+          characterId_recipeId: {
+            characterId: combatUser.character!.id,
+            recipeId: 'tempered-veil-steel-v1',
+          },
+        },
+      }),
+    ).toMatchObject({ source: 'CATALYST_MASTERY' });
     const talentKey = `talent-${Date.now()}`;
     const upgradeTalent = () =>
       request(server)
@@ -636,12 +983,15 @@ describe('Health (e2e)', () => {
     expect(firstTalent.body).toEqual(retriedTalent.body);
     expect(firstTalent.text).toContain('"availablePoints":0');
     expect(firstTalent.text).toContain('"type":"POWER","rank":1');
-    expect(firstTalent.text).toContain('"type":"IRON","amount":38');
+    expect(firstTalent.text).toContain('"type":"IRON","amount":28');
     expect(
       await prisma.client.resourceLedgerEntry.count({
-        where: { characterId: rewardedCharacter.id },
+        where: {
+          characterId: rewardedCharacter.id,
+          reason: 'TALENT_UPGRADE',
+        },
       }),
-    ).toBe(3);
+    ).toBe(1);
 
     const talentResult = JSON.parse(firstTalent.text) as {
       data: { upgradeTalent: { characterVersion: number } };
@@ -723,7 +1073,7 @@ describe('Health (e2e)', () => {
         },
         select: { balance: true },
       }),
-    ).toEqual({ balance: 18 });
+    ).toEqual({ balance: 8 });
 
     const contributionResult = JSON.parse(firstContribution.text) as {
       data: { contributeClanResource: { version: number } };
@@ -874,7 +1224,7 @@ describe('Health (e2e)', () => {
       where: { id: rewardedCharacter.id },
       data: { level: 30 },
     });
-    const ascendedState = await request(server)
+    const awakenedState = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
       .send({
@@ -882,7 +1232,7 @@ describe('Health (e2e)', () => {
           '{ myInventory { baseDamage } myTalents { characterVersion availablePoints resources { type amount } talents { type rank maxRank advanced unlocked costResource costAmount affordable } } }',
       })
       .expect(200);
-    const ascendedPayload = JSON.parse(ascendedState.text) as {
+    const awakenedPayload = JSON.parse(awakenedState.text) as {
       data: {
         myInventory: { baseDamage: number };
         myTalents: {
@@ -900,9 +1250,9 @@ describe('Health (e2e)', () => {
         };
       };
     };
-    expect(ascendedPayload.data.myTalents.talents).toContainEqual(
+    expect(awakenedPayload.data.myTalents.talents).toContainEqual(
       expect.objectContaining({
-        type: 'ASCENDED_POWER',
+        type: 'AWAKENED_POWER',
         rank: 0,
         advanced: true,
         unlocked: true,
@@ -912,8 +1262,8 @@ describe('Health (e2e)', () => {
       }),
     );
     const pointsBeforeAscension =
-      ascendedPayload.data.myTalents.availablePoints;
-    const ascendedUpgrade = await request(server)
+      awakenedPayload.data.myTalents.availablePoints;
+    const awakenedUpgrade = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
       .send({
@@ -921,29 +1271,29 @@ describe('Health (e2e)', () => {
           'mutation Upgrade($input: UpgradeTalentInput!) { upgradeTalent(input: $input) { availablePoints resources { type amount } talents { type rank } } }',
         variables: {
           input: {
-            type: 'ASCENDED_POWER',
+            type: 'AWAKENED_POWER',
             expectedCharacterVersion:
-              ascendedPayload.data.myTalents.characterVersion,
-            idempotencyKey: `ascended-power-${Date.now()}`,
+              awakenedPayload.data.myTalents.characterVersion,
+            idempotencyKey: `awakened-power-${Date.now()}`,
           },
         },
       })
       .expect(200);
-    expect(ascendedUpgrade.text).toContain(
+    expect(awakenedUpgrade.text).toContain(
       `"availablePoints":${pointsBeforeAscension}`,
     );
-    expect(ascendedUpgrade.text).toContain('"type":"VEIL_ECHO","amount":0');
-    expect(ascendedUpgrade.text).toContain('"type":"ASCENDED_POWER","rank":1');
-    const ascendedCharacter = await request(server)
+    expect(awakenedUpgrade.text).toContain('"type":"VEIL_ECHO","amount":0');
+    expect(awakenedUpgrade.text).toContain('"type":"AWAKENED_POWER","rank":1');
+    const awakenedCharacter = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
       .send({ query: '{ myInventory { baseDamage } }' })
       .expect(200);
-    const ascendedCharacterPayload = JSON.parse(ascendedCharacter.text) as {
+    const awakenedCharacterPayload = JSON.parse(awakenedCharacter.text) as {
       data: { myInventory: { baseDamage: number } };
     };
-    expect(ascendedCharacterPayload.data.myInventory.baseDamage).toBe(
-      ascendedPayload.data.myInventory.baseDamage + 8,
+    expect(awakenedCharacterPayload.data.myInventory.baseDamage).toBe(
+      awakenedPayload.data.myInventory.baseDamage + 8,
     );
 
     const clanVersionAfterFirstSummon =
@@ -1160,6 +1510,272 @@ describe('Health (e2e)', () => {
       '"currentLocation":"BROKEN_WATCHPOST"',
     );
 
+    const factionState = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ myFaction { faction characterVersion canChangeFaction dawnStrength ashenStrength frontLevelMin frontLevelMax } }',
+      })
+      .expect(200);
+    const factionPayload = JSON.parse(factionState.text) as {
+      data: {
+        myFaction: {
+          faction: string | null;
+          characterVersion: number;
+          canChangeFaction: boolean;
+          dawnStrength: number;
+          ashenStrength: number;
+          frontLevelMin: number;
+          frontLevelMax: number;
+        };
+      };
+    };
+    expect(factionPayload.data.myFaction).toMatchObject({
+      faction: null,
+      canChangeFaction: true,
+      frontLevelMin: 21,
+      frontLevelMax: 30,
+    });
+    expect(
+      factionPayload.data.myFaction.dawnStrength +
+        factionPayload.data.myFaction.ashenStrength,
+    ).toBe(200);
+
+    const chooseFaction = async (
+      faction: 'DAWN_COVENANT' | 'ASHEN_HOST',
+      expectedCharacterVersion: number,
+    ) =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Choose($input: ChooseFactionInput!) { chooseFaction(input: $input) { faction characterVersion canChangeFaction } }',
+          variables: {
+            input: {
+              faction,
+              expectedCharacterVersion,
+              idempotencyKey: `faction-${faction}-${Date.now()}`,
+            },
+          },
+        })
+        .expect(200);
+    const firstFaction = await chooseFaction(
+      'DAWN_COVENANT',
+      factionPayload.data.myFaction.characterVersion,
+    );
+    const firstFactionPayload = JSON.parse(firstFaction.text) as {
+      data: {
+        chooseFaction: { characterVersion: number; canChangeFaction: boolean };
+      };
+    };
+    expect(firstFaction.text).toContain('"faction":"DAWN_COVENANT"');
+    expect(firstFactionPayload.data.chooseFaction.canChangeFaction).toBe(true);
+    const changedFaction = await chooseFaction(
+      'ASHEN_HOST',
+      firstFactionPayload.data.chooseFaction.characterVersion,
+    );
+    expect(changedFaction.text).toContain(
+      '"faction":"ASHEN_HOST","characterVersion":',
+    );
+    expect(changedFaction.text).toContain('"canChangeFaction":false');
+    const changedFactionPayload = JSON.parse(changedFaction.text) as {
+      data: { chooseFaction: { characterVersion: number } };
+    };
+    const forbiddenReturn = await chooseFaction(
+      'DAWN_COVENANT',
+      changedFactionPayload.data.chooseFaction.characterVersion,
+    );
+    expect(forbiddenReturn.text).toContain('errors');
+
+    await prisma.client.$transaction([
+      prisma.client.character.update({
+        where: { id: combatUser.character!.id },
+        data: { level: 30, experience: 84_100 },
+      }),
+      prisma.client.characterWorldState.update({
+        where: { characterId: combatUser.character!.id },
+        data: { currentLocation: 'CINDERHAVEN_GATE' },
+      }),
+      prisma.client.characterResource.upsert({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'BOSS_INVOCATION_SEAL',
+          },
+        },
+        create: {
+          characterId: combatUser.character!.id,
+          type: 'BOSS_INVOCATION_SEAL',
+          balance: 2,
+        },
+        update: { balance: 2 },
+      }),
+    ]);
+
+    type InvocationResult = {
+      id: string;
+      summonedBoss: boolean;
+      summonedBossId: string;
+      enemyName: string;
+      enemy: { maxHealth: number };
+    };
+    const invokeBoss = async (
+      field: 'invokeCursedKnight' | 'invokeFallenElf',
+      idempotencyKey: string,
+    ) => {
+      const response = await request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query: `mutation Invoke($input: InvokeBossInput!) { ${field}(input: $input) { id summonedBoss summonedBossId enemyName enemy { maxHealth } } }`,
+          variables: { input: { idempotencyKey } },
+        })
+        .expect(200);
+      const payload = JSON.parse(response.text) as {
+        data: Record<typeof field, InvocationResult>;
+      };
+      return payload.data[field];
+    };
+    const forceBossVictory = async (battleId: string) => {
+      const battle = await prisma.client.battle.findUniqueOrThrow({
+        where: { id: battleId },
+      });
+      await prisma.client.battle.update({
+        where: { id: battle.id },
+        data: {
+          state: {
+            ...(battle.state as Record<string, unknown>),
+            status: 'WON',
+            version: battle.version + 1,
+            enemy: {
+              ...((battle.state as Record<string, unknown>).enemy as Record<
+                string,
+                unknown
+              >),
+              health: 0,
+            },
+          },
+          status: 'WON',
+          version: { increment: 1 },
+          activeCharacterId: null,
+          completedAt: new Date(),
+        },
+      });
+    };
+    const claimInvocationReward = async (
+      battleId: string,
+      expectedType: string,
+    ) => {
+      const response = await request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Claim($input: ClaimBattleRewardInput!) { claimBattleReward(input: $input) { resources { type amount } } }',
+          variables: {
+            input: {
+              battleId,
+              idempotencyKey: `boss-reward-${battleId}`,
+            },
+          },
+        })
+        .expect(200);
+      const payload = JSON.parse(response.text) as {
+        data: {
+          claimBattleReward: {
+            resources: Array<{ type: string; amount: number }>;
+          };
+        };
+      };
+      expect(payload.data.claimBattleReward.resources).toContainEqual({
+        type: expectedType,
+        amount: 1,
+      });
+    };
+    const acknowledgeBoss = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({ query: 'mutation { returnToWatchpost }' })
+        .expect(200);
+
+    const cursedKey = `invoke-cursed-${Date.now()}`;
+    const cursedInvocation = await invokeBoss('invokeCursedKnight', cursedKey);
+    expect(cursedInvocation).toMatchObject({
+      summonedBoss: true,
+      summonedBossId: 'CURSED_KNIGHT',
+      enemyName: 'Проклятий лицар Морґрейв',
+    });
+    const cursedBattleId = cursedInvocation.id;
+    const repeatedInvocation = await invokeBoss(
+      'invokeCursedKnight',
+      cursedKey,
+    );
+    expect(repeatedInvocation.id).toBe(cursedBattleId);
+    expect(
+      await prisma.client.characterResource.findUniqueOrThrow({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'BOSS_INVOCATION_SEAL',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 1 });
+    expect(
+      await prisma.client.resourceLedgerEntry.count({
+        where: {
+          characterId: combatUser.character!.id,
+          type: 'BOSS_INVOCATION_SEAL',
+          amount: -1,
+          reason: 'BOSS_INVOCATION',
+        },
+      }),
+    ).toBe(1);
+    await forceBossVictory(cursedBattleId);
+    await claimInvocationReward(cursedBattleId, 'CURSED_HEART');
+    await acknowledgeBoss();
+
+    await prisma.client.characterResource.update({
+      where: {
+        characterId_type: {
+          characterId: combatUser.character!.id,
+          type: 'CURSED_HEART',
+        },
+      },
+      data: { balance: 3 },
+    });
+    const fallenInvocation = await invokeBoss(
+      'invokeFallenElf',
+      `invoke-fallen-${Date.now()}`,
+    );
+    expect(fallenInvocation).toMatchObject({
+      summonedBoss: true,
+      summonedBossId: 'FALLEN_ELF',
+      enemyName: 'Павший ельф Саелір',
+    });
+    const fallenBattleId = fallenInvocation.id;
+    expect(
+      await prisma.client.characterResource.findUniqueOrThrow({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'CURSED_HEART',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: 0 });
+    await forceBossVictory(fallenBattleId);
+    await claimInvocationReward(fallenBattleId, 'FALLEN_ELF_EYE');
+    await acknowledgeBoss();
+    expect(
+      await prisma.client.characterWorldState.findUniqueOrThrow({
+        where: { characterId: combatUser.character!.id },
+      }),
+    ).toMatchObject({ currentLocation: 'CINDERHAVEN_GATE' });
+
     const duplicate = await request(server)
       .post('/graphql')
       .set('Cookie', cookie)
@@ -1176,6 +1792,139 @@ describe('Health (e2e)', () => {
       })
       .expect(200);
     expect(duplicate.text).toContain('errors');
+
+    const forbiddenAdminQuery = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({ query: '{ adminCharacters { id } }' })
+      .expect(200);
+    expect(forbiddenAdminQuery.text).toContain('errors');
+    expect(forbiddenAdminQuery.text).toContain(
+      'Administrative access required',
+    );
+
+    await prisma.client.user.update({
+      where: { id: combatUser.id },
+      data: { role: 'ADMIN' },
+    });
+    const adminCharacters = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          '{ adminCharacters(search: "Hero", take: 10) { id name email userRole level resources { type amount } } }',
+      })
+      .expect(200);
+    expect(adminCharacters.text).toContain(`"email":"${email}"`);
+    expect(adminCharacters.text).toContain('"userRole":"ADMIN"');
+
+    const ironBefore =
+      (
+        await prisma.client.characterResource.findUnique({
+          where: {
+            characterId_type: {
+              characterId: combatUser.character!.id,
+              type: 'IRON',
+            },
+          },
+        })
+      )?.balance ?? 0;
+    const resourceAdminKey = `admin-resource-${Date.now()}`;
+    const adjustResource = () =>
+      request(server)
+        .post('/graphql')
+        .set('Cookie', cookie)
+        .send({
+          query:
+            'mutation Adjust($input: AdjustCharacterResourceInput!) { adminAdjustCharacterResource(input: $input) { auditId character { id version resources { type amount } } } }',
+          variables: {
+            input: {
+              characterId: combatUser.character!.id,
+              resourceType: 'IRON',
+              delta: 7,
+              reason: 'E2E verification of audited resource adjustment',
+              idempotencyKey: resourceAdminKey,
+            },
+          },
+        })
+        .expect(200);
+    const adjusted = await adjustResource();
+    const adjustedRetry = await adjustResource();
+    const adjustedPayload = JSON.parse(adjusted.text) as {
+      data: { adminAdjustCharacterResource: { auditId: string } };
+    };
+    const adjustedRetryPayload = JSON.parse(adjustedRetry.text) as {
+      data: { adminAdjustCharacterResource: { auditId: string } };
+    };
+    expect(adjustedRetryPayload.data.adminAdjustCharacterResource.auditId).toBe(
+      adjustedPayload.data.adminAdjustCharacterResource.auditId,
+    );
+    expect(
+      await prisma.client.characterResource.findUniqueOrThrow({
+        where: {
+          characterId_type: {
+            characterId: combatUser.character!.id,
+            type: 'IRON',
+          },
+        },
+      }),
+    ).toMatchObject({ balance: ironBefore + 7 });
+    expect(
+      await prisma.client.resourceLedgerEntry.count({
+        where: {
+          characterId: combatUser.character!.id,
+          type: 'IRON',
+          amount: 7,
+          reason: 'ADMIN_ADJUSTMENT',
+        },
+      }),
+    ).toBe(1);
+
+    const setAdminLevel = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query:
+          'mutation SetLevel($input: SetCharacterLevelInput!) { adminSetCharacterLevel(input: $input) { auditId character { level experience } } }',
+        variables: {
+          input: {
+            characterId: combatUser.character!.id,
+            level: 31,
+            reason: 'E2E verification of audited level adjustment',
+            idempotencyKey: `admin-level-${Date.now()}`,
+          },
+        },
+      })
+      .expect(200);
+    const setAdminLevelPayload = JSON.parse(setAdminLevel.text) as {
+      data: {
+        adminSetCharacterLevel: {
+          auditId: string;
+          character: { level: number; experience: number };
+        };
+      };
+    };
+    expect(setAdminLevelPayload).toMatchObject({
+      data: {
+        adminSetCharacterLevel: {
+          character: { level: 31, experience: 90_000 },
+        },
+      },
+    });
+    const auditLogs = await request(server)
+      .post('/graphql')
+      .set('Cookie', cookie)
+      .send({
+        query: `{ adminAuditLogs(targetId: "${combatUser.character!.id}") { action actorEmail reason } }`,
+      })
+      .expect(200);
+    expect(auditLogs.text).toContain('ADJUST_CHARACTER_RESOURCE');
+    expect(auditLogs.text).toContain('SET_CHARACTER_LEVEL');
+
+    await prisma.client.user.update({
+      where: { id: combatUser.id },
+      data: { role: 'PLAYER' },
+    });
 
     await request(server)
       .post('/graphql')

@@ -9,11 +9,21 @@ export class CombatantModel {
 }
 
 @ObjectType()
+export class BattleEnemyModel extends CombatantModel {
+  @Field() id!: string;
+  @Field() name!: string;
+  @Field() activeTarget!: boolean;
+}
+
+@ObjectType()
 export class CombatActionModel {
   @Field() id!: string;
   @Field() name!: string;
   @Field(() => Int) cost!: number;
   @Field() description!: string;
+  @Field() kind!: string;
+  @Field() resource!: string;
+  @Field(() => Int, { nullable: true }) charges?: number;
 }
 
 @ObjectType()
@@ -38,11 +48,16 @@ export class BattleModel {
   @Field() status!: string;
   @Field() phase!: string;
   @Field(() => Int) encounterTier!: number;
+  @Field(() => Boolean) personalBest!: boolean;
+  @Field(() => Boolean) rareEncounter!: boolean;
+  @Field(() => Boolean) summonedBoss!: boolean;
+  @Field(() => String, { nullable: true }) summonedBossId?: string;
   @Field() enemyName!: string;
   @Field(() => Int) version!: number;
   @Field(() => Int) turn!: number;
   @Field(() => CombatantModel) hero!: CombatantModel;
   @Field(() => CombatantModel) enemy!: CombatantModel;
+  @Field(() => [BattleEnemyModel]) enemies!: BattleEnemyModel[];
   @Field(() => EnemyIntentModel) currentIntent!: EnemyIntentModel;
   @Field(() => [EnemyIntentModel]) visibleIntents!: EnemyIntentModel[];
   @Field(() => [CombatActionModel]) actions!: CombatActionModel[];

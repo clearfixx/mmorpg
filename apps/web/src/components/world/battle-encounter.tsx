@@ -8,13 +8,18 @@ import { Button } from '@/components/ui/button'
 const endpoint =
   process.env.NEXT_PUBLIC_GRAPHQL_URL ?? 'http://localhost:4000/graphql'
 const battleFields =
-  'id status phase encounterTier enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description } log { turn kind message amount detail }'
+  'id status phase encounterTier personalBest rareEncounter summonedBoss summonedBossId enemyName version turn hero { health maxHealth resource maxResource } enemy { health maxHealth } enemies { id name health maxHealth activeTarget } currentIntent { id name description } visibleIntents { id name description } actions { id name cost description kind resource charges } log { turn kind message amount detail }'
 
 interface Battle {
   id: string
   status: string
   phase: string
   encounterTier: number
+  personalBest: boolean
+  rareEncounter: boolean
+  summonedBoss: boolean
+  summonedBossId:
+    'CURSED_KNIGHT' | 'FALLEN_ELF' | 'DARK_PRIEST' | 'VEIL_WARDEN' | null
   enemyName: string
   version: number
   turn: number
@@ -25,6 +30,13 @@ interface Battle {
     maxResource: number
   }
   enemy: { health: number; maxHealth: number }
+  enemies: Array<{
+    id: string
+    name: string
+    health: number
+    maxHealth: number
+    activeTarget: boolean
+  }>
   currentIntent: { id: string; name: string; description: string }
   visibleIntents: Array<{ id: string; name: string; description: string }>
   actions: Array<{
@@ -32,6 +44,9 @@ interface Battle {
     name: string
     cost: number
     description: string
+    kind: 'BASIC' | 'EQUIPMENT' | 'SPELL' | 'POTION'
+    resource: 'NONE' | 'MANA' | 'ITEM'
+    charges: number | null
   }>
   log: Array<{
     turn: number
@@ -46,35 +61,83 @@ interface BattleReward {
   claimId: string
   experience: number
   gold: number
-  resources: Array<{ type: 'IRON' | 'COPPER' | 'BRONZE'; amount: number }>
+  resources: Array<{
+    type:
+      | 'IRON'
+      | 'COPPER'
+      | 'BRONZE'
+      | 'COAL'
+      | 'LEATHER'
+      | 'WEAPON_FRAGMENT'
+      | 'HEALTH_POTION'
+      | 'MANA_POTION'
+      | 'BOSS_INVOCATION_SEAL'
+      | 'CURSED_HEART'
+      | 'FALLEN_ELF_EYE'
+      | 'DARK_PRIEST_ASH'
+      | 'DARK_PRIEST_INVOCATION_SEAL'
+      | 'DRYAD_HEARTWOOD'
+    amount: number
+  }>
   item: {
     id: string
     name: string
     itemLevel: number
-    rarity: 'COMMON' | 'UNCOMMON'
+    rarity:
+      | 'COMMON'
+      | 'UNCOMMON'
+      | 'RARE'
+      | 'EPIC'
+      | 'LEGENDARY'
+      | 'MYTHIC'
+      | 'DIVINE'
+    rollQuality: number
     damage: number
+    armor: number
+    health: number
+    damageMin: number
+    damageMax: number
     binding: string
     setName: string
     location: 'CHEST' | 'BACKPACK'
-  }
+  } | null
+}
+
+interface ExpeditionProgress {
+  highestClearedTier: number
+  checkpointTier: number
+  saveableTier: number | null
+  saveCost: number | null
+  gold: number
+  canAffordSave: boolean
 }
 
 export function BattleEncounter({
   heroName,
   preparation,
+  region = 'HOLLOW_ROAD',
 }: {
   heroName: string
   preparation: string
+  region?: 'HOLLOW_ROAD' | 'DRYAD_FOREST'
 }) {
   const [battle, setBattle] = useState<Battle | null>(null)
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reward, setReward] = useState<BattleReward | null>(null)
+  const [expedition, setExpedition] = useState<ExpeditionProgress | null>(null)
+  const [targetEnemyId, setTargetEnemyId] = useState<string | null>(null)
 
   useEffect(() => {
-    void loadActiveBattle()
-      .then(setBattle)
+    void Promise.all([loadActiveBattle(), loadExpeditionProgress()])
+      .then(([activeBattle, progress]) => {
+        setBattle(activeBattle)
+        setTargetEnemyId(
+          activeBattle?.enemies.find((enemy) => enemy.activeTarget)?.id ?? null,
+        )
+        setExpedition(progress)
+      })
       .catch(() => setError('Не вдалося відновити стан бою.'))
       .finally(() => setLoading(false))
   }, [])
@@ -86,7 +149,13 @@ export function BattleEncounter({
     const timer = window.setInterval(() => {
       void loadActiveBattle()
         .then((nextBattle) => {
-          if (!cancelled && nextBattle) setBattle(nextBattle)
+          if (!cancelled && nextBattle) {
+            setBattle(nextBattle)
+            setTargetEnemyId(
+              nextBattle.enemies.find((enemy) => enemy.activeTarget)?.id ??
+                null,
+            )
+          }
         })
         .catch(() => {
           if (!cancelled) setError('Не вдалося отримати відповідь ворога.')
@@ -99,6 +168,13 @@ export function BattleEncounter({
     }
   }, [battle?.phase, battle?.version])
 
+  useEffect(() => {
+    if (battle?.status !== 'WON') return
+    void loadExpeditionProgress()
+      .then(setExpedition)
+      .catch(() => setError('Не вдалося покликати провідника.'))
+  }, [battle?.encounterTier, battle?.status])
+
   async function start() {
     setPending(true)
     setError(null)
@@ -108,8 +184,41 @@ export function BattleEncounter({
         { input: { idempotencyKey: crypto.randomUUID() } },
       )
       setBattle(data.startEncounter)
+      setTargetEnemyId(
+        data.startEncounter.enemies.find((enemy) => enemy.activeTarget)?.id ??
+          null,
+      )
     } catch {
       setError('Не вдалося розпочати сутичку.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function hireGuide() {
+    if (
+      !expedition ||
+      battle?.status !== 'WON' ||
+      expedition.saveableTier !== battle.encounterTier
+    )
+      return
+    setPending(true)
+    setError(null)
+    try {
+      const data = await graphQl<{
+        hireExpeditionGuide: ExpeditionProgress
+      }>(
+        'mutation Hire($input: HireExpeditionGuideInput!) { hireExpeditionGuide(input: $input) { highestClearedTier checkpointTier saveableTier saveCost gold canAffordSave } }',
+        {
+          input: {
+            checkpointTier: battle.encounterTier,
+            idempotencyKey: crypto.randomUUID(),
+          },
+        },
+      )
+      setExpedition(data.hireExpeditionGuide)
+    } catch {
+      setError('Провідник відмовився від угоди. Перевірте запас золота.')
     } finally {
       setPending(false)
     }
@@ -125,12 +234,17 @@ export function BattleEncounter({
         {
           input: {
             actionId,
+            targetEnemyId,
             expectedVersion: battle.version,
             idempotencyKey: crypto.randomUUID(),
           },
         },
       )
       setBattle(data.submitCombatCommand)
+      setTargetEnemyId(
+        data.submitCombatCommand.enemies.find((enemy) => enemy.activeTarget)
+          ?.id ?? null,
+      )
     } catch {
       setError('Хід не виконано. Стан бою міг змінитися.')
     } finally {
@@ -169,7 +283,7 @@ export function BattleEncounter({
       )
       window.location.reload()
     } catch {
-      setError('Не вдалося повернутися на заставу.')
+      setError('Не вдалося залишити поле бою.')
       setPending(false)
     }
   }
@@ -183,7 +297,7 @@ export function BattleEncounter({
         `mutation Claim($input: ClaimBattleRewardInput!) {
           claimBattleReward(input: $input) {
             claimId experience gold resources { type amount }
-            item { id name itemLevel rarity damage binding setName location }
+            item { id name itemLevel rarity rollQuality damage armor health damageMin damageMax binding setName location }
           }
         }`,
         {
@@ -258,6 +372,20 @@ export function BattleEncounter({
               {preparationEffect(preparation)}
             </p>
           </div>
+          {expedition && expedition.checkpointTier > 1 ? (
+            <div className="mt-4 border border-border/70 bg-background/45 p-4">
+              <p className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-ember">
+                Провідник Порожньої дороги
+              </p>
+              <p className="mt-2 text-sm">
+                Провідник чекає біля застави й готовий повернути вас до етапу{' '}
+                {expedition.checkpointTier} в обхід переможених ворогів.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Оплачений маршрут зберігається назавжди.
+              </p>
+            </div>
+          ) : null}
           {error ? (
             <p role="alert" className="mt-4 text-sm text-destructive">
               {error}
@@ -268,7 +396,9 @@ export function BattleEncounter({
             disabled={pending}
             className="mt-6 h-10 rounded-sm bg-ember text-ink hover:bg-ember-bright"
           >
-            {pending ? 'Мародер наближається…' : 'Прийняти бій'}
+            {pending
+              ? 'Мародер наближається…'
+              : `Почати з етапу ${expedition?.checkpointTier ?? 1}`}
           </Button>
         </section>
       </main>
@@ -284,7 +414,8 @@ export function BattleEncounter({
         <header className="flex items-center justify-between border-b border-border/70 px-5 py-4">
           <div>
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-ember">
-              Порожня дорога · хід {battle.turn}
+              {region === 'DRYAD_FOREST' ? 'Ліс дріад' : 'Порожня дорога'} · хід{' '}
+              {battle.turn}
             </p>
             <h1 className="mt-1 text-xl font-semibold">{battle.enemyName}</h1>
           </div>
@@ -292,21 +423,53 @@ export function BattleEncounter({
             стан {battle.version}
           </span>
         </header>
+        {battle.rareEncounter || battle.summonedBoss ? (
+          <section className="border-b border-ember/50 bg-ember/5 px-5 py-4">
+            <p className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-ember">
+              {battle.summonedBoss
+                ? ritualBossKicker(battle.summonedBossId)
+                : 'Рідкісна зустріч · доступна з 30 рівня'}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {battle.summonedBoss
+                ? ritualBossDescription(battle.summonedBossId)
+                : 'Носій печаті значно сильніший за звичайних ворогів. Перемога гарантовано принесе переносне закляття для виклику Проклятого лицаря.'}
+            </p>
+          </section>
+        ) : null}
         <section className="grid gap-px bg-border/60 md:grid-cols-2">
           <HealthPanel
             portrait="В"
             title={heroName}
             value={battle.hero.health}
             max={battle.hero.maxHealth}
-            secondary={`${battle.hero.resource}/${battle.hero.maxResource} ресурсу`}
+            secondary={`${battle.hero.resource}/${battle.hero.maxResource} мани`}
           />
-          <HealthPanel
-            portrait={battle.encounterTier > 1 ? 'Р' : 'М'}
-            title={battle.encounterTier > 1 ? 'Розоритель' : 'Мародер'}
-            value={battle.enemy.health}
-            max={battle.enemy.maxHealth}
-            secondary="важкий тесак"
-          />
+          <div className="grid gap-px bg-border/60">
+            {battle.enemies.map((enemy) => (
+              <button
+                key={enemy.id}
+                type="button"
+                disabled={enemy.health === 0 || actionsLocked}
+                onClick={() => setTargetEnemyId(enemy.id)}
+                className={`text-left ${targetEnemyId === enemy.id ? 'ring-1 ring-inset ring-ember' : ''}`}
+              >
+                <HealthPanel
+                  portrait={enemy.name.slice(0, 1)}
+                  title={enemy.name}
+                  value={enemy.health}
+                  max={enemy.maxHealth}
+                  secondary={
+                    enemy.health === 0
+                      ? 'переможений'
+                      : targetEnemyId === enemy.id
+                        ? 'обрана ціль'
+                        : 'натисніть, щоб обрати'
+                  }
+                />
+              </button>
+            ))}
+          </div>
         </section>
         <section className="grid md:grid-cols-[1fr_18rem]">
           <div className="p-5 sm:p-6">
@@ -314,12 +477,18 @@ export function BattleEncounter({
               <BattleResult
                 status={battle.status}
                 encounterTier={battle.encounterTier}
+                personalBest={battle.personalBest}
+                rareEncounter={battle.rareEncounter}
+                summonedBoss={battle.summonedBoss}
+                summonedBossId={battle.summonedBossId}
                 turns={battle.turn}
                 health={battle.hero.health}
                 maxHealth={battle.hero.maxHealth}
                 pending={pending}
                 reward={reward}
+                expedition={expedition}
                 onClaim={claimReward}
+                onSave={hireGuide}
                 onContinue={continueAdventure}
                 onReturn={returnToWatchpost}
               />
@@ -360,15 +529,25 @@ export function BattleEncounter({
                     key={action.id}
                     type="button"
                     disabled={
-                      actionsLocked || battle.hero.resource < action.cost
+                      actionsLocked ||
+                      (action.resource === 'MANA' &&
+                        battle.hero.resource < action.cost) ||
+                      (action.resource === 'ITEM' && (action.charges ?? 0) < 1)
                     }
                     onClick={() => act(action.id)}
                     className="border border-border/70 bg-background/50 p-3 text-left transition hover:border-ember/60 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <span className="flex justify-between gap-3 text-sm font-medium">
+                    <span className="font-mono text-[0.55rem] uppercase tracking-wider text-moss">
+                      {actionKindName(action.kind)}
+                    </span>
+                    <span className="mt-1 flex justify-between gap-3 text-sm font-medium">
                       <span>{action.name}</span>
                       <span className="font-mono text-xs text-ember">
-                        {action.cost}
+                        {action.resource === 'MANA'
+                          ? `${action.cost} мани`
+                          : action.resource === 'ITEM'
+                            ? `${action.charges ?? 0} шт.`
+                            : 'безкоштовно'}
                       </span>
                     </span>
                     <span className="mt-1 block text-xs leading-5 text-muted-foreground">
@@ -438,23 +617,35 @@ export function BattleEncounter({
 function BattleResult({
   status,
   encounterTier,
+  personalBest,
+  rareEncounter,
+  summonedBoss,
+  summonedBossId,
   turns,
   health,
   maxHealth,
   pending,
   reward,
+  expedition,
   onClaim,
+  onSave,
   onContinue,
   onReturn,
 }: {
   status: string
   encounterTier: number
+  personalBest: boolean
+  rareEncounter: boolean
+  summonedBoss: boolean
+  summonedBossId: Battle['summonedBossId']
   turns: number
   health: number
   maxHealth: number
   pending: boolean
   reward: BattleReward | null
+  expedition: ExpeditionProgress | null
   onClaim: () => void
+  onSave: () => void
   onContinue: () => void
   onReturn: () => void
 }) {
@@ -474,13 +665,34 @@ function BattleResult({
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Ходів: {turns}. Здоров’я героя: {health}/{maxHealth}.
       </p>
+      {won && rareEncounter ? (
+        <p className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3 text-sm leading-6 text-ember">
+          Вартовий переможений. Печатка виклику Проклятого лицаря буде серед
+          гарантованих трофеїв.
+        </p>
+      ) : null}
+      {won && summonedBoss ? (
+        <p className="mt-3 border-l-2 border-ember bg-ember/5 px-4 py-3 text-sm leading-6 text-ember">
+          {ritualVictoryText(summonedBossId)}
+        </p>
+      ) : null}
+      {won && personalBest && !summonedBoss ? (
+        <GuideCheckpointOffer
+          encounterTier={encounterTier}
+          expedition={expedition}
+          pending={pending}
+          onSave={onSave}
+        />
+      ) : null}
       {won && !reward ? (
         <div className="mt-5 border border-ember/50 bg-background/50 p-4">
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-ember">
             Здобич не отримана
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Заберіть трофей мародера перед поверненням на заставу.
+            {summonedBoss
+              ? ritualClaimText(summonedBossId)
+              : 'Заберіть трофей ворога перед поверненням на заставу.'}
           </p>
           <Button
             type="button"
@@ -493,14 +705,14 @@ function BattleResult({
         </div>
       ) : null}
       {reward ? <RewardReveal reward={reward} /> : null}
-      {won && reward ? (
+      {won && reward && !summonedBoss ? (
         <div className="mt-4 space-y-2 text-xs leading-5 text-muted-foreground">
           <p>
             Етап {encounterTier + 1}: ворог матиме на 40 більше здоров’я та
             завдаватиме на 6 більше шкоди. Нагорода: +{40 + encounterTier * 20}{' '}
             досвіду і +{18 + encounterTier * 12} золота.
           </p>
-          {reward.item.location === 'BACKPACK' ? (
+          {reward.item?.location === 'BACKPACK' ? (
             <p className="text-destructive">
               Продовження залишить трофей у похідному рюкзаку. Загибель у
               наступному бою знищить усю незбережену здобич.
@@ -517,9 +729,11 @@ function BattleResult({
             variant="outline"
             className="h-9 rounded-sm"
           >
-            Повернутися на заставу
+            {summonedBoss
+              ? 'Повернутися до Прихистку'
+              : 'Повернутися на заставу'}
           </Button>
-          {won && reward ? (
+          {won && reward && !summonedBoss ? (
             <Button
               type="button"
               onClick={onContinue}
@@ -528,7 +742,7 @@ function BattleResult({
             >
               {pending
                 ? 'Шукаємо шлях…'
-                : reward.item.location === 'BACKPACK'
+                : reward.item?.location === 'BACKPACK'
                   ? `Ризикнути · етап ${encounterTier + 1}`
                   : `Продовжити пригоду · етап ${encounterTier + 1}`}
             </Button>
@@ -539,7 +753,48 @@ function BattleResult({
   )
 }
 
+function GuideCheckpointOffer({
+  encounterTier,
+  expedition,
+  pending,
+  onSave,
+}: {
+  encounterTier: number
+  expedition: ExpeditionProgress | null
+  pending: boolean
+  onSave: () => void
+}) {
+  const canSave = expedition?.saveableTier === encounterTier
+
+  if (!canSave) return null
+
+  return (
+    <section className="mt-5 border border-border/70 bg-background/45 p-4">
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-ember">
+        Таємничий провідник
+      </p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        Провідник пропонує запам’ятати шлях до етапу {encounterTier}. У
+        наступному поході він проведе вас сюди в обхід ворогів.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending || !expedition.canAffordSave}
+        onClick={onSave}
+        className="mt-3 h-9 rounded-sm"
+      >
+        {expedition.canAffordSave
+          ? `Закріпити маршрут · ${expedition.saveCost} золота`
+          : `Потрібно ${expedition.saveCost} золота`}
+      </Button>
+    </section>
+  )
+}
+
 function RewardReveal({ reward }: { reward: BattleReward }) {
+  const item = reward.item
+
   return (
     <section
       className="mt-5 border border-moss/50 bg-background/55 p-4"
@@ -548,31 +803,63 @@ function RewardReveal({ reward }: { reward: BattleReward }) {
       <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-moss">
         Нагороду отримано
       </p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-[5rem_1fr]">
-        <div className="grid size-20 place-items-center border border-ember/50 bg-ember/5 font-mono text-2xl text-ember">
-          V
-        </div>
+      <div
+        className={`mt-4 grid gap-4 ${item ? 'sm:grid-cols-[5rem_1fr]' : ''}`}
+      >
+        {item ? (
+          <div className="grid size-20 place-items-center border border-ember/50 bg-ember/5 font-mono text-2xl text-ember">
+            V
+          </div>
+        ) : null}
         <div>
-          <p className="text-lg font-semibold">{reward.item.name}</p>
-          <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-wider text-ember">
-            {rarityName(reward.item.rarity)} · комплект {reward.item.setName}
+          <p className="text-lg font-semibold">
+            {item ? item.name : 'Матеріали та бойовий досвід'}
           </p>
+          {item ? (
+            <p className="mt-1 font-mono text-[0.65rem] uppercase tracking-wider text-ember">
+              {rarityName(item.rarity)} · {item.itemLevel} рівень · комплект{' '}
+              {item.setName}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Цього разу серед трофеїв не знайдено предмета екіпіровки.
+            </p>
+          )}
           <dl className="mt-3 grid grid-cols-2 gap-px bg-border/60 text-center sm:grid-cols-4">
-            <RewardStat label="DMG" value={`+${reward.item.damage}`} />
+            {item ? (
+              <>
+                <RewardStat label="DMG" value={`+${item.damage}`} />
+                <RewardStat label="ARM" value={`+${item.armor}`} />
+                <RewardStat label="HP" value={`+${item.health}`} />
+                <RewardStat
+                  label="Якість"
+                  value={`${Math.round((item.rollQuality / 9_999) * 100)}%`}
+                />
+              </>
+            ) : null}
             <RewardStat label="EXP" value={`+${reward.experience}`} />
             <RewardStat label="Золото" value={`+${reward.gold}`} />
-            <RewardStat
-              label={resourceName(reward.resources[0]?.type)}
-              value={`+${reward.resources[0]?.amount ?? 0}`}
-            />
+            {reward.resources.length ? (
+              reward.resources.map((resource) => (
+                <RewardStat
+                  key={resource.type}
+                  label={resourceName(resource.type)}
+                  value={`+${resource.amount}`}
+                />
+              ))
+            ) : (
+              <RewardStat label="Матеріали" value="нічого" />
+            )}
           </dl>
-          <p
-            className={`mt-3 text-xs leading-5 ${reward.item.location === 'BACKPACK' ? 'text-destructive' : 'text-muted-foreground'}`}
-          >
-            {reward.item.location === 'BACKPACK'
-              ? 'Предмет лежить у похідному рюкзаку. Поверніться на заставу, щоб перенести його до постійного сундука. Якщо продовжите шлях і загинете — трофей буде втрачено.'
-              : 'Предмет переміщено до постійного сундука. Він прив’яжеться до героя після екіпірування.'}
-          </p>
+          {item ? (
+            <p
+              className={`mt-3 text-xs leading-5 ${item.location === 'BACKPACK' ? 'text-destructive' : 'text-muted-foreground'}`}
+            >
+              {item.location === 'BACKPACK'
+                ? 'Предмет лежить у похідному рюкзаку. Поверніться на заставу, щоб перенести його до постійного сундука. Якщо продовжите шлях і загинете — трофей буде втрачено.'
+                : 'Предмет переміщено до постійного сундука. Він прив’яжеться до героя після екіпірування.'}
+            </p>
+          ) : null}
         </div>
       </div>
     </section>
@@ -590,8 +877,50 @@ function RewardStat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function resourceName(type?: 'IRON' | 'COPPER' | 'BRONZE'): string {
-  return { IRON: 'Залізо', COPPER: 'Мідь', BRONZE: 'Бронза' }[type ?? 'IRON']
+function actionKindName(
+  kind: 'BASIC' | 'EQUIPMENT' | 'SPELL' | 'POTION',
+): string {
+  return {
+    BASIC: 'Базова дія',
+    EQUIPMENT: 'Уміння спорядження',
+    SPELL: 'Закляття',
+    POTION: 'Зілля',
+  }[kind]
+}
+
+function resourceName(
+  type?:
+    | 'IRON'
+    | 'COPPER'
+    | 'BRONZE'
+    | 'COAL'
+    | 'LEATHER'
+    | 'WEAPON_FRAGMENT'
+    | 'HEALTH_POTION'
+    | 'MANA_POTION'
+    | 'BOSS_INVOCATION_SEAL'
+    | 'CURSED_HEART'
+    | 'FALLEN_ELF_EYE'
+    | 'DARK_PRIEST_ASH'
+    | 'DARK_PRIEST_INVOCATION_SEAL'
+    | 'DRYAD_HEARTWOOD',
+): string {
+  return {
+    IRON: 'Залізо',
+    COPPER: 'Мідь',
+    BRONZE: 'Бронза',
+    COAL: 'Вугілля',
+    LEATHER: 'Шкіра',
+    WEAPON_FRAGMENT: 'Уламок зброї',
+    HEALTH_POTION: 'Зілля відновлення',
+    MANA_POTION: 'Зілля мани',
+    BOSS_INVOCATION_SEAL: 'Печатка виклику',
+    CURSED_HEART: 'Серце лицаря',
+    FALLEN_ELF_EYE: 'Око Павшого ельфа',
+    DARK_PRIEST_ASH: 'Попіл Темного жерця',
+    DARK_PRIEST_INVOCATION_SEAL: 'Печатка Темного жерця',
+    DRYAD_HEARTWOOD: 'Серцевина кореня',
+  }[type ?? 'IRON']
 }
 
 function HealthPanel({
@@ -640,6 +969,45 @@ function preparationEffect(preparation: string): string {
   return 'Перші три ходи відновлюють по 6 HP.'
 }
 
+function ritualBossKicker(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Ритуальний бос · спалено три прокляті серця'
+  if (bossId === 'DARK_PRIEST')
+    return 'Альтернативна гілка · витрачено перековану печатку'
+  if (bossId === 'VEIL_WARDEN') return 'Третя ланка · розлом Завіси відкрито'
+  return 'Ритуальний бос · витрачено печатку виклику'
+}
+
+function ritualBossDescription(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Саелір не залишить Заборонений гай, доки ритуал не завершиться. Його око існує лише як трофей цього виклику.'
+  if (bossId === 'DARK_PRIEST')
+    return 'Нервал відкриває альтернативний шлях полювання. Його попіл може замінити очі ельфа у ритуалі третьої ланки.'
+  if (bossId === 'VEIL_WARDEN')
+    return 'Вартовий замкнув розлом власним тілом. Перемога гарантує божественне Серце Вартового Завіси.'
+  return 'Морґрейв не зникне, доки ритуал не завершиться. Його серце існує лише як трофей цього виклику.'
+}
+
+function ritualVictoryText(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Саелір переможений. Око Павшого ельфа відкриває шлях до Вартового Завіси.'
+  if (bossId === 'DARK_PRIEST')
+    return 'Нервал розсипався попелом. Три такі трофеї відкриють шлях до Вартового Завіси.'
+  if (bossId === 'VEIL_WARDEN')
+    return 'Розлом приборкано. Божественне Серце Вартового Завіси гарантовано стане вашою реліквією.'
+  return 'Ритуал завершено. Серце Проклятого лицаря відкриває наступну ланку викликів.'
+}
+
+function ritualClaimText(bossId: Battle['summonedBossId']): string {
+  if (bossId === 'FALLEN_ELF')
+    return 'Заберіть око Саеліра перед поверненням до Прихистку.'
+  if (bossId === 'DARK_PRIEST')
+    return 'Зберіть попіл Нервала перед поверненням до Прихистку.'
+  if (bossId === 'VEIL_WARDEN')
+    return 'Прийміть божественну реліквію Вартового перед закриттям розлому.'
+  return 'Заберіть серце Морґрейва перед поверненням до Прихистку.'
+}
+
 function logColor(kind: string): string {
   if (kind === 'HEAL' || kind === 'VICTORY') return 'text-moss'
   if (kind === 'ENEMY_DAMAGE') return 'text-destructive'
@@ -655,8 +1023,25 @@ async function loadActiveBattle(): Promise<Battle | null> {
   return data.latestBattle
 }
 
-function rarityName(rarity: BattleReward['item']['rarity']): string {
-  return rarity === 'UNCOMMON' ? 'Незвичайний' : 'Звичайний'
+async function loadExpeditionProgress(): Promise<ExpeditionProgress> {
+  const data = await graphQl<{ expeditionProgress: ExpeditionProgress }>(
+    '{ expeditionProgress { highestClearedTier checkpointTier saveableTier saveCost gold canAffordSave } }',
+  )
+  return data.expeditionProgress
+}
+
+function rarityName(
+  rarity: NonNullable<BattleReward['item']>['rarity'],
+): string {
+  return {
+    COMMON: 'Звичайний',
+    UNCOMMON: 'Незвичайний',
+    RARE: 'Рідкісний',
+    EPIC: 'Епічний',
+    LEGENDARY: 'Легендарний',
+    MYTHIC: 'Міфічний',
+    DIVINE: 'Божественний',
+  }[rarity]
 }
 
 async function graphQl<T>(

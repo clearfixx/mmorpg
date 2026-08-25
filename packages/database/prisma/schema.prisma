@@ -43,6 +43,7 @@ enum WorldLocation {
   BROKEN_WATCHPOST
   HOLLOW_ROAD
   CINDERHAVEN_GATE
+  DRYAD_FOREST
 }
 
 enum PreparationChoice {
@@ -61,6 +62,11 @@ enum BattleStatus {
 enum ItemRarity {
   COMMON
   UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+  MYTHIC
+  DIVINE
 }
 
 enum ItemBinding {
@@ -73,7 +79,15 @@ enum ItemLocation {
   CHEST
   BACKPACK
   EQUIPPED
+  MARKET
   LOST
+}
+
+enum MarketListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+  EXPIRED
 }
 
 enum ItemLineageType {
@@ -81,26 +95,68 @@ enum ItemLineageType {
   STORED_IN_CHEST
   EQUIPPED
   LOST_IN_BATTLE
+  TEMPERING
 }
 
 enum EquipmentSlot {
+  HEAD
+  SHOULDERS
+  CHEST
+  BRACERS
+  HANDS
+  WAIST
+  LEGS
+  FEET
   MAIN_HAND
+  OFF_HAND
+  AMULET
+  BRACELET
+  RING_LEFT
+  RING_RIGHT
 }
 
 enum TalentType {
   VITALITY
   POWER
   RESILIENCE
-  ASCENDED_VITALITY
-  ASCENDED_POWER
-  ASCENDED_RESILIENCE
+  AWAKENED_VITALITY
+  AWAKENED_POWER
+  AWAKENED_RESILIENCE
 }
 
 enum ResourceType {
   IRON
   COPPER
   BRONZE
+  COAL
+  TIMBER
+  LEATHER
+  WEAPON_FRAGMENT
+  HEALTH_POTION
+  MANA_POTION
+  HERBS
+  OBSIDIAN_SHARD
+  VEIL_STEEL
+  STABILIZED_CATALYST
   VEIL_ECHO
+  CURSED_HEART
+  FALLEN_ELF_EYE
+  DARK_PRIEST_ASH
+  BOSS_INVOCATION_SEAL
+  DARK_PRIEST_INVOCATION_SEAL
+  DRYAD_HEARTWOOD
+  TEMPERING_STONE_DULL
+  TEMPERING_STONE_WHOLE
+  TEMPERING_STONE_FLAWLESS
+  TEMPERING_STONE_MYTHIC
+  TEMPERING_STONE_DIVINE
+}
+
+enum TemperingJobStatus {
+  ACTIVE
+  SUCCEEDED
+  PROGRESS_GAINED
+  CANCELLED
 }
 
 enum ClanRole {
@@ -123,88 +179,116 @@ enum ClanBossStatus {
   EXPIRED
 }
 
+enum CraftingStation {
+  WORKSHOP
+  ALCHEMY_TABLE
+  FORGE
+  RITUAL_CIRCLE
+}
+
+enum CraftJobStatus {
+  ACTIVE
+  CLAIMED
+}
+
+enum WorldFaction {
+  DAWN_COVENANT
+  ASHEN_HOST
+}
+
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  email        String     @unique @db.VarChar(320)
-  passwordHash String     @map("password_hash") @db.VarChar(255)
-  role         UserRole   @default(PLAYER)
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  sessions     Session[]
-  character    Character?
+  id                String          @id @default(uuid()) @db.Uuid
+  email             String          @unique @db.VarChar(320)
+  passwordHash      String          @map("password_hash") @db.VarChar(255)
+  role              UserRole        @default(PLAYER)
+  status            UserStatus      @default(ACTIVE)
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  sessions          Session[]
+  character         Character?
+  adminAuditEntries AdminAuditLog[] @relation("AdminAuditActor")
 
   @@map("users")
 }
 
 model Character {
-  id                String                @id @default(uuid()) @db.Uuid
-  userId            String                @unique @map("user_id") @db.Uuid
-  name              String                @db.VarChar(24)
-  nameKey           String                @unique @map("name_key") @db.VarChar(64)
-  archetype         CharacterArchetype
-  origin            CharacterOrigin       @default(ROAD_SURVIVOR)
-  avatarMode        AvatarMode            @default(STATIC) @map("avatar_mode")
-  staticAvatarId    String?               @map("static_avatar_id") @db.VarChar(64)
-  level             Int                   @default(1)
-  experience        Int                   @default(0)
-  gold              Int                   @default(0)
-  version           Int                   @default(1)
-  createdAt         DateTime              @default(now()) @map("created_at")
-  updatedAt         DateTime              @updatedAt @map("updated_at")
-  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  worldState        CharacterWorldState?
-  worldCommands     WorldCommand[]
-  battles           Battle[]
-  rewardClaims      RewardClaim[]
-  items             ItemInstance[]
-  equipment         EquipmentAssignment[]
-  inventoryCommands InventoryCommand[]
-  talents           CharacterTalent[]
-  talentCommands    TalentCommand[]
-  resources         CharacterResource[]
-  resourceLedger    ResourceLedgerEntry[]
-  clanMembership    ClanMembership?
-  clanCommands      ClanCommand[]
-  clanContributions ClanContribution[]
-  clanBossParticipations ClanBossParticipant[]
-  clanBossRewardClaims   ClanBossRewardClaim[]
+  id                      String                     @id @default(uuid()) @db.Uuid
+  userId                  String                     @unique @map("user_id") @db.Uuid
+  name                    String                     @db.VarChar(24)
+  nameKey                 String                     @unique @map("name_key") @db.VarChar(64)
+  archetype               CharacterArchetype
+  origin                  CharacterOrigin            @default(ROAD_SURVIVOR)
+  avatarMode              AvatarMode                 @default(STATIC) @map("avatar_mode")
+  staticAvatarId          String?                    @map("static_avatar_id") @db.VarChar(64)
+  level                   Int                        @default(1)
+  experience              Int                        @default(0)
+  gold                    Int                        @default(0)
+  version                 Int                        @default(1)
+  faction                 WorldFaction?
+  factionChanges          Int                        @default(0) @map("faction_changes")
+  createdAt               DateTime                   @default(now()) @map("created_at")
+  updatedAt               DateTime                   @updatedAt @map("updated_at")
+  user                    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  worldState              CharacterWorldState?
+  worldCommands           WorldCommand[]
+  battles                 Battle[]
+  rewardClaims            RewardClaim[]
+  items                   ItemInstance[]
+  equipment               EquipmentAssignment[]
+  inventoryCommands       InventoryCommand[]
+  expeditionGuideCommands ExpeditionGuideCommand[]
+  talents                 CharacterTalent[]
+  talentCommands          TalentCommand[]
+  resources               CharacterResource[]
+  resourceLedger          ResourceLedgerEntry[]
+  clanMembership          ClanMembership?
+  clanCommands            ClanCommand[]
+  clanContributions       ClanContribution[]
+  clanBossParticipations  ClanBossParticipant[]
+  clanBossRewardClaims    ClanBossRewardClaim[]
+  craftJobs               CraftJob[]
+  craftCommands           CraftCommand[]
+  recipeKnowledge         CharacterRecipeKnowledge[]
+  factionCommands         FactionCommand[]
+  bossInvocationCommands  BossInvocationCommand[]
+  temperingJobs           TemperingJob[]
+  temperingCommands       TemperingCommand[]
 
   @@map("characters")
 }
 
 model Clan {
-  id         String           @id @default(uuid()) @db.Uuid
-  name       String           @db.VarChar(32)
-  nameKey    String           @unique @map("name_key") @db.VarChar(64)
-  inviteCode String           @unique @map("invite_code") @db.Char(8)
-  level      Int              @default(1)
-  experience Int              @default(0)
-  version    Int              @default(1)
-  createdAt  DateTime         @default(now()) @map("created_at")
-  updatedAt  DateTime         @updatedAt @map("updated_at")
-  members    ClanMembership[]
-  commands   ClanCommand[]
-  resources  ClanResource[]
-  contributions ClanContribution[]
-  developments  ClanDevelopment[]
+  id             String              @id @default(uuid()) @db.Uuid
+  name           String              @db.VarChar(32)
+  nameKey        String              @unique @map("name_key") @db.VarChar(64)
+  inviteCode     String              @unique @map("invite_code") @db.Char(8)
+  level          Int                 @default(1)
+  experience     Int                 @default(0)
+  version        Int                 @default(1)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  members        ClanMembership[]
+  commands       ClanCommand[]
+  resources      ClanResource[]
+  contributions  ClanContribution[]
+  developments   ClanDevelopment[]
   bossEncounters ClanBossEncounter[]
 
   @@map("clans")
 }
 
 model ClanBossEncounter {
-  id            String             @id @default(uuid()) @db.Uuid
-  clanId        String             @map("clan_id") @db.Uuid
-  activeClanId  String?            @unique @map("active_clan_id") @db.Uuid
-  tier          Int                @default(1)
-  status        ClanBossStatus     @default(ACTIVE)
-  maxHealth     Int                @map("max_health")
-  currentHealth Int                @map("current_health")
-  version       Int                @default(1)
-  createdAt     DateTime           @default(now()) @map("created_at")
-  completedAt   DateTime?          @map("completed_at")
-  clan          Clan               @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  id            String                @id @default(uuid()) @db.Uuid
+  clanId        String                @map("clan_id") @db.Uuid
+  activeClanId  String?               @unique @map("active_clan_id") @db.Uuid
+  tier          Int                   @default(1)
+  status        ClanBossStatus        @default(ACTIVE)
+  maxHealth     Int                   @map("max_health")
+  currentHealth Int                   @map("current_health")
+  version       Int                   @default(1)
+  createdAt     DateTime              @default(now()) @map("created_at")
+  completedAt   DateTime?             @map("completed_at")
+  clan          Clan                  @relation(fields: [clanId], references: [id], onDelete: Cascade)
   participants  ClanBossParticipant[]
   rewardClaims  ClanBossRewardClaim[]
 
@@ -213,18 +297,18 @@ model ClanBossEncounter {
 }
 
 model ClanBossParticipant {
-  id          String            @id @default(uuid()) @db.Uuid
-  encounterId String            @map("encounter_id") @db.Uuid
-  characterId String            @map("character_id") @db.Uuid
-  damage      Int               @default(0)
-  actions     Int               @default(0)
-  maxHealth   Int               @default(0) @map("max_health")
-  currentHealth Int             @default(0) @map("current_health")
-  defeatedAt DateTime?          @map("defeated_at")
-  joinedAt    DateTime          @default(now()) @map("joined_at")
-  encounter   ClanBossEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
-  character   Character         @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  rewardClaim ClanBossRewardClaim?
+  id            String               @id @default(uuid()) @db.Uuid
+  encounterId   String               @map("encounter_id") @db.Uuid
+  characterId   String               @map("character_id") @db.Uuid
+  damage        Int                  @default(0)
+  actions       Int                  @default(0)
+  maxHealth     Int                  @default(0) @map("max_health")
+  currentHealth Int                  @default(0) @map("current_health")
+  defeatedAt    DateTime?            @map("defeated_at")
+  joinedAt      DateTime             @default(now()) @map("joined_at")
+  encounter     ClanBossEncounter    @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  character     Character            @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  rewardClaim   ClanBossRewardClaim?
 
   @@unique([encounterId, characterId])
   @@index([encounterId, damage])
@@ -262,15 +346,15 @@ model ClanDevelopment {
 }
 
 model ClanMembership {
-  id          String    @id @default(uuid()) @db.Uuid
-  clanId      String    @map("clan_id") @db.Uuid
-  characterId String    @unique @map("character_id") @db.Uuid
-  role        ClanRole  @default(MEMBER)
-  joinedAt    DateTime  @default(now()) @map("joined_at")
-  roleSince   DateTime  @default(now()) @map("role_since")
-  contribution Int      @default(0)
-  clan        Clan      @relation(fields: [clanId], references: [id], onDelete: Cascade)
-  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  id           String    @id @default(uuid()) @db.Uuid
+  clanId       String    @map("clan_id") @db.Uuid
+  characterId  String    @unique @map("character_id") @db.Uuid
+  role         ClanRole  @default(MEMBER)
+  joinedAt     DateTime  @default(now()) @map("joined_at")
+  roleSince    DateTime  @default(now()) @map("role_since")
+  contribution Int       @default(0)
+  clan         Clan      @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  character    Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@index([clanId, joinedAt])
   @@map("clan_memberships")
@@ -345,6 +429,66 @@ model TalentCommand {
   @@map("talent_commands")
 }
 
+model CraftJob {
+  id            String           @id @default(uuid()) @db.Uuid
+  characterId   String           @map("character_id") @db.Uuid
+  recipeId      String           @map("recipe_id") @db.VarChar(64)
+  station       CraftingStation
+  activeStation CraftingStation? @map("active_station")
+  status        CraftJobStatus   @default(ACTIVE)
+  quantity      Int              @default(1)
+  outputType    ResourceType     @map("output_type")
+  outputAmount  Int              @map("output_amount")
+  startedAt     DateTime         @default(now()) @map("started_at")
+  completesAt   DateTime         @map("completes_at")
+  claimedAt     DateTime?        @map("claimed_at")
+  character     Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, activeStation])
+  @@index([characterId, status, completesAt])
+  @@map("craft_jobs")
+}
+
+model CraftCommand {
+  id             String    @id @default(uuid()) @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  commandType    String    @map("command_type") @db.VarChar(32)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  craftJobId     String?   @map("craft_job_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("craft_commands")
+}
+
+model CharacterRecipeKnowledge {
+  id           String    @id @default(uuid()) @db.Uuid
+  characterId  String    @map("character_id") @db.Uuid
+  recipeId     String    @map("recipe_id") @db.VarChar(64)
+  source       String    @db.VarChar(64)
+  discoveredAt DateTime  @default(now()) @map("discovered_at")
+  character    Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, recipeId])
+  @@index([characterId, discoveredAt])
+  @@map("character_recipe_knowledge")
+}
+
+model FactionCommand {
+  id             String       @id @default(uuid()) @db.Uuid
+  characterId    String       @map("character_id") @db.Uuid
+  idempotencyKey String       @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String       @map("payload_hash") @db.Char(64)
+  faction        WorldFaction
+  createdAt      DateTime     @default(now()) @map("created_at")
+  character      Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("faction_commands")
+}
+
 model CharacterResource {
   id          String       @id @default(uuid()) @db.Uuid
   characterId String       @map("character_id") @db.Uuid
@@ -373,24 +517,25 @@ model ResourceLedgerEntry {
 }
 
 model Battle {
-  id                   String          @id @default(uuid()) @db.Uuid
-  characterId          String          @map("character_id") @db.Uuid
-  activeCharacterId    String?         @unique @map("active_character_id") @db.Uuid
-  encounterId          String          @map("encounter_id") @db.VarChar(64)
-  status               BattleStatus    @default(ACTIVE)
-  version              Int             @default(1)
+  id                   String                 @id @default(uuid()) @db.Uuid
+  characterId          String                 @map("character_id") @db.Uuid
+  activeCharacterId    String?                @unique @map("active_character_id") @db.Uuid
+  encounterId          String                 @map("encounter_id") @db.VarChar(64)
+  status               BattleStatus           @default(ACTIVE)
+  version              Int                    @default(1)
   seed                 Int
   state                Json
-  pendingState         Json?           @map("pending_state")
-  enemyReadyAt         DateTime?       @map("enemy_ready_at")
-  createdAt            DateTime        @default(now()) @map("created_at")
-  updatedAt            DateTime        @updatedAt @map("updated_at")
-  completedAt          DateTime?       @map("completed_at")
-  resultAcknowledgedAt DateTime?       @map("result_acknowledged_at")
-  character            Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  pendingState         Json?                  @map("pending_state")
+  enemyReadyAt         DateTime?              @map("enemy_ready_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  completedAt          DateTime?              @map("completed_at")
+  resultAcknowledgedAt DateTime?              @map("result_acknowledged_at")
+  character            Character              @relation(fields: [characterId], references: [id], onDelete: Cascade)
   commands             BattleCommand[]
   rewardClaim          RewardClaim?
   rewardItem           ItemInstance?
+  invocationCommand    BossInvocationCommand?
 
   @@index([characterId, status])
   @@map("battles")
@@ -402,6 +547,7 @@ model BattleCommand {
   idempotencyKey   String   @map("idempotency_key") @db.VarChar(64)
   expectedVersion  Int      @map("expected_version")
   actionId         String   @map("action_id") @db.VarChar(64)
+  targetEnemyId    String?  @map("target_enemy_id") @db.VarChar(64)
   resultingVersion Int      @map("resulting_version")
   createdAt        DateTime @default(now()) @map("created_at")
   battle           Battle   @relation(fields: [battleId], references: [id], onDelete: Cascade)
@@ -410,17 +556,52 @@ model BattleCommand {
   @@map("battle_commands")
 }
 
+model BossInvocationCommand {
+  id             String    @id @default(uuid()) @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  battleId       String    @unique @map("battle_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  battle         Battle    @relation(fields: [battleId], references: [id], onDelete: Restrict)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("boss_invocation_commands")
+}
+
 model CharacterWorldState {
   characterId         String             @id @map("character_id") @db.Uuid
   currentLocation     WorldLocation      @default(BROKEN_WATCHPOST) @map("current_location")
   preparationChoice   PreparationChoice? @map("preparation_choice")
   version             Int                @default(1)
   cinderhavenUnlocked Boolean            @default(false) @map("cinderhaven_unlocked")
+  highestClearedTier  Int                @default(0) @map("highest_cleared_tier")
+  guideCheckpointTier Int                @default(1) @map("guide_checkpoint_tier")
+  dryadHighestClearedTier Int            @default(0) @map("dryad_highest_cleared_tier")
+  dryadGuideCheckpointTier Int           @default(1) @map("dryad_guide_checkpoint_tier")
+  rareEncounterWeek   String?            @map("rare_encounter_week") @db.VarChar(10)
+  rareEncounterChecks Int                @default(0) @map("rare_encounter_checks")
+  rareEncounterCount  Int                @default(0) @map("rare_encounter_count")
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   character           Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@map("character_world_states")
+}
+
+model ExpeditionGuideCommand {
+  id             String    @id @default(uuid()) @db.Uuid
+  characterId    String    @map("character_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String    @map("payload_hash") @db.Char(64)
+  checkpointTier Int       @map("checkpoint_tier")
+  goldCost       Int       @map("gold_cost")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  character      Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@map("expedition_guide_commands")
 }
 
 model RewardClaim {
@@ -436,9 +617,21 @@ model RewardClaim {
   battle         Battle        @relation(fields: [battleId], references: [id], onDelete: Restrict)
   character      Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
   item           ItemInstance?
+  resources      RewardClaimResource[]
 
   @@unique([characterId, idempotencyKey])
   @@map("reward_claims")
+}
+
+model RewardClaimResource {
+  id            String       @id @default(uuid()) @db.Uuid
+  rewardClaimId String       @map("reward_claim_id") @db.Uuid
+  type          ResourceType
+  amount        Int
+  rewardClaim   RewardClaim  @relation(fields: [rewardClaimId], references: [id], onDelete: Cascade)
+
+  @@unique([rewardClaimId, type])
+  @@map("reward_claim_resources")
 }
 
 model ItemInstance {
@@ -449,20 +642,105 @@ model ItemInstance {
   rewardClaimId       String               @unique @map("reward_claim_id") @db.Uuid
   itemLevel           Int                  @default(1) @map("item_level")
   rarity              ItemRarity
+  rollQuality         Int                  @default(0) @map("roll_quality")
   damage              Int
+  armor               Int                  @default(0)
+  health              Int                  @default(0)
   binding             ItemBinding          @default(BOUND_ON_EQUIP)
   location            ItemLocation         @default(CHEST)
   setId               String               @map("set_id") @db.VarChar(64)
   visualAssetId       String               @map("visual_asset_id") @db.VarChar(64)
+  temperingStage      Int                  @default(0) @map("tempering_stage")
+  temperingProgress   Int                  @default(0) @map("tempering_progress")
+  temperingVersion    Int                  @default(1) @map("tempering_version")
   createdAt           DateTime             @default(now()) @map("created_at")
   owner               Character            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   sourceBattle        Battle               @relation(fields: [sourceBattleId], references: [id], onDelete: Restrict)
   rewardClaim         RewardClaim          @relation(fields: [rewardClaimId], references: [id], onDelete: Restrict)
   lineage             ItemLineageEvent[]
   equipmentAssignment EquipmentAssignment?
+  marketListings      MarketListing[]
+  temperingJobs       TemperingJob[]
 
   @@index([ownerId, location])
   @@map("item_instances")
+}
+
+model TemperingJob {
+  id                  String             @id @default(uuid()) @db.Uuid
+  characterId         String             @map("character_id") @db.Uuid
+  itemId              String             @map("item_id") @db.Uuid
+  activeItemId        String?            @unique @map("active_item_id") @db.Uuid
+  startingStage       Int                @map("starting_stage")
+  targetStage         Int                @map("target_stage")
+  startingProgress    Int                @map("starting_progress")
+  accelerationPercent Int                @default(0) @map("acceleration_percent")
+  costSnapshot        Json               @map("cost_snapshot")
+  status              TemperingJobStatus @default(ACTIVE)
+  resultProgress      Int?               @map("result_progress")
+  guaranteed          Boolean?
+  startedAt           DateTime           @default(now()) @map("started_at")
+  readyAt             DateTime           @map("ready_at")
+  resolvedAt          DateTime?          @map("resolved_at")
+  character           Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  item                ItemInstance       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  commands            TemperingCommand[]
+
+  @@index([characterId, status, readyAt])
+  @@index([itemId, startedAt])
+  @@map("tempering_jobs")
+}
+
+model TemperingCommand {
+  id             String       @id @default(uuid()) @db.Uuid
+  characterId    String       @map("character_id") @db.Uuid
+  temperingJobId String       @map("tempering_job_id") @db.Uuid
+  idempotencyKey String       @map("idempotency_key") @db.VarChar(64)
+  commandType    String       @map("command_type") @db.VarChar(24)
+  payloadHash    String       @map("payload_hash") @db.Char(64)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  character      Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  temperingJob   TemperingJob @relation(fields: [temperingJobId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, idempotencyKey])
+  @@index([temperingJobId, createdAt])
+  @@map("tempering_commands")
+}
+
+model MarketListing {
+  id                String              @id @default(uuid()) @db.Uuid
+  sellerCharacterId String              @map("seller_character_id") @db.Uuid
+  buyerCharacterId  String?             @map("buyer_character_id") @db.Uuid
+  itemId            String?             @map("item_id") @db.Uuid
+  resourceType      ResourceType?       @map("resource_type")
+  resourceAmount    Int?                @map("resource_amount")
+  price             Int
+  deposit           Int                 @default(1)
+  saleFee           Int                 @default(0) @map("sale_fee")
+  status            MarketListingStatus @default(ACTIVE)
+  expiresAt         DateTime            @map("expires_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  completedAt       DateTime?           @map("completed_at")
+  item              ItemInstance?       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([status, expiresAt])
+  @@index([itemId, createdAt])
+  @@index([sellerCharacterId, createdAt])
+  @@index([buyerCharacterId, completedAt])
+  @@map("market_listings")
+}
+
+model MarketCommand {
+  id             String   @id @default(uuid()) @db.Uuid
+  characterId    String   @map("character_id") @db.Uuid
+  listingId      String?  @map("listing_id") @db.Uuid
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(64)
+  commandType    String   @map("command_type") @db.VarChar(32)
+  payloadHash    String   @map("payload_hash") @db.Char(64)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([characterId, idempotencyKey])
+  @@map("market_commands")
 }
 
 model EquipmentAssignment {
@@ -529,4 +807,24 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+model AdminAuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(64)
+  payloadHash    String   @map("payload_hash") @db.Char(64)
+  action         String   @db.VarChar(64)
+  targetType     String   @map("target_type") @db.VarChar(32)
+  targetId       String   @map("target_id") @db.VarChar(64)
+  reason         String   @db.VarChar(500)
+  before         Json
+  after          Json
+  createdAt      DateTime @default(now()) @map("created_at")
+  actor          User     @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([actorUserId, idempotencyKey])
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("admin_audit_logs")
 }

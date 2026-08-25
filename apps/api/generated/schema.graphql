@@ -2,6 +2,46 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+input AdjustCharacterResourceInput {
+  characterId: ID!
+  delta: Int!
+  idempotencyKey: String!
+  reason: String!
+  resourceType: ResourceType!
+}
+
+type AdminAuditLogModel {
+  action: String!
+  actorEmail: String!
+  createdAt: DateTime!
+  id: ID!
+  reason: String!
+  targetId: String!
+  targetType: String!
+}
+
+type AdminCharacterModel {
+  email: String!
+  experience: Int!
+  gold: Int!
+  id: ID!
+  level: Int!
+  name: String!
+  resources: [AdminResourceModel!]!
+  userRole: UserRole!
+  version: Int!
+}
+
+type AdminMutationResultModel {
+  auditId: ID!
+  character: AdminCharacterModel!
+}
+
+type AdminResourceModel {
+  amount: Int!
+  type: ResourceType!
+}
+
 input AttackClanBossInput {
   encounterId: ID!
   expectedVersion: Int!
@@ -18,17 +58,32 @@ enum AvatarMode {
   STATIC
 }
 
+type BattleEnemyModel {
+  activeTarget: Boolean!
+  health: Int!
+  id: String!
+  maxHealth: Int!
+  maxResource: Int
+  name: String!
+  resource: Int
+}
+
 type BattleModel {
   actions: [CombatActionModel!]!
   currentIntent: EnemyIntentModel!
   encounterTier: Int!
+  enemies: [BattleEnemyModel!]!
   enemy: CombatantModel!
   enemyName: String!
   hero: CombatantModel!
   id: ID!
   log: [CombatLogEntryModel!]!
+  personalBest: Boolean!
   phase: String!
+  rareEncounter: Boolean!
   status: String!
+  summonedBoss: Boolean!
+  summonedBossId: String
   turn: Int!
   version: Int!
   visibleIntents: [EnemyIntentModel!]!
@@ -39,7 +94,7 @@ type BattleRewardModel {
   claimId: ID!
   experience: Int!
   gold: Int!
-  item: RewardItemModel!
+  item: RewardItemModel
   resources: [ResourceBalanceModel!]!
 }
 
@@ -80,6 +135,12 @@ type CharacterStats {
   speed: Int!
 }
 
+input ChooseFactionInput {
+  expectedCharacterVersion: Int!
+  faction: WorldFaction!
+  idempotencyKey: String!
+}
+
 input ClaimBattleRewardInput {
   battleId: ID!
   idempotencyKey: String!
@@ -87,6 +148,11 @@ input ClaimBattleRewardInput {
 
 input ClaimClanBossRewardInput {
   encounterId: ID!
+  idempotencyKey: String!
+}
+
+input ClaimCraftInput {
+  craftJobId: ID!
   idempotencyKey: String!
 }
 
@@ -186,10 +252,13 @@ enum ClanRole {
 }
 
 type CombatActionModel {
+  charges: Int
   cost: Int!
   description: String!
   id: String!
+  kind: String!
   name: String!
+  resource: String!
 }
 
 type CombatLogEntryModel {
@@ -220,6 +289,54 @@ input ContributeClanResourceInput {
   resourceType: ResourceType!
 }
 
+type CraftJobModel {
+  completesAt: DateTime!
+  id: ID!
+  outputAmount: Int!
+  outputName: String!
+  outputType: ResourceType!
+  quantity: Int!
+  ready: Boolean!
+  recipeId: String!
+  recipeName: String!
+  remainingSeconds: Int!
+  startedAt: DateTime!
+  station: CraftingStation!
+  status: CraftJobStatus!
+}
+
+enum CraftJobStatus {
+  ACTIVE
+  CLAIMED
+}
+
+type CraftingRecipeModel {
+  affordable: Boolean!
+  description: String!
+  discovered: Boolean!
+  durationSeconds: Int!
+  id: String!
+  ingredients: [RecipeIngredientModel!]!
+  name: String!
+  outputAmount: Int!
+  outputName: String!
+  outputType: ResourceType!
+  station: CraftingStation!
+  stationAvailable: Boolean!
+}
+
+type CraftingStateModel {
+  jobs: [CraftJobModel!]!
+  recipes: [CraftingRecipeModel!]!
+}
+
+enum CraftingStation {
+  ALCHEMY_TABLE
+  FORGE
+  RITUAL_CIRCLE
+  WORKSHOP
+}
+
 input CreateCharacterInput {
   archetype: CharacterArchetype!
   avatarMode: AvatarMode!
@@ -232,6 +349,19 @@ input CreateClanInput {
   expectedCharacterVersion: Int!
   idempotencyKey: String!
   name: String!
+}
+
+input CreateMarketListingInput {
+  idempotencyKey: String!
+  itemId: ID!
+  price: Int!
+}
+
+input CreateMarketResourceListingInput {
+  amount: Int!
+  idempotencyKey: String!
+  price: Int!
+  resourceType: ResourceType!
 }
 
 """
@@ -253,7 +383,20 @@ input EquipItemInput {
 }
 
 enum EquipmentSlot {
+  AMULET
+  BRACELET
+  BRACERS
+  CHEST
+  FEET
+  HANDS
+  HEAD
+  LEGS
   MAIN_HAND
+  OFF_HAND
+  RING_LEFT
+  RING_RIGHT
+  SHOULDERS
+  WAIST
 }
 
 type EquippedItemModel {
@@ -261,26 +404,67 @@ type EquippedItemModel {
   slot: EquipmentSlot!
 }
 
+type ExpeditionProgressModel {
+  canAffordSave: Boolean!
+  checkpointTier: Int!
+  gold: Int!
+  highestClearedTier: Int!
+  saveCost: Int
+  saveableTier: Int
+}
+
+type FactionStateModel {
+  ashenStrength: Int!
+  canChangeFaction: Boolean!
+  characterVersion: Int!
+  contestedLocation: String!
+  controllingFaction: WorldFaction!
+  dawnStrength: Int!
+  faction: WorldFaction
+  frontLevelMax: Int!
+  frontLevelMin: Int!
+  nextScriptedShiftAt: DateTime!
+}
+
+input HireExpeditionGuideInput {
+  checkpointTier: Int!
+  idempotencyKey: String!
+}
+
 type InventoryItemModel {
+  armor: Int!
   binding: String!
+  compatibleSlots: [EquipmentSlot!]!
   damage: Int!
+  damageMax: Int!
+  damageMin: Int!
   definitionId: String!
+  health: Int!
   id: ID!
   itemLevel: Int!
   name: String!
   rarity: String!
+  rollQuality: Int!
   setName: String!
   visualAssetId: String!
 }
 
 type InventoryModel {
   backpack: [InventoryItemModel!]!
+  baseArmor: Int!
   baseDamage: Int!
+  baseHealth: Int!
   characterVersion: Int!
   chest: [InventoryItemModel!]!
   equipped: [EquippedItemModel!]!
   mainHandVisualAssetId: String
+  totalArmor: Int!
   totalDamage: Int!
+  totalHealth: Int!
+}
+
+input InvokeBossInput {
+  idempotencyKey: String!
 }
 
 enum ItemBinding {
@@ -294,10 +478,16 @@ enum ItemLocation {
   CHEST
   EQUIPPED
   LOST
+  MARKET
 }
 
 enum ItemRarity {
   COMMON
+  DIVINE
+  EPIC
+  LEGENDARY
+  MYTHIC
+  RARE
   UNCOMMON
 }
 
@@ -312,15 +502,109 @@ input LoginInput {
   password: String!
 }
 
+input MarketBrowseInput {
+  kind: String
+  maxLevel: Int
+  maxPrice: Int
+  minLevel: Int
+  minPrice: Int
+  page: Int = 1
+  rarity: String
+  search: String
+  sort: String
+}
+
+type MarketHistoryEntryModel {
+  completedAt: DateTime!
+  id: ID!
+  item: InventoryItemModel
+  price: Int!
+  resource: ResourceBalanceModel
+  role: String!
+  saleFee: Int!
+  sellerProceeds: Int!
+  status: String!
+}
+
+input MarketListingCommandInput {
+  idempotencyKey: String!
+  listingId: ID!
+}
+
+type MarketListingModel {
+  comparableSales: Int!
+  createdAt: DateTime!
+  deposit: Int!
+  expiresAt: DateTime!
+  id: ID!
+  item: InventoryItemModel
+  minimumPrice: Int!
+  own: Boolean!
+  price: Int!
+  referencePrice: Int
+  resource: ResourceBalanceModel
+  status: String!
+}
+
+type MarketPersonalStatsModel {
+  earned: Int!
+  feesPaid: Int!
+  purchases: Int!
+  sales: Int!
+  spent: Int!
+}
+
+input MarketQuoteInput {
+  amount: Int
+  itemId: ID
+  resourceType: ResourceType
+}
+
+type MarketQuoteModel {
+  comparableSales: Int!
+  minimumPrice: Int!
+  proceedsAtReference: Int!
+  referencePrice: Int
+  saleFeeAtReference: Int!
+  saleFeePercent: Int!
+}
+
+type MarketplaceModel {
+  balance: Int!
+  history: [MarketHistoryEntryModel!]!
+  listingDeposit: Int!
+  listings: [MarketListingModel!]!
+  myListings: [MarketListingModel!]!
+  page: Int!
+  saleFeePercent: Int!
+  stats: MarketPersonalStatsModel!
+  totalListings: Int!
+  totalPages: Int!
+}
+
 type Mutation {
+  adminAdjustCharacterResource(input: AdjustCharacterResourceInput!): AdminMutationResultModel!
+  adminSetCharacterLevel(input: SetCharacterLevelInput!): AdminMutationResultModel!
   attackClanBoss(input: AttackClanBossInput!): ClanBossModel!
+  buyMarketListing(input: MarketListingCommandInput!): MarketplaceModel!
+  cancelMarketListing(input: MarketListingCommandInput!): MarketplaceModel!
+  chooseFaction(input: ChooseFactionInput!): FactionStateModel!
   claimBattleReward(input: ClaimBattleRewardInput!): BattleRewardModel!
   claimClanBossReward(input: ClaimClanBossRewardInput!): ClanBossModel!
+  claimCraft(input: ClaimCraftInput!): CraftingStateModel!
   continueAdventure(input: ContinueAdventureInput!): BattleModel!
   contributeClanResource(input: ContributeClanResourceInput!): ClanModel!
   createCharacter(input: CreateCharacterInput!): CharacterModel!
   createClan(input: CreateClanInput!): ClanModel!
+  createMarketListing(input: CreateMarketListingInput!): MarketplaceModel!
+  createMarketResourceListing(input: CreateMarketResourceListingInput!): MarketplaceModel!
   equipItem(input: EquipItemInput!): InventoryModel!
+  hireExpeditionGuide(input: HireExpeditionGuideInput!): ExpeditionProgressModel!
+  invokeCursedKnight(input: InvokeBossInput!): BattleModel!
+  invokeDarkPriest(input: InvokeBossInput!): BattleModel!
+  invokeFallenElf(input: InvokeBossInput!): BattleModel!
+  invokeVeilWardenFromAsh(input: InvokeBossInput!): BattleModel!
+  invokeVeilWardenFromEyes(input: InvokeBossInput!): BattleModel!
   joinClan(input: JoinClanInput!): ClanModel!
   login(input: LoginInput!): AuthPayload!
   logout: Boolean!
@@ -328,6 +612,7 @@ type Mutation {
   register(input: RegisterInput!): AuthPayload!
   retreatFromBattle(input: RetreatInput!): BattleModel!
   returnToWatchpost: Boolean!
+  startCraft(input: StartCraftInput!): CraftingStateModel!
   startEncounter(input: StartEncounterInput!): BattleModel!
   submitCombatCommand(input: SubmitCombatCommandInput!): BattleModel!
   summonClanBoss(input: SummonClanBossInput!): ClanBossModel!
@@ -350,11 +635,18 @@ input PrepareLocationInput {
 
 type Query {
   activeBattle: BattleModel
+  adminAuditLogs(take: Int = 50, targetId: String): [AdminAuditLogModel!]!
+  adminCharacters(search: String = "", take: Int = 50): [AdminCharacterModel!]!
   currentClanBoss: ClanBossModel
   currentLocation: WorldStateModel!
+  expeditionProgress: ExpeditionProgressModel!
   latestBattle: BattleModel
+  marketQuote(input: MarketQuoteInput!): MarketQuoteModel!
+  marketplace(input: MarketBrowseInput): MarketplaceModel!
   myCharacter: CharacterModel
   myClan: ClanModel
+  myCrafting: CraftingStateModel!
+  myFaction: FactionStateModel!
   myInventory: InventoryModel!
   myResources: [ResourceBalanceModel!]!
   myTalents: TalentTreeModel!
@@ -362,6 +654,14 @@ type Query {
   """API readiness probe for the foundation milestone."""
   status: String!
   viewer: Viewer
+  worldMap: WorldMapModel!
+}
+
+type RecipeIngredientModel {
+  amount: Int!
+  available: Int!
+  name: String!
+  resourceType: ResourceType!
 }
 
 input RegisterInput {
@@ -371,14 +671,52 @@ input RegisterInput {
 
 type ResourceBalanceModel {
   amount: Int!
+  clanContributable: Boolean!
+  description: String!
+  name: String!
+  origin: ResourceOrigin!
+  rarity: ResourceRarity!
+  tradeable: Boolean!
   type: ResourceType!
 }
 
+enum ResourceOrigin {
+  BOSS_EXCLUSIVE
+  CRAFTED
+  DROPPED
+}
+
+enum ResourceRarity {
+  COMMON
+  DIVINE
+  EPIC
+  LEGENDARY
+  MYTHIC
+  RARE
+  UNCOMMON
+}
+
 enum ResourceType {
+  BOSS_INVOCATION_SEAL
   BRONZE
+  COAL
   COPPER
+  CURSED_HEART
+  DARK_PRIEST_ASH
+  DARK_PRIEST_INVOCATION_SEAL
+  DRYAD_HEARTWOOD
+  FALLEN_ELF_EYE
+  HEALTH_POTION
+  HERBS
   IRON
+  LEATHER
+  MANA_POTION
+  OBSIDIAN_SHARD
+  STABILIZED_CATALYST
+  TIMBER
   VEIL_ECHO
+  VEIL_STEEL
+  WEAPON_FRAGMENT
 }
 
 input RetreatInput {
@@ -387,16 +725,35 @@ input RetreatInput {
 }
 
 type RewardItemModel {
+  armor: Int!
   binding: ItemBinding!
+  compatibleSlots: [EquipmentSlot!]!
   damage: Int!
+  damageMax: Int!
+  damageMin: Int!
   definitionId: String!
+  health: Int!
   id: ID!
   itemLevel: Int!
   location: ItemLocation!
   name: String!
   rarity: ItemRarity!
+  rollQuality: Int!
   setName: String!
   visualAssetId: String!
+}
+
+input SetCharacterLevelInput {
+  characterId: ID!
+  idempotencyKey: String!
+  level: Int!
+  reason: String!
+}
+
+input StartCraftInput {
+  idempotencyKey: String!
+  quantity: Int!
+  recipeId: String!
 }
 
 input StartEncounterInput {
@@ -407,6 +764,7 @@ input SubmitCombatCommandInput {
   actionId: String!
   expectedVersion: Int!
   idempotencyKey: String!
+  targetEnemyId: String
 }
 
 input SummonClanBossInput {
@@ -437,9 +795,9 @@ type TalentTreeModel {
 }
 
 enum TalentType {
-  ASCENDED_POWER
-  ASCENDED_RESILIENCE
-  ASCENDED_VITALITY
+  AWAKENED_POWER
+  AWAKENED_RESILIENCE
+  AWAKENED_VITALITY
   POWER
   RESILIENCE
   VITALITY
@@ -478,10 +836,36 @@ type Viewer {
   role: UserRole!
 }
 
+type WatchpostVoiceModel {
+  id: String!
+  line: String!
+  name: String!
+  role: String!
+}
+
+enum WorldFaction {
+  ASHEN_HOST
+  DAWN_COVENANT
+}
+
 enum WorldLocation {
   BROKEN_WATCHPOST
   CINDERHAVEN_GATE
+  DRYAD_FOREST
   HOLLOW_ROAD
+}
+
+type WorldMapModel {
+  nodes: [WorldMapNodeModel!]!
+}
+
+type WorldMapNodeModel {
+  id: String!
+  kind: String!
+  name: String!
+  note: String
+  stages: Int
+  status: String!
 }
 
 type WorldRouteModel {
@@ -491,8 +875,13 @@ type WorldRouteModel {
 }
 
 type WorldStateModel {
+  cinderhavenUnlockTier: Int!
+  cinderhavenUnlocked: Boolean!
   currentLocation: WorldLocation!
+  dryadHighestClearedTier: Int!
+  highestClearedTier: Int!
   preparationChoice: PreparationChoice
   routes: [WorldRouteModel!]!
   version: Int!
+  watchpostVoices: [WatchpostVoiceModel!]!
 }

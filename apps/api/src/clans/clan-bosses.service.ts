@@ -8,7 +8,11 @@ import {
   TalentType,
   WorldLocation,
 } from '@veilfall/database';
-import { levelBonuses, talentBonuses } from '@veilfall/game-engine';
+import {
+  levelBonuses,
+  talentBonuses,
+  temperingStoneRewardForBossTier,
+} from '@veilfall/game-engine';
 import {
   BadRequestException,
   ConflictException,
@@ -310,6 +314,9 @@ export class ClanBossesService {
           if (participant.encounter.status !== ClanBossStatus.WON)
             throw new ConflictException('The clan boss is not defeated');
           const amount = this.rewardAmount(participant.encounter.tier);
+          const temperingStone = this.temperingStoneForTier(
+            participant.encounter.tier,
+          );
           const claim = await tx.clanBossRewardClaim.create({
             data: {
               encounterId: input.encounterId,
@@ -334,12 +341,31 @@ export class ClanBossesService {
             },
             update: { balance: { increment: amount } },
           });
+          await tx.characterResource.upsert({
+            where: {
+              characterId_type: {
+                characterId,
+                type: temperingStone,
+              },
+            },
+            create: { characterId, type: temperingStone, balance: 1 },
+            update: { balance: { increment: 1 } },
+          });
           await tx.resourceLedgerEntry.create({
             data: {
               characterId,
               type: ResourceType.VEIL_ECHO,
               amount,
               reason: 'CLAN_BOSS_REWARD',
+              referenceId: claim.id,
+            },
+          });
+          await tx.resourceLedgerEntry.create({
+            data: {
+              characterId,
+              type: temperingStone,
+              amount: 1,
+              reason: 'CLAN_BOSS_TEMPERING_REWARD',
               referenceId: claim.id,
             },
           });
@@ -385,15 +411,15 @@ export class ClanBossesService {
     const power =
       character.talents.find((talent) => talent.type === TalentType.POWER)
         ?.rank ?? 0;
-    const ascendedPower =
+    const awakenedPower =
       character.talents.find(
-        (talent) => talent.type === TalentType.ASCENDED_POWER,
+        (talent) => talent.type === TalentType.AWAKENED_POWER,
       )?.rank ?? 0;
     return (
       base +
       (character.level - 1) * 2 +
       power * 3 +
-      ascendedPower * 8 +
+      awakenedPower * 8 +
       (character.equipment[0]?.item.damage ?? 0)
     );
   }
@@ -422,12 +448,12 @@ export class ClanBossesService {
         bases[character.archetype].health +
         level.health +
         basic.health +
-        (ranks[TalentType.ASCENDED_VITALITY] ?? 0) * 30,
+        (ranks[TalentType.AWAKENED_VITALITY] ?? 0) * 30,
       armor:
         bases[character.archetype].armor +
         level.armor +
         basic.armor +
-        (ranks[TalentType.ASCENDED_RESILIENCE] ?? 0) * 6,
+        (ranks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
     };
   }
 
@@ -559,6 +585,10 @@ export class ClanBossesService {
       viewerMaxHealth: viewerParticipation?.maxHealth ?? 0,
       rewardType: ResourceType.VEIL_ECHO,
       rewardAmount: this.rewardAmount(boss.tier),
+      bonusRewardType: this.temperingStoneForTier(boss.tier),
+      bonusRewardAmount: 1,
+      nextBonusRewardType: this.temperingStoneForTier(nextTier),
+      nextBonusRewardAmount: 1,
       participants: boss.participants.map((entry) => ({
         characterId: entry.characterId,
         name: entry.character.name,
@@ -579,6 +609,10 @@ export class ClanBossesService {
         (development) => development.branch === ClanDevelopmentBranch.MILITARY,
       )?.rank ?? 0
     );
+  }
+
+  private temperingStoneForTier(tier: number): ResourceType {
+    return ResourceType[temperingStoneRewardForBossTier(tier)];
   }
 
   private summonLockedReason(input: {

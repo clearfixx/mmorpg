@@ -14,8 +14,12 @@ async function bootstrap() {
     }),
   );
   app.enableShutdownHooks();
+  const allowedOrigins = [
+    requireEnvironment('WEB_ORIGIN'),
+    ...(process.env.ADMIN_ORIGIN ? [process.env.ADMIN_ORIGIN] : []),
+  ];
   app.enableCors({
-    origin: requireEnvironment('WEB_ORIGIN'),
+    origin: allowedOrigins,
     credentials: true,
   });
   await app.listen(process.env.API_PORT ?? 4000);

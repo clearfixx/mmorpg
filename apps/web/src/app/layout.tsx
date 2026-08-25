@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 
+import { SiteFooter } from '@/components/layout/site-footer'
+
 import './globals.css'
 
 const geistSans = Geist({
@@ -25,7 +27,10 @@ export default function RootLayout({
       lang="uk"
       className={`dark ${geistSans.variable} ${geistMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        <SiteFooter />
+      </body>
     </html>
   )
 }

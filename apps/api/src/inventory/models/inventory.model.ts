@@ -10,8 +10,19 @@ export class InventoryItemModel {
   @Field() definitionId!: string;
   @Field(() => Int) itemLevel!: number;
   @Field() rarity!: string;
+  @Field(() => Int) rollQuality!: number;
   @Field(() => Int) damage!: number;
+  @Field(() => Int) armor!: number;
+  @Field(() => Int) health!: number;
+  @Field(() => Int) temperingStage!: number;
+  @Field(() => Int) temperingProgress!: number;
+  @Field(() => Int) temperingVersion!: number;
+  @Field() temperingLocked!: boolean;
+  @Field(() => Int) damageMin!: number;
+  @Field(() => Int) damageMax!: number;
+  @Field(() => [EquipmentSlot]) compatibleSlots!: EquipmentSlot[];
   @Field() binding!: string;
+  @Field() setId!: string;
   @Field() setName!: string;
   @Field() visualAssetId!: string;
 }
@@ -23,13 +34,37 @@ export class EquippedItemModel {
 }
 
 @ObjectType()
+export class ActiveSetBonusModel {
+  @Field() setId!: string;
+  @Field() setName!: string;
+  @Field(() => Int) equippedPieces!: number;
+  @Field(() => Int) requiredPieces!: number;
+  @Field() name!: string;
+  @Field(() => Int) damage!: number;
+  @Field(() => Int) armor!: number;
+  @Field(() => Int) health!: number;
+}
+
+@ObjectType()
+export class SetBonusProgressModel extends ActiveSetBonusModel {
+  @Field() active!: boolean;
+}
+
+@ObjectType()
 export class InventoryModel {
   @Field(() => Int) characterVersion!: number;
   @Field(() => Int) baseDamage!: number;
   @Field(() => Int) totalDamage!: number;
+  @Field(() => Int) baseArmor!: number;
+  @Field(() => Int) totalArmor!: number;
+  @Field(() => Int) baseHealth!: number;
+  @Field(() => Int) totalHealth!: number;
   @Field(() => [InventoryItemModel]) chest!: InventoryItemModel[];
   @Field(() => [InventoryItemModel]) backpack!: InventoryItemModel[];
   @Field(() => [EquippedItemModel]) equipped!: EquippedItemModel[];
+  @Field(() => [ActiveSetBonusModel]) activeSetBonuses!: ActiveSetBonusModel[];
+  @Field(() => [SetBonusProgressModel])
+  setBonusProgress!: SetBonusProgressModel[];
   @Field(() => String, { nullable: true }) mainHandVisualAssetId!:
     string | null;
 }

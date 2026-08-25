@@ -27,6 +27,44 @@ export class WorldStateModel {
   @Field(() => Int)
   version!: number;
 
+  @Field(() => Int)
+  highestClearedTier!: number;
+
+  @Field(() => Int)
+  cinderhavenUnlockTier!: number;
+
+  @Field(() => Int)
+  dryadHighestClearedTier!: number;
+
+  @Field()
+  cinderhavenUnlocked!: boolean;
+
+  @Field(() => [WatchpostVoiceModel])
+  watchpostVoices!: WatchpostVoiceModel[];
+
   @Field(() => [WorldRouteModel])
   routes!: WorldRouteModel[];
+}
+
+@ObjectType()
+export class WatchpostVoiceModel {
+  @Field() id!: string;
+  @Field() name!: string;
+  @Field() role!: string;
+  @Field() line!: string;
+}
+
+@ObjectType()
+export class WorldMapNodeModel {
+  @Field() id!: string;
+  @Field() name!: string;
+  @Field() kind!: string;
+  @Field() status!: string;
+  @Field(() => Int, { nullable: true }) stages!: number | null;
+  @Field(() => String, { nullable: true }) note!: string | null;
+}
+
+@ObjectType()
+export class WorldMapModel {
+  @Field(() => [WorldMapNodeModel]) nodes!: WorldMapNodeModel[];
 }

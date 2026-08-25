@@ -59,6 +59,14 @@ export class ClanBossModel {
   rewardType!: ResourceType;
   @Field(() => Int)
   rewardAmount!: number;
+  @Field(() => ResourceType)
+  bonusRewardType!: ResourceType;
+  @Field(() => Int)
+  bonusRewardAmount!: number;
+  @Field(() => ResourceType)
+  nextBonusRewardType!: ResourceType;
+  @Field(() => Int)
+  nextBonusRewardAmount!: number;
   @Field(() => [ClanBossParticipantModel])
   participants!: ClanBossParticipantModel[];
 }

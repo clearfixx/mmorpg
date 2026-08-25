@@ -7,6 +7,7 @@ import {
 import {
   levelBonuses,
   progressionForExperience,
+  sumEquipmentStats,
   talentBonuses,
 } from '@veilfall/game-engine';
 import {
@@ -16,6 +17,7 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '../database/prisma.service';
+import { withTemperedStats } from '../inventory/tempered-item';
 import { CharacterNameService } from './character-name.service';
 import { CreateCharacterInput } from './dto/create-character.input';
 import { CharacterModel } from './models/character.model';
@@ -138,10 +140,21 @@ export class CharactersService {
     gold: number;
     version: number;
     createdAt: Date;
-    equipment?: Array<{ item: { damage: number } }>;
+    equipment?: Array<{
+      item: {
+        damage: number;
+        armor: number;
+        health: number;
+        temperingStage: number;
+      };
+    }>;
     talents?: Array<{ type: TalentType; rank: number }>;
   }): CharacterModel {
-    const weaponDamage = character.equipment?.[0]?.item.damage ?? 0;
+    const equipmentStats = sumEquipmentStats(
+      character.equipment?.map((assignment) =>
+        withTemperedStats(assignment.item),
+      ) ?? [],
+    );
     const progression = progressionForExperience(character.experience);
     const bonuses = levelBonuses(progression.level);
     const talentRanks = Object.fromEntries(
@@ -152,10 +165,10 @@ export class CharactersService {
       power: talentRanks[TalentType.POWER] ?? 0,
       resilience: talentRanks[TalentType.RESILIENCE] ?? 0,
     });
-    const ascended = {
-      health: (talentRanks[TalentType.ASCENDED_VITALITY] ?? 0) * 30,
-      damage: (talentRanks[TalentType.ASCENDED_POWER] ?? 0) * 8,
-      armor: (talentRanks[TalentType.ASCENDED_RESILIENCE] ?? 0) * 6,
+    const awakened = {
+      health: (talentRanks[TalentType.AWAKENED_VITALITY] ?? 0) * 30,
+      damage: (talentRanks[TalentType.AWAKENED_POWER] ?? 0) * 8,
+      armor: (talentRanks[TalentType.AWAKENED_RESILIENCE] ?? 0) * 6,
     };
     return {
       ...character,
@@ -167,18 +180,20 @@ export class CharactersService {
           BASE_STATS[character.archetype].health +
           bonuses.health +
           trained.health +
-          ascended.health,
+          awakened.health +
+          equipmentStats.health,
         damage:
           BASE_STATS[character.archetype].damage +
           bonuses.damage +
           trained.damage +
-          ascended.damage +
-          weaponDamage,
+          awakened.damage +
+          equipmentStats.damage,
         armor:
           BASE_STATS[character.archetype].armor +
           bonuses.armor +
           trained.armor +
-          ascended.armor,
+          awakened.armor +
+          equipmentStats.armor,
         speed: BASE_STATS[character.archetype].speed,
         reaction: BASE_STATS[character.archetype].reaction,
       },

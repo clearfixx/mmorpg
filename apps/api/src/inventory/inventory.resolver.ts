@@ -2,6 +2,7 @@ import { Args, Context, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { SessionService } from '../identity/session.service';
 import type { GraphqlContext } from '../identity/identity.types';
 import { EquipItemInput } from './dto/equip-item.input';
+import { UnequipItemInput } from './dto/unequip-item.input';
 import { InventoryModel } from './models/inventory.model';
 import { InventoryService } from './inventory.service';
 
@@ -25,5 +26,14 @@ export class InventoryResolver {
   ) {
     const viewer = await this.sessions.requireViewer(context.req);
     return this.inventory.equip(viewer.id, input);
+  }
+
+  @Mutation(() => InventoryModel)
+  async unequipItem(
+    @Args('input') input: UnequipItemInput,
+    @Context() context: GraphqlContext,
+  ) {
+    const viewer = await this.sessions.requireViewer(context.req);
+    return this.inventory.unequip(viewer.id, input);
   }
 }
